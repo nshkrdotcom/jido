@@ -1,4 +1,5 @@
 defmodule JidoTest.SimpleAgent do
+  @moduledoc false
   alias Jido.Actions.Basic
 
   use Jido.Agent,
@@ -22,6 +23,7 @@ defmodule JidoTest.SimpleAgent do
 end
 
 defmodule JidoTest.AdvancedAgent do
+  @moduledoc false
   alias Jido.Actions.Simplebot
 
   use Jido.Agent,

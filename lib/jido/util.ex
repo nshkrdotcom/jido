@@ -1,5 +1,22 @@
 defmodule Jido.Util do
-  @moduledoc false
+  @moduledoc """
+  A collection of utility functions for the Jido framework.
+
+  This module provides various helper functions that are used throughout the Jido framework,
+  including:
+
+  - ID generation
+  - Name validation
+  - Error handling
+  - Logging utilities
+
+  These utilities are designed to support common operations and maintain consistency
+  across the Jido ecosystem. They encapsulate frequently used patterns and provide
+  a centralized location for shared functionality.
+
+  Many of the functions in this module are used internally by other Jido modules,
+  but they can also be useful for developers building applications with Jido.
+  """
 
   alias Jido.Error
 

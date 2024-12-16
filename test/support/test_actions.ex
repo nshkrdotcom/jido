@@ -108,6 +108,7 @@ defmodule JidoTest.TestActions do
   end
 
   defmodule CompensateAction do
+    @moduledoc false
     use Action,
       name: "compensate_action",
       description: "Action that tests compensation behavior",

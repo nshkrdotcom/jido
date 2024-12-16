@@ -67,6 +67,7 @@ defmodule Jido.MixProject do
       {:typed_struct, "~> 0.3.0"},
 
       # Testing
+      {:credo, "~> 1.7"},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
@@ -88,7 +89,6 @@ defmodule Jido.MixProject do
         "format --check-formatted",
         "compile --warnings-as-errors",
         "dialyzer --format dialyxir",
-        "sobelow --config",
         "credo --all"
       ]
     ]

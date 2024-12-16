@@ -3,6 +3,42 @@ defmodule Jido.Sensor do
   Defines the behavior and implementation for Sensors in the Jido system.
 
   A Sensor is a GenServer that emits Signals on PubSub based on specific events and retains a configurable number of last values.
+
+  ## Usage
+
+  To define a new Sensor, use the `Jido.Sensor` behavior in your module:
+
+      defmodule MySensor do
+        use Jido.Sensor,
+          name: "my_sensor",
+          description: "Monitors a specific metric",
+          category: :monitoring,
+          tags: [:example, :demo],
+          vsn: "1.0.0",
+          schema: [
+            metric: [type: :string, required: true]
+          ]
+
+        @impl true
+        def generate_signal(state) do
+          # Your sensor logic here
+          {:ok, Jido.Signal.new(%{
+            source: "\#{state.sensor.name}:\#{state.id}",
+            topic: "metric_update",
+            payload: %{value: get_metric_value()},
+            timestamp: DateTime.utc_now()
+          })}
+        end
+      end
+
+  ## Callbacks
+
+  Implementing modules can override the following callbacks:
+
+  - `c:mount/1`: Called when the sensor is initialized.
+  - `c:generate_signal/1`: Generates a signal based on the current state.
+  - `c:before_publish/2`: Called before a signal is published.
+  - `c:shutdown/1`: Called when the sensor is shutting down.
   """
 
   alias Jido.Error
@@ -30,13 +66,36 @@ defmodule Jido.Sensor do
   @sensor_compiletime_options_schema NimbleOptions.new!(
                                        name: [
                                          type: {:custom, Jido.Util, :validate_name, []},
-                                         required: true
+                                         required: true,
+                                         doc:
+                                           "The name of the Sensor. Must contain only letters, numbers, and underscores."
                                        ],
-                                       description: [type: :string, required: false],
-                                       category: [type: :atom, required: false],
-                                       tags: [type: {:list, :atom}, default: []],
-                                       vsn: [type: :string, required: false],
-                                       schema: [type: :keyword_list, default: []]
+                                       description: [
+                                         type: :string,
+                                         required: false,
+                                         doc: "A description of what the Sensor does."
+                                       ],
+                                       category: [
+                                         type: :atom,
+                                         required: false,
+                                         doc: "The category of the Sensor."
+                                       ],
+                                       tags: [
+                                         type: {:list, :atom},
+                                         default: [],
+                                         doc: "A list of tags associated with the Sensor."
+                                       ],
+                                       vsn: [
+                                         type: :string,
+                                         required: false,
+                                         doc: "The version of the Sensor."
+                                       ],
+                                       schema: [
+                                         type: :keyword_list,
+                                         default: [],
+                                         doc:
+                                           "A NimbleOptions schema for validating the Sensor's runtime options."
+                                       ]
                                      )
 
   defstruct [:name, :description, :category, :tags, :vsn, :schema]
@@ -50,7 +109,7 @@ defmodule Jido.Sensor do
     escaped_schema = Macro.escape(@sensor_compiletime_options_schema)
 
     quote location: :keep do
-      # @behaviour Sensor
+      @behaviour Jido.Sensor
 
       use GenServer
 
@@ -63,20 +122,41 @@ defmodule Jido.Sensor do
 
           @sensor_runtime_options_schema NimbleOptions.new!(
                                            [
-                                             id: [type: :string],
+                                             id: [
+                                               type: :string,
+                                               doc: "Unique identifier for the sensor instance"
+                                             ],
                                              topic: [
                                                type: :string,
-                                               default: "#{@validated_opts[:name]}:${id}"
+                                               default: "#{@validated_opts[:name]}:${id}",
+                                               doc: "PubSub topic for the sensor"
                                              ],
                                              heartbeat_interval: [
                                                type: :non_neg_integer,
-                                               default: 10_000
+                                               default: 10_000,
+                                               doc: "Interval in milliseconds between heartbeats"
                                              ],
-                                             pubsub: [type: :atom, required: true],
-                                             retain_last: [type: :pos_integer, default: 10]
+                                             pubsub: [
+                                               type: :atom,
+                                               required: true,
+                                               doc: "PubSub module to use"
+                                             ],
+                                             retain_last: [
+                                               type: :pos_integer,
+                                               default: 10,
+                                               doc: "Number of last values to retain"
+                                             ]
                                            ] ++ @validated_opts[:schema]
                                          )
 
+          @doc """
+          Starts a new Sensor process.
+
+          ## Options
+
+          #{NimbleOptions.docs(@sensor_runtime_options_schema)}
+          """
+          @spec start_link(Keyword.t()) :: GenServer.on_start()
           def start_link(opts) do
             {id, opts} = Keyword.pop(opts, :id, Jido.Util.generate_id())
             GenServer.start_link(__MODULE__, Map.new(Keyword.put(opts, :id, id)))
@@ -154,6 +234,7 @@ defmodule Jido.Sensor do
             |> Enum.take(n)
           end
 
+          @spec validate_opts(map()) :: {:ok, map()} | {:error, String.t()}
           defp validate_opts(opts) do
             case NimbleOptions.validate(Map.to_list(opts), @sensor_runtime_options_schema) do
               {:ok, validated} ->
@@ -164,12 +245,14 @@ defmodule Jido.Sensor do
             end
           end
 
+          @spec schedule_heartbeat(map()) :: reference() | :ok
           defp schedule_heartbeat(%{heartbeat_interval: interval}) when interval > 0 do
             Process.send_after(self(), :heartbeat, interval)
           end
 
           defp schedule_heartbeat(_), do: :ok
 
+          @spec publish_signal(Jido.Signal.t(), map()) :: :ok | {:error, :publish_failed}
           defp publish_signal(%Jido.Signal{} = signal, state) do
             Phoenix.PubSub.broadcast(state.pubsub, state.topic, {:sensor_signal, signal})
           rescue
@@ -178,6 +261,7 @@ defmodule Jido.Sensor do
               {:error, :publish_failed}
           end
 
+          @spec update_last_values(map(), Jido.Signal.t()) :: map()
           defp update_last_values(state, signal) do
             new_queue = :queue.in(signal, state.last_values)
 
@@ -193,9 +277,11 @@ defmodule Jido.Sensor do
           end
 
           # Default implementations
+          @impl true
           @spec mount(map()) :: {:ok, map()} | {:error, any()}
           def mount(opts), do: OK.success(opts)
 
+          @impl true
           @spec generate_signal(map()) :: {:ok, Jido.Signal.t()} | {:error, any()}
           def generate_signal(state) do
             OK.success(
@@ -208,9 +294,11 @@ defmodule Jido.Sensor do
             )
           end
 
+          @impl true
           @spec before_publish(Jido.Signal.t(), map()) :: {:ok, Jido.Signal.t()} | {:error, any()}
           def before_publish(signal, _state), do: OK.success(signal)
 
+          @impl true
           @spec shutdown(map()) :: {:ok, map()} | {:error, any()}
           def shutdown(state), do: OK.success(state)
 
@@ -231,6 +319,8 @@ defmodule Jido.Sensor do
             |> Map.update!(:category, &if(&1, do: Atom.to_string(&1)))
           end
 
+          @doc false
+          @spec __sensor_metadata__() :: map()
           def __sensor_metadata__ do
             to_json()
           end
@@ -251,6 +341,7 @@ defmodule Jido.Sensor do
   end
 
   @doc false
+  @spec validate_sensor_config!(module(), Keyword.t()) :: t() | {:error, Error.t()}
   def validate_sensor_config!(_module, opts) do
     case NimbleOptions.validate(opts, @sensor_compiletime_options_schema) do
       {:ok, config} ->
@@ -264,6 +355,7 @@ defmodule Jido.Sensor do
     end
   end
 
+  @doc false
   @spec format_config_error(NimbleOptions.ValidationError.t() | any()) :: String.t()
   def format_config_error(%NimbleOptions.ValidationError{keys_path: [], message: message}) do
     "Invalid configuration given to use Jido.Sensors.Sensor: #{message}"
@@ -276,6 +368,7 @@ defmodule Jido.Sensor do
   def format_config_error(error) when is_binary(error), do: error
   def format_config_error(error), do: inspect(error)
 
+  @doc false
   @spec format_validation_error(NimbleOptions.ValidationError.t() | any()) :: String.t()
   def format_validation_error(%NimbleOptions.ValidationError{keys_path: [], message: message}) do
     "Invalid parameters for Sensor: #{message}"

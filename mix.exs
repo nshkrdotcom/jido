@@ -78,7 +78,7 @@ defmodule Jido.MixProject do
   defp package do
     [
       files: ["lib", "mix.exs", "README.md", "LICENSE.md"],
-      licenses: ["Apache 2.0"],
+      licenses: ["Apache-2.0"],
       links: %{
         "GitHub" => "https://github.com/agentjido/jido"
       }

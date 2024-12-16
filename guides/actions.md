@@ -126,7 +126,7 @@ Chain.chain(
   context: %{user_id: 123},   # Context passed to each workflow
   timeout: 5000,              # Maximum execution time
   max_retries: 3,             # Retry attempts for failed workflows
-  backoff: 1000              # Initial retry backoff time
+  backoff: 1000               # Initial retry backoff time
 )
 ```
 

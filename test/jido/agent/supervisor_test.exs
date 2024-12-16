@@ -192,8 +192,6 @@ defmodule Jido.Agent.SupervisorTest do
   end
 
   describe "telemetry" do
-    import ExUnit.CaptureLog
-
     setup do
       agent = SimpleAgent.new("test_agent")
 

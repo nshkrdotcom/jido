@@ -1,16 +1,25 @@
 defmodule Jido.Actions.Simplebot do
-  @moduledoc false
+  @moduledoc """
+  A collection of actions for a simple robot simulation.
+
+  This module provides a set of actions that can be used to simulate
+  basic robot behaviors such as moving, working, reporting, and recharging.
+  """
+
   alias Jido.Action
 
   defmodule Move do
-    @moduledoc false
+    @moduledoc """
+    An action that simulates moving the robot to a specified location.
+    """
     use Action,
       name: "move_workflow",
       description: "Moves the robot to a specified location",
       schema: [
-        destination: [type: :atom, required: true]
+        destination: [type: :atom, required: true, doc: "The destination location"]
       ]
 
+    @spec run(map(), map()) :: {:ok, map()}
     def run(params, _ctx) do
       # Simulate movement taking between 300-500ms
       Process.sleep(Enum.random(300..500))
@@ -21,11 +30,14 @@ defmodule Jido.Actions.Simplebot do
   end
 
   defmodule Idle do
-    @moduledoc false
+    @moduledoc """
+    An action that simulates the robot idling.
+    """
     use Action,
       name: "idle_workflow",
-      description: "Does nothing"
+      description: "Simulates the robot doing nothing"
 
+    @spec run(map(), map()) :: {:ok, map()}
     def run(params, _ctx) do
       # Simulate idling for 100-200ms
       Process.sleep(Enum.random(100..200))
@@ -34,11 +46,14 @@ defmodule Jido.Actions.Simplebot do
   end
 
   defmodule DoWork do
-    @moduledoc false
+    @moduledoc """
+    An action that simulates the robot performing work tasks.
+    """
     use Action,
       name: "do_work_workflow",
-      description: "The robot performs work tasks"
+      description: "Simulates the robot performing work tasks"
 
+    @spec run(map(), map()) :: {:ok, map()}
     def run(params, _ctx) do
       # Simulate work taking 1-2 seconds
       Process.sleep(Enum.random(500..1500))
@@ -50,11 +65,14 @@ defmodule Jido.Actions.Simplebot do
   end
 
   defmodule Report do
-    @moduledoc false
+    @moduledoc """
+    An action that simulates the robot reporting its status.
+    """
     use Action,
       name: "report_workflow",
-      description: "Records that the robot has reported"
+      description: "Simulates the robot reporting its status"
 
+    @spec run(map(), map()) :: {:ok, map()}
     def run(params, _ctx) do
       # Simulate reporting taking 200ms
       Process.sleep(200)
@@ -64,11 +82,14 @@ defmodule Jido.Actions.Simplebot do
   end
 
   defmodule Recharge do
-    @moduledoc false
+    @moduledoc """
+    An action that simulates the robot recharging its battery.
+    """
     use Action,
       name: "recharge",
-      description: "Recharges the robot's battery"
+      description: "Simulates recharging the robot's battery"
 
+    @spec run(map(), map()) :: {:ok, map()}
     def run(params, _ctx) do
       # Randomize recharge time between 1-2 seconds
       recharge_time = Enum.random(400..1000)

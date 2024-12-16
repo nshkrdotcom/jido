@@ -34,14 +34,6 @@ defmodule Jido.Agent.WorkerTest do
     signal
   end
 
-  defp flush_messages(acc \\ []) do
-    receive do
-      msg -> flush_messages([msg | acc])
-    after
-      0 -> Enum.reverse(acc)
-    end
-  end
-
   describe "initialization" do
     test "start_link/1 starts the worker and emits metric", %{agent: agent} do
       # Only subscribe to metrics topic for initialization

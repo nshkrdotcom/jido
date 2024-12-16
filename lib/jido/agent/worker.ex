@@ -2,6 +2,15 @@ defmodule Jido.Agent.Worker do
   @moduledoc """
   A GenServer implementation for managing Jido agents with centralized command handling
   and pluggable communication.
+
+  This module provides a robust worker process for Jido agents, handling:
+  - Agent state management
+  - Command processing and queueing
+  - PubSub-based communication
+  - Metrics and signal emission
+
+  It supports various commands like replan, pause, resume, reset, and stop,
+  and manages the agent's lifecycle through different states (idle, planning, running, paused).
   """
 
   use GenServer
@@ -14,7 +23,18 @@ defmodule Jido.Agent.Worker do
   @type topic :: String.t()
 
   defmodule State do
-    @moduledoc "State structure for the Agent Server"
+    @moduledoc """
+    State structure for the Agent Worker.
+
+    Holds all necessary information for the worker's operation, including:
+    - The agent itself
+    - PubSub module for communication
+    - Topics for various channels
+    - Current status
+    - Configuration
+    - Queue of pending commands
+    """
+
     @type t :: %__MODULE__{
             agent: Jido.Agent.Worker.agent(),
             pubsub: module(),
@@ -37,6 +57,14 @@ defmodule Jido.Agent.Worker do
       pending_commands: :queue.new()
     ]
 
+    @doc """
+    Generates default topics for an agent based on its ID.
+    """
+    @spec default_topics(String.t()) :: %{
+            input: String.t(),
+            emit: String.t(),
+            metrics: String.t()
+          }
     def default_topics(agent_id) do
       base = "jido.agent.#{agent_id}"
 
@@ -50,6 +78,21 @@ defmodule Jido.Agent.Worker do
 
   # Client API
 
+  @doc """
+  Starts a new Agent Worker process.
+
+  ## Options
+
+    * `:agent` - The Jido agent to manage (required)
+    * `:name` - The name to register the process under (optional, defaults to agent ID)
+    * `:pubsub` - The PubSub module to use for communication (required)
+
+  ## Returns
+
+    * `{:ok, pid}` on success
+    * `{:error, reason}` on failure
+  """
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     agent = Keyword.fetch!(opts, :agent)
     name = opts[:name] || agent.id
@@ -64,6 +107,10 @@ defmodule Jido.Agent.Worker do
     )
   end
 
+  @doc """
+  Returns a child specification for starting the Agent Worker under a supervisor.
+  """
+  @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts) do
     id = Keyword.get(opts, :id, __MODULE__)
 
@@ -76,18 +123,56 @@ defmodule Jido.Agent.Worker do
     }
   end
 
+  @doc """
+  Updates the agent's attributes.
+
+  ## Parameters
+
+    * `server` - The GenServer reference
+    * `attrs` - A map of attributes to update
+
+  ## Returns
+
+    * `:ok`
+  """
   @spec set(GenServer.server(), map()) :: :ok
   def set(server, attrs) do
     debug("Calling set", %{server: server, attrs: attrs})
     GenServer.cast(server, {:set, attrs})
   end
 
+  @doc """
+  Triggers the agent to act based on its current state.
+
+  ## Parameters
+
+    * `server` - The GenServer reference
+    * `attrs` - A map of additional attributes for the action
+
+  ## Returns
+
+    * `:ok`
+  """
   @spec act(GenServer.server(), map()) :: :ok
   def act(server, attrs) do
     debug("Calling act", %{server: server, attrs: attrs})
     GenServer.cast(server, {:act, attrs})
   end
 
+  @doc """
+  Sends a command to the agent.
+
+  ## Parameters
+
+    * `server` - The GenServer reference
+    * `command` - The command to execute
+    * `args` - Additional arguments for the command (optional)
+
+  ## Returns
+
+    * `{:ok, State.t()}` on success
+    * `{:error, term()}` on failure
+  """
   @spec cmd(GenServer.server(), command(), term()) :: {:ok, State.t()} | {:error, term()}
   def cmd(server, command, args \\ nil) do
     debug("Calling cmd", %{server: server, command: command, args: args})
@@ -97,6 +182,7 @@ defmodule Jido.Agent.Worker do
   # Server Callbacks
 
   @impl true
+  @spec init(map()) :: {:ok, State.t()} | {:stop, term()}
   def init(%{agent: agent, pubsub: pubsub}) do
     debug("Initializing Jido Agent Worker", %{agent: agent, pubsub: pubsub})
 
@@ -120,6 +206,7 @@ defmodule Jido.Agent.Worker do
   # Message Handlers
 
   @impl true
+  @spec handle_cast({:set, map()} | {:act, map()}, State.t()) :: {:noreply, State.t()}
   def handle_cast({:set, attrs}, state) do
     debug("Handling set cast", %{attrs: attrs})
 
@@ -134,7 +221,6 @@ defmodule Jido.Agent.Worker do
     end
   end
 
-  @impl true
   def handle_cast({:act, attrs}, state) do
     debug("Handling act cast", %{attrs: attrs})
 
@@ -150,6 +236,8 @@ defmodule Jido.Agent.Worker do
   end
 
   @impl true
+  @spec handle_call({:cmd, command(), term()}, GenServer.from(), State.t()) ::
+          {:reply, {:ok, State.t()} | {:ok, :queued} | {:error, term()}, State.t()}
   def handle_call({:cmd, command, args}, _from, state) do
     debug("Handling cmd call", %{command: command, args: args})
 
@@ -166,6 +254,7 @@ defmodule Jido.Agent.Worker do
 
   # PubSub Handler
   @impl true
+  @spec handle_info(Jido.Signal.t() | term(), State.t()) :: {:noreply, State.t()}
   def handle_info(%Jido.Signal{} = signal, state) do
     debug("Handling incoming signal", %{type: signal.type})
 
@@ -217,6 +306,9 @@ defmodule Jido.Agent.Worker do
   end
 
   # Command Handling
+
+  @spec enqueue_or_execute_command(State.t(), command(), term()) ::
+          {:execute, {:ok, State.t()} | {:error, term()}, State.t()} | {:enqueue, State.t()}
   defp enqueue_or_execute_command(%{status: status} = state, :resume, args)
        when status == :paused do
     debug("Executing resume command immediately", %{args: args})
@@ -246,6 +338,7 @@ defmodule Jido.Agent.Worker do
     {:enqueue, new_state}
   end
 
+  @spec maybe_process_next_command(State.t()) :: {:noreply, State.t()}
   defp maybe_process_next_command(%{status: :idle, pending_commands: queue} = state) do
     debug("Processing next command")
 
@@ -276,6 +369,7 @@ defmodule Jido.Agent.Worker do
 
   # Core Command Handlers
 
+  @spec do_set(State.t(), map() | nil) :: {:ok, State.t()} | {:error, String.t()}
   defp do_set(%State{status: :paused} = state, _attrs) do
     debug("Set ignored due to paused state")
     {:ok, state}
@@ -318,6 +412,7 @@ defmodule Jido.Agent.Worker do
     end
   end
 
+  @spec do_act(State.t(), map()) :: {:ok, State.t()} | {:error, term()}
   defp do_act(%State{status: :paused} = state, _attrs) do
     debug("Act ignored due to paused state")
     {:ok, state}
@@ -343,6 +438,7 @@ defmodule Jido.Agent.Worker do
     end
   end
 
+  @spec do_cmd(State.t(), command(), term()) :: {:ok, State.t()} | {:error, term()}
   defp do_cmd(state, command, args) do
     debug("Executing command", %{command: command, args: args})
 
@@ -358,6 +454,7 @@ defmodule Jido.Agent.Worker do
     end
   end
 
+  @spec execute_command(State.t(), command(), term()) :: {:ok, State.t()} | {:error, term()}
   defp execute_command(state, :pause, _args) do
     debug("Executing pause command")
     {:ok, %{state | status: :paused}}
@@ -399,6 +496,7 @@ defmodule Jido.Agent.Worker do
 
   # Private Helper Functions
 
+  @spec validate_state(State.t()) :: :ok | {:error, String.t()}
   defp validate_state(%State{pubsub: nil}), do: {:error, "PubSub module is required"}
   defp validate_state(%State{agent: nil}), do: {:error, "Agent is required"}
   defp validate_state(_state), do: :ok
@@ -409,6 +507,7 @@ defmodule Jido.Agent.Worker do
     Phoenix.PubSub.subscribe(pubsub, topics.input)
   end
 
+  @spec emit_signal(State.t(), atom(), map()) :: :ok
   defp emit_signal(%State{} = state, event_type, payload) do
     debug("Emitting signal", %{event_type: event_type, payload: payload})
 
@@ -422,6 +521,7 @@ defmodule Jido.Agent.Worker do
     broadcast_event(state, :emit, signal)
   end
 
+  @spec emit_metrics(State.t(), atom(), map()) :: :ok
   defp emit_metrics(%State{} = state, event_type, payload) do
     debug("Emitting metrics", %{event_type: event_type, payload: payload})
 
@@ -442,6 +542,7 @@ defmodule Jido.Agent.Worker do
     Phoenix.PubSub.broadcast(pubsub, topic, payload)
   end
 
+  @spec via_tuple(term()) :: {:via, Registry, {Jido.AgentRegistry, term()}}
   defp via_tuple(name) do
     {:via, Registry, {Jido.AgentRegistry, name}}
   end

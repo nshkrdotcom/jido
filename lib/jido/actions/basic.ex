@@ -2,18 +2,21 @@ defmodule Jido.Actions.Basic do
   @moduledoc """
   A collection of basic actions for common workflows.
 
-  This module provides a set of simple, reusable actions that can be used in various workflows.
+  This module provides a set of simple, reusable actions:
+  - Sleep: Pauses execution for a specified duration
+  - Log: Logs a message with a specified level
+  - Todo: Logs a todo item as a placeholder or reminder
+  - RandomSleep: Introduces a random delay within a specified range
+  - Increment: Increments a value by 1
+  - Decrement: Decrements a value by 1
+
   Each action is implemented as a separate submodule and follows the Jido.Action behavior.
   """
 
   alias Jido.Action
 
   defmodule Sleep do
-    @moduledoc """
-    An action that simulates sleeping for a specified duration.
-
-    This action pauses the execution for a given number of milliseconds.
-    """
+    @moduledoc false
     use Action,
       name: "sleep_workflow",
       description: "Sleeps for a specified duration",
@@ -33,11 +36,7 @@ defmodule Jido.Actions.Basic do
   end
 
   defmodule Log do
-    @moduledoc """
-    An action that logs a message with a specified level.
-
-    This action uses Elixir's Logger to output a message at the specified log level.
-    """
+    @moduledoc false
     use Action,
       name: "log_workflow",
       description: "Logs a message with a specified level",
@@ -62,11 +61,7 @@ defmodule Jido.Actions.Basic do
   end
 
   defmodule Todo do
-    @moduledoc """
-    An action that logs a todo item.
-
-    This action is useful for marking placeholders or reminders in workflows.
-    """
+    @moduledoc false
     use Action,
       name: "todo_workflow",
       description: "A placeholder for a todo item",
@@ -84,11 +79,7 @@ defmodule Jido.Actions.Basic do
   end
 
   defmodule RandomSleep do
-    @moduledoc """
-    An action that introduces a random delay within a specified range.
-
-    This action is useful for simulating variable processing times or network latency.
-    """
+    @moduledoc false
     use Action,
       name: "random_sleep_workflow",
       description: "Introduces a random sleep within a specified range",
@@ -114,11 +105,7 @@ defmodule Jido.Actions.Basic do
   end
 
   defmodule Increment do
-    @moduledoc """
-    An action that increments a value by 1.
-
-    This action is useful for counters or iterative processes in workflows.
-    """
+    @moduledoc false
     use Action,
       name: "increment_workflow",
       description: "Increments a value by 1",
@@ -133,11 +120,7 @@ defmodule Jido.Actions.Basic do
   end
 
   defmodule Decrement do
-    @moduledoc """
-    An action that decrements a value by 1.
-
-    This action is useful for counters or iterative processes in workflows.
-    """
+    @moduledoc false
     use Action,
       name: "decrement_workflow",
       description: "Decrements a value by 1",

@@ -2,16 +2,18 @@ defmodule Jido.Actions.Simplebot do
   @moduledoc """
   A collection of actions for a simple robot simulation.
 
-  This module provides a set of actions that can be used to simulate
-  basic robot behaviors such as moving, working, reporting, and recharging.
+  This module provides actions for:
+  - Move: Simulates moving the robot to a specified location
+  - Idle: Simulates the robot idling
+  - DoWork: Simulates the robot performing work tasks
+  - Report: Simulates the robot reporting its status
+  - Recharge: Simulates recharging the robot's battery
   """
 
   alias Jido.Action
 
   defmodule Move do
-    @moduledoc """
-    An action that simulates moving the robot to a specified location.
-    """
+    @moduledoc false
     use Action,
       name: "move_workflow",
       description: "Moves the robot to a specified location",
@@ -30,9 +32,7 @@ defmodule Jido.Actions.Simplebot do
   end
 
   defmodule Idle do
-    @moduledoc """
-    An action that simulates the robot idling.
-    """
+    @moduledoc false
     use Action,
       name: "idle_workflow",
       description: "Simulates the robot doing nothing"
@@ -46,9 +46,7 @@ defmodule Jido.Actions.Simplebot do
   end
 
   defmodule DoWork do
-    @moduledoc """
-    An action that simulates the robot performing work tasks.
-    """
+    @moduledoc false
     use Action,
       name: "do_work_workflow",
       description: "Simulates the robot performing work tasks"
@@ -65,9 +63,7 @@ defmodule Jido.Actions.Simplebot do
   end
 
   defmodule Report do
-    @moduledoc """
-    An action that simulates the robot reporting its status.
-    """
+    @moduledoc false
     use Action,
       name: "report_workflow",
       description: "Simulates the robot reporting its status"
@@ -82,9 +78,7 @@ defmodule Jido.Actions.Simplebot do
   end
 
   defmodule Recharge do
-    @moduledoc """
-    An action that simulates the robot recharging its battery.
-    """
+    @moduledoc false
     use Action,
       name: "recharge",
       description: "Simulates recharging the robot's battery"

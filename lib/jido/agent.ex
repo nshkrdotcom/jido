@@ -1,4 +1,49 @@
 defmodule Jido.Agent do
+  @moduledoc """
+  Defines an Agent within the Jido system.
+
+  An Agent represents a higher-level entity that can plan and execute a series of Actions.
+  Agents are defined at compile-time and provide a consistent interface for planning,
+  executing, and managing complex workflows.
+
+  ## Features
+
+  - Compile-time configuration validation
+  - Runtime input parameter validation
+  - Consistent error handling and formatting
+  - Extensible lifecycle hooks
+  - JSON serialization support
+  - Dynamic planning and execution of Action sequences
+
+  ## Usage
+
+  To define a new Agent, use the `Jido.Agent` behavior in your module:
+
+      defmodule MyAgent do
+        use Jido.Agent,
+          name: "my_agent",
+          description: "Performs a complex workflow",
+          category: "processing",
+          tags: ["example", "demo"],
+          vsn: "1.0.0",
+          schema: [
+            input: [type: :string, required: true]
+          ]
+
+        @impl true
+        def plan(agent) do
+          # Your planning logic here
+          {:ok, %Jido.ActionSet{agent: agent, plan: [MyAction1, MyAction2]}}
+        end
+      end
+
+  ## Callbacks
+
+  Implementing modules must define the following callback:
+
+  - `c:plan/1`: Generates a plan (sequence of Actions) for the Agent to execute.
+
+  """
   alias Jido.Error
   require OK
 

@@ -1,7 +1,7 @@
 if Code.ensure_loaded?(Private) do
   defmodule Jido.Workflow do
     @moduledoc """
-    Workflows are the Action runtime. They provide a robust framework for executing and managing workflows (Actions) in a distributed system.
+    Workflows are the Action runtime. They provide a robust framework for executing and managing workflows (multiple Actions) in a distributed system.
 
     This module offers functionality to:
     - Run workflows synchronously or asynchronously

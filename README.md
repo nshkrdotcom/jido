@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  自動 (Jido) - A flexible framework for building distributed AI Agents and Workflows in Elixir.
+  自動 (Jido) - A flexible framework for building distributed Agents and Workflows in Elixir.
 </p>
 
 <p align="center">
@@ -15,8 +15,8 @@
     <img alt="Hex Docs" src="http://img.shields.io/badge/hex.pm-docs-green.svg?style=flat">
   </a>
 
-  <a href="https://github.com/yourusername/jido/actions">
-    <img alt="CI Status" src="https://github.com/yourusername/jido/workflows/ci/badge.svg">
+  <a href="https://github.com/agentjido/jido/actions">
+    <img alt="CI Status" src="https://github.com/agentjido/jido/workflows/ci/badge.svg">
   </a>
 
   <a href="https://opensource.org/licenses/Apache-2.0">
@@ -31,7 +31,6 @@
 - **Agents**: Stateful autonomous entities that can plan and execute workflows
 - **Sensors**: Event-driven data gathering components
 - **Signals**: Cloud Events-based messaging between components
-- **Built for Distribution**: Native support for multi-node operation
 - **Flexible Planning**: Pluggable planners for agent decision making
 - **Comprehensive Testing**: Rich testing tools and helpers
 - **Observable**: Built-in telemetry and debugging tools
@@ -112,20 +111,12 @@ children = [
 ]
 
 # Start an agent instance
-{:ok, pid} = Jido.Agent.Supervisor.start_agent(MyApp.SimpleAgent.new())
+{:ok, pid} = Jido.Agent.Worker.start_link(MyApp.SimpleAgent.new())
 ```
-
-## Comprehensive Documentation
-
-- [Getting Started Guide](https://hexdocs.pm/jido/getting_started.html)
-- [Jido Architecture](https://hexdocs.pm/jido/architecture.html)
-- [Actions Guide](https://hexdocs.pm/jido/actions.html)
-- [Agents Guide](https://hexdocs.pm/jido/agents.html)
-- [Testing Guide](https://hexdocs.pm/jido/testing.html)
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! Please feel free to submit a PR.
 
 To run tests:
 

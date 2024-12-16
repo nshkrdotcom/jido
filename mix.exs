@@ -1,7 +1,7 @@
 defmodule Jido.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "1.0.0-rc.1"
 
   def project do
     [
@@ -15,9 +15,10 @@ defmodule Jido.MixProject do
 
       # Docs
       name: "Jido",
-      description: "An Elixir SDK for building AI Agents and Workflows.",
-      source_url: "https://github.com/mikehostetler/jido",
-      homepage_url: "https://github.com/mikehostetler/jido",
+      description:
+        "A flexible framework for building distributed Agents and Workflows in Elixir.",
+      source_url: "https://github.com/agentjido/jido",
+      homepage_url: "https://github.com/agentjido/jido",
       package: package(),
       docs: docs()
     ]
@@ -38,17 +39,48 @@ defmodule Jido.MixProject do
     [
       main: "Jido",
       source_ref: "v#{@version}",
-      source_url: "https://github.com/mikehostetler/jido",
-      extras: ["guides/getting-started.md", "guides/workflows.md"]
+      source_url: "https://github.com/agentjido/jido",
+      extras: ["README.md"],
+      groups_for_modules: [
+        Core: [
+          Jido,
+          Jido.Agent,
+          Jido.Action,
+          Jido.Workflow,
+          Jido.Signal,
+          Jido.Sensor
+        ],
+        Workflows: [
+          Jido.Workflow.Chain,
+          Jido.Workflow.Closure,
+          Jido.Workflow.Tool
+        ],
+        Agent_Runtime: [
+          Jido.Agent.Worker,
+          Jido.Agent.Supervisor
+        ],
+        Example_Actions: [
+          Jido.Actions.Arithmetic,
+          Jido.Actions.Basic,
+          Jido.Actions.Files,
+          Jido.Actions.Simplebot
+        ],
+        Utilities: [
+          Jido.ActionSet,
+          Jido.Util,
+          Jido.Error,
+          Jido.Agent.Worker.State
+        ]
+      ]
     ]
   end
 
   defp package do
     [
-      files: ["lib", "mix.exs", "README.md", "LICENSE"],
-      licenses: ["MIT"],
+      files: ["lib", "mix.exs", "README.md", "LICENSE.md"],
+      licenses: ["Apache 2.0"],
       links: %{
-        "GitHub" => "https://github.com/mikehostetler/jido"
+        "GitHub" => "https://github.com/agentjido/jido"
       }
     ]
   end

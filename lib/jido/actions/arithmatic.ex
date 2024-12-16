@@ -2,18 +2,20 @@ defmodule Jido.Actions.Arithmetic do
   @moduledoc """
   Provides basic arithmetic operations as actions.
 
-  This module defines a set of arithmetic actions that can be used in workflows.
+  This module defines a set of arithmetic actions that can be used in workflows:
+  - Add: Adds two numbers together
+  - Subtract: Subtracts one number from another
+  - Multiply: Multiplies two numbers
+  - Divide: Divides one number by another, handling division by zero
+  - Square: Squares a number
+
   Each action is implemented as a separate submodule and follows the Jido.Action behavior.
   """
 
   alias Jido.Action
 
   defmodule Add do
-    @moduledoc """
-    Adds two numbers together.
-
-    This action takes two numbers as input and returns their sum.
-    """
+    @moduledoc false
     use Action,
       name: "add",
       description: "Adds two numbers",
@@ -29,11 +31,7 @@ defmodule Jido.Actions.Arithmetic do
   end
 
   defmodule Subtract do
-    @moduledoc """
-    Subtracts one number from another.
-
-    This action takes two numbers as input and returns their difference.
-    """
+    @moduledoc false
     use Action,
       name: "subtract",
       description: "Subtracts one number from another",
@@ -49,11 +47,7 @@ defmodule Jido.Actions.Arithmetic do
   end
 
   defmodule Multiply do
-    @moduledoc """
-    Multiplies two numbers.
-
-    This action takes two numbers as input and returns their product.
-    """
+    @moduledoc false
     use Action,
       name: "multiply",
       description: "Multiplies two numbers",
@@ -69,12 +63,7 @@ defmodule Jido.Actions.Arithmetic do
   end
 
   defmodule Divide do
-    @moduledoc """
-    Divides one number by another.
-
-    This action takes two numbers as input and returns their quotient.
-    It handles division by zero by returning an error.
-    """
+    @moduledoc false
     use Action,
       name: "divide",
       description: "Divides one number by another",
@@ -94,11 +83,7 @@ defmodule Jido.Actions.Arithmetic do
   end
 
   defmodule Square do
-    @moduledoc """
-    Squares a number.
-
-    This action takes a single number as input and returns its square.
-    """
+    @moduledoc false
     use Action,
       name: "square",
       description: "Squares a number",

@@ -24,15 +24,7 @@ defmodule Jido.Agent.Worker do
 
   defmodule State do
     @moduledoc """
-    State structure for the Agent Worker.
-
-    Holds all necessary information for the worker's operation, including:
-    - The agent itself
-    - PubSub module for communication
-    - Topics for various channels
-    - Current status
-    - Configuration
-    - Queue of pending commands
+    Struct module for the Agent Worker state.
     """
 
     @type t :: %__MODULE__{
@@ -57,9 +49,6 @@ defmodule Jido.Agent.Worker do
       pending_commands: :queue.new()
     ]
 
-    @doc """
-    Generates default topics for an agent based on its ID.
-    """
     @spec default_topics(String.t()) :: %{
             input: String.t(),
             emit: String.t(),

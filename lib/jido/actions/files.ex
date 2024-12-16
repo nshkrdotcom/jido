@@ -2,19 +2,19 @@ defmodule Jido.Actions.Files do
   @moduledoc """
   Actions for file-related operations in workflows.
 
-  This module provides a set of actions for common file operations such as
-  reading, writing, copying, and moving files. Each action is implemented
-  as a separate submodule and follows the Jido.Action behavior.
+  This module provides a set of actions for common file operations:
+  - WriteFile: Writes content to a file
+  - ReadFile: Reads content from a file
+  - CopyFile: Copies a file from source to destination
+  - MoveFile: Moves a file from source to destination
+
+  Each action is implemented as a separate submodule and follows the Jido.Action behavior.
   """
 
   alias Jido.Action
 
   defmodule WriteFile do
-    @moduledoc """
-    Writes content to a file.
-
-    This action takes a file path and content as input, and writes the content to the specified file.
-    """
+    @moduledoc false
     use Action,
       name: "write_file",
       description: "Writes content to a file",
@@ -34,11 +34,7 @@ defmodule Jido.Actions.Files do
   end
 
   defmodule ReadFile do
-    @moduledoc """
-    Reads content from a file.
-
-    This action takes a file path as input and returns the content of the specified file.
-    """
+    @moduledoc false
     use Action,
       name: "read_file",
       description: "Reads content from a file",
@@ -57,12 +53,7 @@ defmodule Jido.Actions.Files do
   end
 
   defmodule CopyFile do
-    @moduledoc """
-    Copies a file from source to destination.
-
-    This action takes a source file path and a destination file path as input,
-    and copies the file from the source to the destination.
-    """
+    @moduledoc false
     use Action,
       name: "copy_file",
       description: "Copies a file from source to destination",
@@ -85,12 +76,7 @@ defmodule Jido.Actions.Files do
   end
 
   defmodule MoveFile do
-    @moduledoc """
-    Moves a file from source to destination.
-
-    This action takes a source file path and a destination file path as input,
-    and moves the file from the source to the destination.
-    """
+    @moduledoc false
     use Action,
       name: "move_file",
       description: "Moves a file from source to destination",

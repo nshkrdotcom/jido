@@ -1,61 +1,197 @@
 defmodule Jido do
   @moduledoc """
-  Jido enables intelligent automation in Elixir, with a focus on Actions, Workflows, Bots, Agents, Sensors, and Signals for creating dynamic and adaptive systems.
-  """
-  use Jido.Util, debug_enabled: false
+  Jido is a flexible framework for building distributed AI Agents and Workflows in Elixir.  It enables intelligent automation in Elixir, with a focus on Actions, Workflows, Bots, Agents, Sensors, and Signals for creating dynamic and adaptive systems.
 
-  @doc """
-  Retrieves all loaded Action modules and their metadata.
-
-  This function scans all loaded modules and identifies those that are Actions
-  by checking for the presence of the `__action_metadata__/0` function.
-  It then collects the metadata for each Action.
-
-  ## Returns
-
-  A list of tuples, where each tuple contains:
-  - The module name of the Action
-  - The metadata of the Action as returned by `__action_metadata__/0`
+  This module provides the main interface for interacting with Jido components, including:
+  - Listing and retrieving Actions, Sensors, and Domains
+  - Filtering and paginating results
+  - Generating unique slugs for components
 
   ## Examples
 
-      iex> Jido.Action.all_actions()
-      [
-        {MyApp.SomeAction, [name: "some_action", description: "Does something"]},
-        {MyApp.AnotherAction, [name: "another_action", description: "Does something else"]}
-      ]
+      iex> Jido.list_actions()
+      [%{module: MyApp.SomeAction, name: "some_action", description: "Does something", slug: "abc123de"}]
+
+      iex> Jido.get_action_by_slug("abc123de")
+      %{module: MyApp.SomeAction, name: "some_action", description: "Does something", slug: "abc123de"}
 
   """
+  use Jido.Util, debug_enabled: false
+
+  @type component_metadata :: %{
+          module: module(),
+          name: String.t(),
+          description: String.t(),
+          slug: String.t(),
+          category: atom() | nil,
+          tags: [atom()] | nil
+        }
+
+  @doc """
+  Retrieves an Action by its slug.
+
+  ## Parameters
+
+  - `slug`: A string representing the unique identifier of the Action.
+
+  ## Returns
+
+  The Action metadata if found, otherwise `nil`.
+
+  ## Examples
+
+      iex> Jido.get_action_by_slug("abc123de")
+      %{module: MyApp.SomeAction, name: "some_action", description: "Does something", slug: "abc123de"}
+
+      iex> Jido.get_action_by_slug("nonexistent")
+      nil
+
+  """
+  @spec get_action_by_slug(String.t()) :: component_metadata() | nil
   def get_action_by_slug(slug) do
     Enum.find(list_actions(), fn action -> action.slug == slug end)
   end
 
+  @doc """
+  Retrieves a Sensor by its slug.
+
+  ## Parameters
+
+  - `slug`: A string representing the unique identifier of the Sensor.
+
+  ## Returns
+
+  The Sensor metadata if found, otherwise `nil`.
+
+  ## Examples
+
+      iex> Jido.get_sensor_by_slug("def456gh")
+      %{module: MyApp.SomeSensor, name: "some_sensor", description: "Monitors something", slug: "def456gh"}
+
+      iex> Jido.get_sensor_by_slug("nonexistent")
+      nil
+
+  """
+  @spec get_sensor_by_slug(String.t()) :: component_metadata() | nil
   def get_sensor_by_slug(slug) do
     Enum.find(list_sensors(), fn sensor -> sensor.slug == slug end)
   end
 
+  @doc """
+  Retrieves a Domain by its slug.
+
+  ## Parameters
+
+  - `slug`: A string representing the unique identifier of the Domain.
+
+  ## Returns
+
+  The Domain metadata if found, otherwise `nil`.
+
+  ## Examples
+
+      iex> Jido.get_domain_by_slug("ghi789jk")
+      %{module: MyApp.SomeDomain, name: "some_domain", description: "Represents a domain", slug: "ghi789jk"}
+
+      iex> Jido.get_domain_by_slug("nonexistent")
+      nil
+
+  """
+  @spec get_domain_by_slug(String.t()) :: component_metadata() | nil
   def get_domain_by_slug(slug) do
     Enum.find(list_domains(), fn domain -> domain.slug == slug end)
   end
 
-  @spec list_actions(keyword()) :: [{module(), map()}]
+  @doc """
+  Lists all Actions with optional filtering and pagination.
+
+  ## Parameters
+
+  - `opts`: A keyword list of options for filtering and pagination. Available options:
+    - `:limit`: Maximum number of results to return.
+    - `:offset`: Number of results to skip before starting to return.
+    - `:name`: Filter Actions by name (partial match).
+    - `:description`: Filter Actions by description (partial match).
+    - `:category`: Filter Actions by category (exact match).
+    - `:tag`: Filter Actions by tag (must have the exact tag).
+
+  ## Returns
+
+  A list of Action metadata.
+
+  ## Examples
+
+      iex> Jido.list_actions(limit: 10, offset: 5, category: :utility)
+      [%{module: MyApp.SomeAction, name: "some_action", description: "Does something", slug: "abc123de", category: :utility}]
+
+  """
+  @spec list_actions(keyword()) :: [component_metadata()]
   def list_actions(opts \\ []) do
     debug("Listing actions with options", opts: opts)
     list_modules(opts, :__action_metadata__)
   end
 
-  @spec list_sensors(keyword()) :: [{module(), map()}]
+  @doc """
+  Lists all Sensors with optional filtering and pagination.
+
+  ## Parameters
+
+  - `opts`: A keyword list of options for filtering and pagination. Available options:
+    - `:limit`: Maximum number of results to return.
+    - `:offset`: Number of results to skip before starting to return.
+    - `:name`: Filter Sensors by name (partial match).
+    - `:description`: Filter Sensors by description (partial match).
+    - `:category`: Filter Sensors by category (exact match).
+    - `:tag`: Filter Sensors by tag (must have the exact tag).
+
+  ## Returns
+
+  A list of Sensor metadata.
+
+  ## Examples
+
+      iex> Jido.list_sensors(limit: 10, offset: 5, category: :monitoring)
+      [%{module: MyApp.SomeSensor, name: "some_sensor", description: "Monitors something", slug: "def456gh", category: :monitoring}]
+
+  """
+  @spec list_sensors(keyword()) :: [component_metadata()]
   def list_sensors(opts \\ []) do
     debug("Listing sensors with options", opts: opts)
     list_modules(opts, :__sensor_metadata__)
   end
 
-  @spec list_domains(keyword()) :: [{module(), map()}]
+  @doc """
+  Lists all Domains with optional filtering and pagination.
+
+  ## Parameters
+
+  - `opts`: A keyword list of options for filtering and pagination. Available options:
+    - `:limit`: Maximum number of results to return.
+    - `:offset`: Number of results to skip before starting to return.
+    - `:name`: Filter Domains by name (partial match).
+    - `:description`: Filter Domains by description (partial match).
+    - `:category`: Filter Domains by category (exact match).
+    - `:tag`: Filter Domains by tag (must have the exact tag).
+
+  ## Returns
+
+  A list of Domain metadata.
+
+  ## Examples
+
+      iex> Jido.list_domains(limit: 10, offset: 5, category: :business)
+      [%{module: MyApp.SomeDomain, name: "some_domain", description: "Represents a domain", slug: "ghi789jk", category: :business}]
+
+  """
+  @spec list_domains(keyword()) :: [component_metadata()]
   def list_domains(opts \\ []) do
     debug("Listing domains with options", opts: opts)
     list_modules(opts, :__domain_metadata__)
   end
 
+  # Private functions
+
+  @spec list_modules(keyword(), atom()) :: [component_metadata()]
   defp list_modules(opts, metadata_function) do
     debug("Listing modules", opts: opts, metadata_function: metadata_function)
     limit = Keyword.get(opts, :limit)
@@ -102,11 +238,13 @@ defmodule Jido do
     result
   end
 
+  @spec all_applications() :: [atom()]
   defp all_applications do
     Application.loaded_applications()
     |> Enum.map(fn {app, _description, _version} -> app end)
   end
 
+  @spec all_modules(atom()) :: [module()]
   defp all_modules(app) do
     debug("Fetching all modules")
 
@@ -121,12 +259,15 @@ defmodule Jido do
     end
   end
 
+  @spec has_metadata_function?(module(), atom()) :: boolean()
   defp has_metadata_function?(module, function) do
     result = Code.ensure_loaded?(module) and function_exported?(module, function, 0)
     debug("Metadata function check result", module: module, function: function, result: result)
     result
   end
 
+  @spec filter_metadata(map(), String.t() | nil, String.t() | nil, atom() | nil, atom() | nil) ::
+          boolean()
   defp filter_metadata(metadata, name, description, category, tag) do
     debug("Filtering metadata",
       metadata: metadata,
@@ -149,6 +290,7 @@ defmodule Jido do
     result
   end
 
+  @spec maybe_limit(list(), non_neg_integer() | nil) :: list()
   defp maybe_limit(list, nil) do
     debug("No limit applied to list")
     list

@@ -94,6 +94,7 @@ defmodule Jido.MixProject do
       {:nimble_options, "~> 1.1"},
       {:ok, "~> 2.3"},
       {:phoenix_pubsub, "~> 2.1"},
+      {:private, "~> 0.1.2"},
       {:proper_case, "~> 1.3"},
       {:telemetry, "~> 1.3"},
       {:typed_struct, "~> 0.3.0"},
@@ -105,7 +106,6 @@ defmodule Jido.MixProject do
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
       {:mimic, "~> 1.7", only: [:dev, :test]},
       {:mock, "~> 0.3.8", only: [:dev, :test]},
-      {:private, "~> 0.1.2", only: [:dev, :test]},
       {:stream_data, "~> 1.1", only: [:dev, :test]}
     ]
   end

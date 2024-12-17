@@ -143,8 +143,7 @@ defmodule Jido.Agent do
           end
 
           def __agent_metadata__ do
-            metadata = to_json()
-            metadata
+            to_json()
           end
 
           @doc """

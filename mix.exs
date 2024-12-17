@@ -1,7 +1,7 @@
 defmodule Jido.MixProject do
   use Mix.Project
 
-  @version "1.0.0-rc.1"
+  @version "1.0.0-rc.2"
 
   def project do
     [
@@ -78,6 +78,7 @@ defmodule Jido.MixProject do
   defp package do
     [
       files: ["lib", "mix.exs", "README.md", "LICENSE.md"],
+      maintainers: ["Mike Hostetler"],
       licenses: ["Apache-2.0"],
       links: %{
         "GitHub" => "https://github.com/agentjido/jido"

@@ -78,28 +78,28 @@ defmodule Jido do
   end
 
   @doc """
-  Retrieves a Domain by its slug.
+  Retrieves an Agent by its slug.
 
   ## Parameters
 
-  - `slug`: A string representing the unique identifier of the Domain.
+  - `slug`: A string representing the unique identifier of the Agent.
 
   ## Returns
 
-  The Domain metadata if found, otherwise `nil`.
+  The Agent metadata if found, otherwise `nil`.
 
   ## Examples
 
-      iex> Jido.get_domain_by_slug("ghi789jk")
-      %{module: MyApp.SomeDomain, name: "some_domain", description: "Represents a domain", slug: "ghi789jk"}
+      iex> Jido.get_agent_by_slug("ghi789jk")
+      %{module: MyApp.SomeAgent, name: "some_agent", description: "Represents an agent", slug: "ghi789jk"}
 
-      iex> Jido.get_domain_by_slug("nonexistent")
+      iex> Jido.get_agent_by_slug("nonexistent")
       nil
 
   """
-  @spec get_domain_by_slug(String.t()) :: component_metadata() | nil
-  def get_domain_by_slug(slug) do
-    Enum.find(list_domains(), fn domain -> domain.slug == slug end)
+  @spec get_agent_by_slug(String.t()) :: component_metadata() | nil
+  def get_agent_by_slug(slug) do
+    Enum.find(list_agents(), fn agent -> agent.slug == slug end)
   end
 
   @doc """
@@ -161,32 +161,32 @@ defmodule Jido do
   end
 
   @doc """
-  Lists all Domains with optional filtering and pagination.
+  Lists all Agents with optional filtering and pagination.
 
   ## Parameters
 
   - `opts`: A keyword list of options for filtering and pagination. Available options:
     - `:limit`: Maximum number of results to return.
     - `:offset`: Number of results to skip before starting to return.
-    - `:name`: Filter Domains by name (partial match).
-    - `:description`: Filter Domains by description (partial match).
-    - `:category`: Filter Domains by category (exact match).
-    - `:tag`: Filter Domains by tag (must have the exact tag).
+    - `:name`: Filter Agents by name (partial match).
+    - `:description`: Filter Agents by description (partial match).
+    - `:category`: Filter Agents by category (exact match).
+    - `:tag`: Filter Agents by tag (must have the exact tag).
 
   ## Returns
 
-  A list of Domain metadata.
+  A list of Agent metadata.
 
   ## Examples
 
-      iex> Jido.list_domains(limit: 10, offset: 5, category: :business)
-      [%{module: MyApp.SomeDomain, name: "some_domain", description: "Represents a domain", slug: "ghi789jk", category: :business}]
+      iex> Jido.list_agents(limit: 10, offset: 5, category: :business)
+      [%{module: MyApp.SomeAgent, name: "some_agent", description: "Represents an agent", slug: "ghi789jk", category: :business}]
 
   """
-  @spec list_domains(keyword()) :: [component_metadata()]
-  def list_domains(opts \\ []) do
-    debug("Listing domains with options", opts: opts)
-    list_modules(opts, :__domain_metadata__)
+  @spec list_agents(keyword()) :: [component_metadata()]
+  def list_agents(opts \\ []) do
+    debug("Listing agents with options", opts: opts)
+    list_modules(opts, :__agent_metadata__)
   end
 
   # Private functions

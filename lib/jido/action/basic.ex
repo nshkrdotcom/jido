@@ -9,6 +9,7 @@ defmodule Jido.Actions.Basic do
   - RandomSleep: Introduces a random delay within a specified range
   - Increment: Increments a value by 1
   - Decrement: Decrements a value by 1
+  - Noop: No operation, returns input unchanged
 
   Each action is implemented as a separate submodule and follows the Jido.Action behavior.
   """
@@ -131,6 +132,35 @@ defmodule Jido.Actions.Basic do
     @spec run(map(), map()) :: {:ok, map()}
     def run(%{value: value} = params, _ctx) do
       {:ok, Map.put(params, :value, value - 1)}
+    end
+  end
+
+  defmodule Noop do
+    @moduledoc false
+    use Action,
+      name: "noop_workflow",
+      description: "No operation, returns input unchanged",
+      schema: []
+
+    @spec run(map(), map()) :: {:ok, map()}
+    def run(params, _ctx) do
+      {:ok, params}
+    end
+  end
+
+  defmodule Inspect do
+    @moduledoc false
+    use Action,
+      name: "inspect_workflow",
+      description: "Inspects a value",
+      schema: [
+        value: [type: :any, required: true, doc: "Value to inspect"]
+      ]
+
+    @spec run(map(), map()) :: {:ok, map()}
+    def run(%{value: value} = params, _ctx) do
+      IO.inspect(value)
+      {:ok, params}
     end
   end
 end

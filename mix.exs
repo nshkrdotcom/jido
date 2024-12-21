@@ -27,7 +27,8 @@ defmodule Jido.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger],
+      mod: {Jido.Application, []}
     ]
   end
 
@@ -56,7 +57,7 @@ defmodule Jido.MixProject do
           Jido.Workflow.Tool
         ],
         Agent_Runtime: [
-          Jido.Agent.Worker,
+          Jido.Agent.Runtime,
           Jido.Agent.Supervisor
         ],
         Example_Actions: [
@@ -66,10 +67,9 @@ defmodule Jido.MixProject do
           Jido.Actions.Simplebot
         ],
         Utilities: [
-          Jido.ActionSet,
           Jido.Util,
           Jido.Error,
-          Jido.Agent.Worker.State
+          Jido.Agent.Runtime.State
         ]
       ]
     ]

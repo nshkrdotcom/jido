@@ -28,7 +28,7 @@ defmodule Jido.Workflow do
 
       Jido.Workflow.run(MyAction, %{param1: "value"}, %{context_key: "context_value"})
 
-  See `Jido.Action` for how to define a Action.
+  See `Jido.Action` for how to define an Action.
 
   For asynchronous execution:
 
@@ -36,7 +36,22 @@ defmodule Jido.Workflow do
       # ... do other work ...
       result = Jido.Workflow.await(async_ref)
 
+  ### Integrating with OTP
+
+  For correct supervision of async tasks, ensure you start a `Task.Supervisor` under your
+  application's supervision tree, for example:
+
+      def start(_type, _args) do
+        children = [
+          {Task.Supervisor, name: Jido.Workflow.TaskSupervisor},
+          ...
+        ]
+        Supervisor.start_link(children, strategy: :one_for_one)
+      end
+
+  This way, any async tasks spawned by `run_async/4` will be supervised by the Task Supervisor.
   """
+
   use Private
 
   alias Jido.Error
@@ -79,7 +94,6 @@ defmodule Jido.Workflow do
 
       iex> Jido.Workflow.run(MyAction, %{invalid: "input"}, %{}, timeout: 1000)
       {:error, %Jido.Error{type: :validation_error, message: "Invalid input"}}
-
   """
   @spec run(action(), params(), context(), run_opts()) :: {:ok, map()} | {:error, Error.t()}
   def run(action, params \\ %{}, context \\ %{}, opts \\ [])
@@ -116,6 +130,9 @@ defmodule Jido.Workflow do
   This function immediately returns a reference that can be used to await the result
   or cancel the workflow.
 
+  **Note**: This approach integrates with OTP by spawning tasks under a `Task.Supervisor`.
+  Make sure `{Task.Supervisor, name: Jido.Workflow.TaskSupervisor}` is part of your supervision tree.
+
   ## Parameters
 
   - `action`: The module implementing the Action behavior.
@@ -136,18 +153,23 @@ defmodule Jido.Workflow do
 
       iex> result = Jido.Workflow.await(async_ref)
       {:ok, %{result: "processed value"}}
-
   """
   @spec run_async(action(), params(), context(), run_opts()) :: async_ref()
   def run_async(action, params \\ %{}, context \\ %{}, opts \\ []) do
-    caller = self()
     ref = make_ref()
+    parent = self()
 
-    {pid, _} =
-      spawn_monitor(fn ->
+    # Start the task under the TaskSupervisor.
+    # If the supervisor is not running, this will raise an error.
+    {:ok, pid} =
+      Task.Supervisor.start_child(Jido.Workflow.TaskSupervisor, fn ->
         result = run(action, params, context, opts)
-        send(caller, {:action_async_result, ref, result})
+        send(parent, {:action_async_result, ref, result})
+        result
       end)
+
+    # We monitor the newly created Task so we can handle :DOWN messages in `await`.
+    Process.monitor(pid)
 
     %{ref: ref, pid: pid}
   end
@@ -174,7 +196,6 @@ defmodule Jido.Workflow do
       iex> async_ref = Jido.Workflow.run_async(SlowAction, %{input: "value"})
       iex> Jido.Workflow.await(async_ref, 100)
       {:error, %Jido.Error{type: :timeout, message: "Async workflow timed out after 100ms"}}
-
   """
   @spec await(async_ref(), timeout()) :: {:ok, map()} | {:error, Error.t()}
   def await(%{ref: ref, pid: pid}, timeout \\ 5000) do
@@ -182,11 +203,26 @@ defmodule Jido.Workflow do
       {:action_async_result, ^ref, result} ->
         result
 
-      {:DOWN, _, :process, ^pid, reason} ->
-        {:error, Error.execution_error("Async workflow failed: #{inspect(reason)}")}
+      {:DOWN, _monitor_ref, :process, ^pid, :normal} ->
+        # Process completed normally, but we might still receive the result
+        receive do
+          {:action_async_result, ^ref, result} -> result
+        after
+          100 -> {:error, Error.execution_error("Process completed but result was not received")}
+        end
+
+      {:DOWN, _monitor_ref, :process, ^pid, reason} ->
+        {:error, Error.execution_error("Runtime error in async workflow: #{inspect(reason)}")}
     after
       timeout ->
         Process.exit(pid, :kill)
+
+        receive do
+          {:DOWN, _, :process, ^pid, _} -> :ok
+        after
+          0 -> :ok
+        end
+
         {:error, Error.timeout("Async workflow timed out after #{timeout}ms")}
     end
   end
@@ -211,7 +247,6 @@ defmodule Jido.Workflow do
 
       iex> Jido.Workflow.cancel("invalid")
       {:error, %Jido.Error{type: :invalid_async_ref, message: "Invalid async ref for cancellation"}}
-
   """
   @spec cancel(async_ref() | pid()) :: :ok | {:error, Error.t()}
   def cancel(%{ref: _ref, pid: pid}), do: cancel(pid)
@@ -224,6 +259,7 @@ defmodule Jido.Workflow do
 
   def cancel(_), do: {:error, Error.invalid_async_ref("Invalid async ref for cancellation")}
 
+  # Private functions are exposed to the test suite
   private do
     @spec normalize_params(params()) :: {:ok, map()} | {:error, Error.t()}
     defp normalize_params(%Error{} = error), do: OK.failure(error)
@@ -359,7 +395,7 @@ defmodule Jido.Workflow do
 
       case result do
         {:ok, _} = success -> success
-        {:error, %Error{type: :timeout}} = timeout -> timeout
+        {:error, %Error{type: :timeout}} = timeout_err -> timeout_err
         {:error, error} -> handle_action_error(action, params, context, error)
       end
     end
@@ -430,8 +466,15 @@ defmodule Jido.Workflow do
             {:error, Error.t() | map()}
     defp handle_action_error(action, params, context, error) do
       if compensation_enabled?(action) do
-        compensation_opts = action.__action_metadata__()[:compensation] || []
-        timeout = Keyword.get(compensation_opts, :timeout, 5_000)
+        metadata = action.__action_metadata__()
+        compensation_opts = metadata[:compensation] || []
+
+        timeout =
+          case compensation_opts do
+            opts when is_list(opts) -> Keyword.get(opts, :timeout, 5_000)
+            %{timeout: timeout} -> timeout
+            _ -> 5_000
+          end
 
         task =
           Task.async(fn ->
@@ -444,11 +487,10 @@ defmodule Jido.Workflow do
 
           nil ->
             Error.compensation_error(
-              error.message,
+              error,
               %{
                 compensated: false,
-                compensation_error: "Compensation timed out after #{timeout}ms",
-                original_error: error
+                compensation_error: "Compensation timed out after #{timeout}ms"
               }
             )
             |> OK.failure()
@@ -458,33 +500,43 @@ defmodule Jido.Workflow do
       end
     end
 
-    @spec handle_compensation_result(map(), Error.t()) :: {:error, Error.t()}
+    @spec handle_compensation_result(any(), Error.t()) :: {:error, Error.t()}
     defp handle_compensation_result(result, original_error) do
       case result do
-        OK.success(comp_result) ->
+        {:ok, comp_result} ->
+          # Extract fields that should be at the top level of the details
           {top_level_fields, remaining_fields} =
             Map.split(comp_result, [:test_value, :compensation_context])
 
-          Error.compensation_error(
-            original_error.message,
+          # Create the details map with the compensation result
+          details =
             Map.merge(
               %{
                 compensated: true,
-                original_error: original_error,
                 compensation_result: remaining_fields
               },
               top_level_fields
             )
+
+          Error.compensation_error(original_error, details)
+          |> OK.failure()
+
+        {:error, comp_error} ->
+          Error.compensation_error(
+            original_error,
+            %{
+              compensated: false,
+              compensation_error: comp_error
+            }
           )
           |> OK.failure()
 
-        OK.failure(comp_error) ->
+        _ ->
           Error.compensation_error(
-            original_error.message,
+            original_error,
             %{
               compensated: false,
-              compensation_error: comp_error,
-              original_error: original_error
+              compensation_error: "Invalid compensation result"
             }
           )
           |> OK.failure()
@@ -493,22 +545,29 @@ defmodule Jido.Workflow do
 
     @spec compensation_enabled?(action()) :: boolean()
     defp compensation_enabled?(action) do
-      compensation_opts = action.__action_metadata__()[:compensation] || []
+      metadata = action.__action_metadata__()
+      compensation_opts = metadata[:compensation] || []
 
-      Keyword.get(compensation_opts, :enabled, false) &&
-        function_exported?(action, :on_error, 4)
+      enabled =
+        case compensation_opts do
+          opts when is_list(opts) -> Keyword.get(opts, :enabled, false)
+          %{enabled: enabled} -> enabled
+          _ -> false
+        end
+
+      enabled && function_exported?(action, :on_error, 4)
     end
 
     @spec execute_action_with_timeout(action(), params(), context(), non_neg_integer()) ::
             {:ok, map()} | {:error, Error.t()}
-    def execute_action_with_timeout(action, params, context, timeout)
+    defp execute_action_with_timeout(action, params, context, timeout)
 
-    def execute_action_with_timeout(action, params, context, 0) do
+    defp execute_action_with_timeout(action, params, context, 0) do
       execute_action(action, params, context)
     end
 
-    def execute_action_with_timeout(action, params, context, timeout)
-        when is_integer(timeout) and timeout > 0 do
+    defp execute_action_with_timeout(action, params, context, timeout)
+         when is_integer(timeout) and timeout > 0 do
       parent = self()
       ref = make_ref()
 
@@ -549,7 +608,7 @@ defmodule Jido.Workflow do
       end
     end
 
-    def execute_action_with_timeout(action, params, context, _timeout) do
+    defp execute_action_with_timeout(action, params, context, _timeout) do
       execute_action_with_timeout(action, params, context, @default_timeout)
     end
 
@@ -558,6 +617,9 @@ defmodule Jido.Workflow do
       case action.run(params, context) do
         OK.success(result) ->
           OK.success(result)
+
+        OK.failure(%Error{} = error) ->
+          OK.failure(error)
 
         OK.failure(reason) ->
           OK.failure(Error.execution_error(reason))

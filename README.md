@@ -86,20 +86,16 @@ defmodule MyApp.SimpleAgent do
 
   @impl true
   def plan(%__MODULE__{} = agent) do
-    {:ok,
-     %Jido.ActionSet{
-       agent: agent,
-       plan: [
-         {MyApp.Actions.Basic.Log, message: "Hello, world!"},
-         {MyApp.Actions.Basic.Sleep, duration: 50},
-         {MyApp.Actions.Basic.Log, message: "Goodbye, world!"}
-       ]
-     }}
+    {:ok, [
+        {MyApp.Actions.Basic.Log, message: "Hello, world!"},
+        {MyApp.Actions.Basic.Sleep, duration: 50},
+        {MyApp.Actions.Basic.Log, message: "Goodbye, world!"}
+     ]}
   end
 end
 ```
 
-### Starting an Agent Worker
+### Starting an Agent Runtime
 
 Start an agent worker under your supervision tree:
 
@@ -111,7 +107,7 @@ children = [
 ]
 
 # Start an agent instance
-{:ok, pid} = Jido.Agent.Worker.start_link(MyApp.SimpleAgent.new())
+{:ok, pid} = Jido.Agent.Runtime.start_link(MyApp.SimpleAgent.new())
 ```
 
 ## Contributing

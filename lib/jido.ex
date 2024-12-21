@@ -27,6 +27,80 @@ defmodule Jido do
           tags: [atom()] | nil
         }
 
+  @callback config() :: keyword()
+
+  defmacro __using__(opts) do
+    quote do
+      @behaviour unquote(__MODULE__)
+      @otp_app unquote(opts)[:otp_app] ||
+                 raise(ArgumentError, """
+                 You must provide `otp_app: :your_app` to use Jido, e.g.:
+
+                     use Jido, otp_app: :my_app
+                 """)
+
+      # Public function to retrieve config from application environment
+      def config do
+        Application.get_env(@otp_app, __MODULE__, [])
+      end
+
+      # Provide a child spec so we can be placed directly under a Supervisor:
+      @spec child_spec(any()) :: Supervisor.child_spec()
+      def child_spec(_arg) do
+        %{
+          id: __MODULE__,
+          start: {__MODULE__, :start_link, []},
+          shutdown: 5000,
+          type: :supervisor
+        }
+      end
+
+      # Entry point for starting the Jido supervisor
+      @spec start_link() :: Supervisor.on_start()
+      def start_link do
+        unquote(__MODULE__).ensure_started(__MODULE__)
+      end
+    end
+  end
+
+  @doc """
+  Callback used by the generated `start_link/0` function.
+  This is where we actually call Jido.Supervisor.start_link.
+  """
+  @spec ensure_started(module()) :: Supervisor.on_start()
+  def ensure_started(jido_module) do
+    config = jido_module.config()
+    Jido.Supervisor.start_link(jido_module, config)
+  end
+
+  @doc """
+  Retrieves a prompt file from the priv/prompts directory by its name.
+
+  ## Parameters
+
+  - `name`: An atom representing the name of the prompt file (without .txt extension)
+
+  ## Returns
+
+  The contents of the prompt file as a string if found, otherwise raises an error.
+
+  ## Examples
+
+      iex> Jido.prompt(:system)
+      "You are a helpful AI assistant..."
+
+      iex> Jido.prompt(:nonexistent)
+      ** (File.Error) could not read file priv/prompts/nonexistent.txt
+
+  """
+  @spec prompt(atom()) :: String.t()
+  def prompt(name) when is_atom(name) do
+    app = Application.get_application(__MODULE__)
+    path = :code.priv_dir(app)
+    prompt_path = Path.join([path, "prompts", "#{name}.txt"])
+    File.read!(prompt_path)
+  end
+
   @doc """
   Retrieves an Action by its slug.
 
@@ -277,17 +351,38 @@ defmodule Jido do
       tag: tag
     )
 
-    name_match = is_nil(name) or String.contains?(metadata[:name] || "", name)
+    result =
+      matches_name?(metadata, name) and
+        matches_description?(metadata, description) and
+        matches_category?(metadata, category) and
+        matches_tag?(metadata, tag)
 
-    description_match =
-      is_nil(description) or String.contains?(metadata[:description] || "", description)
-
-    category_match = is_nil(category) or metadata[:category] == category
-    tag_match = is_nil(tag) or (is_list(metadata[:tags]) and tag in metadata[:tags])
-
-    result = name_match and description_match and category_match and tag_match
     debug("Filter result", result: result)
     result
+  end
+
+  defp matches_name?(_metadata, nil), do: true
+
+  defp matches_name?(metadata, name) do
+    String.contains?(metadata[:name] || "", name)
+  end
+
+  defp matches_description?(_metadata, nil), do: true
+
+  defp matches_description?(metadata, description) do
+    String.contains?(metadata[:description] || "", description)
+  end
+
+  defp matches_category?(_metadata, nil), do: true
+
+  defp matches_category?(metadata, category) do
+    metadata[:category] == category
+  end
+
+  defp matches_tag?(_metadata, nil), do: true
+
+  defp matches_tag?(metadata, tag) do
+    is_list(metadata[:tags]) and tag in metadata[:tags]
   end
 
   @spec maybe_limit(list(), non_neg_integer() | nil) :: list()

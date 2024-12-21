@@ -1,8 +1,8 @@
-defmodule Jido.Agent.Worker.State do
+defmodule Jido.Agent.Runtime.State do
   @moduledoc """
-  Defines the state management structure and transition logic for Agent Workers.
+  Defines the state management structure and transition logic for Agent Runtimes.
 
-  The Worker.State module implements a finite state machine (FSM) that governs
+  The Runtime.State module implements a finite state machine (FSM) that governs
   the lifecycle of agent workers in the Jido system. It ensures type safety and
   enforces valid state transitions while providing telemetry and logging for
   observability.
@@ -11,10 +11,10 @@ defmodule Jido.Agent.Worker.State do
 
   The worker can be in one of the following states:
   - `:initializing` - Initial state when worker is starting up
-  - `:idle` - Worker is inactive and ready to accept new commands
-  - `:planning` - Worker is planning but not yet executing actions
-  - `:running` - Worker is actively executing commands
-  - `:paused` - Worker execution is temporarily suspended
+  - `:idle` - Runtime is inactive and ready to accept new commands
+  - `:planning` - Runtime is planning but not yet executing actions
+  - `:running` - Runtime is actively executing commands
+  - `:paused` - Runtime execution is temporarily suspended
 
   ## State Transitions
 
@@ -42,13 +42,13 @@ defmodule Jido.Agent.Worker.State do
 
   ## Example
 
-      iex> state = %Worker.State{
+      iex> state = %Runtime.State{
       ...>   agent: my_agent,
       ...>   pubsub: MyApp.PubSub,
       ...>   topic: "agent.worker.1",
       ...>   status: :idle
       ...> }
-      iex> {:ok, new_state} = Worker.State.transition(state, :running)
+      iex> {:ok, new_state} = Runtime.State.transition(state, :running)
       iex> new_state.status
       :running
   """
@@ -59,11 +59,11 @@ defmodule Jido.Agent.Worker.State do
   @typedoc """
   Represents the possible states of a worker.
 
-  - `:initializing` - Worker is starting up
-  - `:idle` - Worker is inactive
-  - `:planning` - Worker is planning actions
-  - `:running` - Worker is executing actions
-  - `:paused` - Worker execution is suspended
+  - `:initializing` - Runtime is starting up
+  - `:idle` - Runtime is inactive
+  - `:planning` - Runtime is planning actions
+  - `:running` - Runtime is executing actions
+  - `:paused` - Runtime execution is suspended
   """
   @type status :: :initializing | :idle | :planning | :running | :paused
 
@@ -108,7 +108,7 @@ defmodule Jido.Agent.Worker.State do
 
   ## Parameters
 
-  - `state` - Current Worker.State struct
+  - `state` - Current Runtime.State struct
   - `desired` - Desired target state
 
   ## Returns
@@ -118,12 +118,12 @@ defmodule Jido.Agent.Worker.State do
 
   ## Examples
 
-      iex> state = %Worker.State{status: :idle}
-      iex> Worker.State.transition(state, :running)
-      {:ok, %Worker.State{status: :running}}
+      iex> state = %Runtime.State{status: :idle}
+      iex> Runtime.State.transition(state, :running)
+      {:ok, %Runtime.State{status: :running}}
 
-      iex> state = %Worker.State{status: :idle}
-      iex> Worker.State.transition(state, :paused)
+      iex> state = %Runtime.State{status: :idle}
+      iex> Runtime.State.transition(state, :paused)
       {:error, {:invalid_transition, :idle, :paused}}
   """
   @spec transition(%__MODULE__{status: status()}, status()) ::
@@ -155,7 +155,7 @@ defmodule Jido.Agent.Worker.State do
 
   ## Examples
 
-      iex> Worker.State.default_topic("robot_1")
+      iex> Runtime.State.default_topic("robot_1")
       "jido.agent.robot_1"
   """
   @spec default_topic(String.t()) :: String.t()

@@ -205,7 +205,6 @@ defmodule Jido.Agent do
               |> Keyword.put(:command_manager, @initial_command_manager)
 
             struct(__MODULE__, defaults)
-            |> OK.success()
           end
 
           @doc """

@@ -1,8 +1,8 @@
-defmodule Jido.Agent.Worker do
+defmodule Jido.Agent.Runtime do
   @moduledoc """
   A GenServer implementation for managing agent state and operations in a distributed system.
 
-  The Worker module provides a robust framework for managing agent lifecycle, state transitions,
+  The Runtime module provides a robust framework for managing agent lifecycle, state transitions,
   and command processing. It handles both synchronous and asynchronous operations while
   maintaining fault tolerance and providing comprehensive logging and telemetry.
 
@@ -17,7 +17,7 @@ defmodule Jido.Agent.Worker do
 
   ## States
 
-  Workers follow a state machine pattern with these states:
+  Runtimes follow a state machine pattern with these states:
   - `:initializing` - Initial startup state
   - `:idle` - Ready to accept commands
   - `:running` - Actively processing commands
@@ -35,7 +35,7 @@ defmodule Jido.Agent.Worker do
   Start a worker under a supervisor:
 
       children = [
-        {Jido.Agent.Worker,
+        {Jido.Agent.Runtime,
           agent: MyAgent.new(),
           pubsub: MyApp.PubSub,
           topic: "custom.topic",
@@ -47,16 +47,16 @@ defmodule Jido.Agent.Worker do
   Send commands to the worker:
 
       # Asynchronous action
-      Worker.act(worker_pid, %{command: :move, destination: :kitchen})
+      Runtime.act(worker_pid, %{command: :move, destination: :kitchen})
 
       # Synchronous management
-      {:ok, new_state} = Worker.manage(worker_pid, :pause)
+      {:ok, new_state} = Runtime.manage(worker_pid, :pause)
 
   ## Events
 
   The worker emits these events on its PubSub topic:
-  - `jido.agent.started` - Worker initialization complete
-  - `jido.agent.state_changed` - Worker state transitions
+  - `jido.agent.started` - Runtime initialization complete
+  - `jido.agent.state_changed` - Runtime state transitions
   - `jido.agent.act_completed` - Action execution completed
   - `jido.agent.queue_overflow` - Queue size exceeded max_queue_size
 
@@ -73,7 +73,7 @@ defmodule Jido.Agent.Worker do
   use Private
   use Jido.Util, debug_enabled: true
   alias Jido.Signal
-  alias Jido.Agent.Worker.State
+  alias Jido.Agent.Runtime.State
   require Logger
 
   @default_max_queue_size 10_000
@@ -106,10 +106,10 @@ defmodule Jido.Agent.Worker do
 
   ## Examples
 
-      iex> Worker.start_link(agent: MyAgent.new(), pubsub: MyApp.PubSub)
+      iex> Runtime.start_link(agent: MyAgent.new(), pubsub: MyApp.PubSub)
       {:ok, #PID<0.123.0>}
 
-      iex> Worker.start_link(
+      iex> Runtime.start_link(
       ...>   agent: MyAgent.new(),
       ...>   pubsub: MyApp.PubSub,
       ...>   topic: "custom.topic",
@@ -154,7 +154,7 @@ defmodule Jido.Agent.Worker do
   ## Examples
 
       children = [
-        {Worker, agent: agent, pubsub: pubsub, id: :worker_1}
+        {Runtime, agent: agent, pubsub: pubsub, id: :worker_1}
       ]
       Supervisor.start_link(children, strategy: :one_for_one)
   """
@@ -182,15 +182,15 @@ defmodule Jido.Agent.Worker do
 
   ## Parameters
 
-    * `server` - Worker pid or name
+    * `server` - Runtime pid or name
     * `attrs` - Map of command attributes including :command key
 
   ## Examples
 
-      iex> Worker.act(worker, %{command: :move, destination: :kitchen})
+      iex> Runtime.act(worker, %{command: :move, destination: :kitchen})
       :ok
 
-      iex> Worker.act(worker, %{command: :recharge})
+      iex> Runtime.act(worker, %{command: :recharge})
       :ok
   """
   @spec act(GenServer.server(), map()) :: :ok
@@ -212,7 +212,7 @@ defmodule Jido.Agent.Worker do
 
   ## Parameters
 
-    * `server` - Worker pid or name
+    * `server` - Runtime pid or name
     * `command` - Management command (see @type command)
     * `args` - Optional arguments for the command
 
@@ -223,10 +223,10 @@ defmodule Jido.Agent.Worker do
 
   ## Examples
 
-      iex> Worker.manage(worker, :pause)
+      iex> Runtime.manage(worker, :pause)
       {:ok, %State{status: :paused}}
 
-      iex> Worker.manage(worker, :resume)
+      iex> Runtime.manage(worker, :resume)
       {:ok, %State{status: :running}}
   """
   @spec manage(GenServer.server(), command(), term()) :: {:ok, State.t()} | {:error, term()}
@@ -261,7 +261,7 @@ defmodule Jido.Agent.Worker do
          :ok <- subscribe_to_topic(state),
          {:ok, running_state} <- State.transition(state, :idle) do
       emit(running_state, :started, %{agent_id: agent.id})
-      debug("Worker initialized successfully", state: running_state)
+      debug("Runtime initialized successfully", state: running_state)
       {:ok, running_state}
     else
       {:error, reason} ->

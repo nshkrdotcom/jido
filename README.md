@@ -95,7 +95,7 @@ defmodule MyApp.SimpleAgent do
 end
 ```
 
-### Starting an Agent Worker
+### Starting an Agent Runtime
 
 Start an agent worker under your supervision tree:
 
@@ -107,7 +107,7 @@ children = [
 ]
 
 # Start an agent instance
-{:ok, pid} = Jido.Agent.Worker.start_link(MyApp.SimpleAgent.new())
+{:ok, pid} = Jido.Agent.Runtime.start_link(MyApp.SimpleAgent.new())
 ```
 
 ## Contributing

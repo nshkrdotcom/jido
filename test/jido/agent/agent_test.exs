@@ -7,7 +7,7 @@ defmodule JidoTest.AgentTest do
 
   describe "agent creation" do
     test "creates basic agent with defaults" do
-      {:ok, agent} = BasicAgent.new()
+      agent = BasicAgent.new()
 
       assert agent.id != nil
       assert agent.location == :home
@@ -19,13 +19,13 @@ defmodule JidoTest.AgentTest do
 
     test "creates agent with custom id" do
       custom_id = "test_id"
-      {:ok, agent} = BasicAgent.new(custom_id)
+      agent = BasicAgent.new(custom_id)
       assert agent.id == custom_id
     end
 
     test "generates unique ids for multiple agents" do
-      {:ok, agent1} = BasicAgent.new()
-      {:ok, agent2} = BasicAgent.new()
+      agent1 = BasicAgent.new()
+      agent2 = BasicAgent.new()
       refute agent1.id == agent2.id
     end
   end
@@ -58,7 +58,7 @@ defmodule JidoTest.AgentTest do
 
   describe "state management" do
     setup do
-      {:ok, agent} = BasicAgent.new()
+      agent = BasicAgent.new()
       {:ok, agent: agent}
     end
 
@@ -101,7 +101,7 @@ defmodule JidoTest.AgentTest do
 
   describe "command management" do
     setup do
-      {:ok, agent} = AdvancedAgent.new()
+      agent = AdvancedAgent.new()
       {:ok, agent: agent}
     end
 
@@ -120,7 +120,7 @@ defmodule JidoTest.AgentTest do
 
   describe "planning and execution" do
     setup do
-      {:ok, agent} = AdvancedAgent.new()
+      agent = AdvancedAgent.new()
       {:ok, agent: agent}
     end
 
@@ -168,7 +168,7 @@ defmodule JidoTest.AgentTest do
 
   describe "combined operations with act/4" do
     setup do
-      {:ok, agent} = AdvancedAgent.new()
+      agent = AdvancedAgent.new()
       {:ok, agent: agent}
     end
 
@@ -203,7 +203,7 @@ defmodule JidoTest.AgentTest do
 
   describe "queue management" do
     setup do
-      {:ok, agent} = BasicAgent.new()
+      agent = BasicAgent.new()
       {:ok, agent: agent}
     end
 

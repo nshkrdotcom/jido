@@ -1,15 +1,15 @@
-defmodule Jido.Agent.WorkerProcessTest do
+defmodule Jido.Agent.RuntimeProcessTest do
   use ExUnit.Case, async: true
   require Logger
 
   alias Jido.Signal
-  alias Jido.Agent.Worker
-  alias Jido.Agent.Worker.State
-  alias JidoTest.SimpleAgent
+  alias Jido.Agent.Runtime
+  alias Jido.Agent.Runtime.State
+  alias JidoTest.TestAgents.SimpleAgent
 
   setup do
     {:ok, _} = start_supervised({Phoenix.PubSub, name: TestPubSub})
-    {:ok, _} = start_supervised({Registry, keys: :unique, name: Jido.AgentRegistry})
+    # {:ok, _} = start_supervised({Registry, keys: :unique, name: Jido.AgentRegistry})
 
     agent = SimpleAgent.new("test")
 
@@ -26,7 +26,7 @@ defmodule Jido.Agent.WorkerProcessTest do
 
   describe "via_tuple/1" do
     test "returns registry tuple" do
-      assert {:via, Registry, {Jido.AgentRegistry, "test"}} == Worker.via_tuple("test")
+      assert {:via, Registry, {Jido.AgentRegistry, "test"}} == Runtime.via_tuple("test")
     end
   end
 
@@ -35,7 +35,7 @@ defmodule Jido.Agent.WorkerProcessTest do
       Phoenix.PubSub.subscribe(TestPubSub, state.topic)
       payload = %{foo: "bar"}
 
-      assert :ok = Worker.emit(state, "test_event", payload)
+      assert :ok = Runtime.emit(state, "test_event", payload)
 
       # Verify signal was broadcast with correct format
       assert_receive %Signal{
@@ -48,7 +48,7 @@ defmodule Jido.Agent.WorkerProcessTest do
 
   describe "subscribe_to_topic/1" do
     test "subscribes to pubsub topic", %{base_state: state} do
-      assert :ok = Worker.subscribe_to_topic(state)
+      assert :ok = Runtime.subscribe_to_topic(state)
     end
   end
 
@@ -56,7 +56,7 @@ defmodule Jido.Agent.WorkerProcessTest do
     test "adds command to pending queue", %{base_state: state} do
       command = {:act, %{command: :custom, message: "test"}}
 
-      assert {:ok, new_state} = Worker.queue_command(state, command)
+      assert {:ok, new_state} = Runtime.queue_command(state, command)
       assert :queue.len(new_state.pending) == 1
 
       {{:value, queued_command}, _} = :queue.out(new_state.pending)
@@ -66,17 +66,17 @@ defmodule Jido.Agent.WorkerProcessTest do
 
   describe "validate_state/1" do
     test "validates state with valid inputs", %{base_state: state} do
-      assert :ok = Worker.validate_state(state)
+      assert :ok = Runtime.validate_state(state)
     end
 
     test "fails validation with nil pubsub", %{base_state: state} do
       state = %{state | pubsub: nil}
-      assert {:error, "PubSub module is required"} = Worker.validate_state(state)
+      assert {:error, "PubSub module is required"} = Runtime.validate_state(state)
     end
 
     test "fails validation with nil agent", %{base_state: state} do
       state = %{state | agent: nil}
-      assert {:error, "Agent is required"} = Worker.validate_state(state)
+      assert {:error, "Agent is required"} = Runtime.validate_state(state)
     end
   end
 
@@ -92,7 +92,7 @@ defmodule Jido.Agent.WorkerProcessTest do
           data: %{command: :move, destination: :kitchen}
         })
 
-      assert {:ok, new_state} = Worker.process_signal(signal, state)
+      assert {:ok, new_state} = Runtime.process_signal(signal, state)
       assert new_state.status == :idle
       assert new_state.agent.location == :kitchen
     end
@@ -107,13 +107,13 @@ defmodule Jido.Agent.WorkerProcessTest do
           data: %{command: :pause, args: nil}
         })
 
-      assert {:ok, new_state} = Worker.process_signal(signal, state)
+      assert {:ok, new_state} = Runtime.process_signal(signal, state)
       assert new_state.status == :paused
     end
 
     test "ignores unknown signal type", %{base_state: state} do
       {:ok, signal} = Signal.new(%{type: "unknown", source: "/test", data: %{}})
-      assert :ignore = Worker.process_signal(signal, state)
+      assert :ignore = Runtime.process_signal(signal, state)
     end
   end
 
@@ -123,7 +123,7 @@ defmodule Jido.Agent.WorkerProcessTest do
       assert state.agent.location == :home
 
       attrs = %{command: :move, destination: :kitchen}
-      assert {:ok, new_state} = Worker.process_act(attrs, state)
+      assert {:ok, new_state} = Runtime.process_act(attrs, state)
       assert new_state.status == :idle
       assert new_state.agent.location == :kitchen
     end
@@ -132,7 +132,7 @@ defmodule Jido.Agent.WorkerProcessTest do
       state = %{state | status: :paused}
       attrs = %{command: :move, destination: :kitchen}
 
-      assert {:ok, new_state} = Worker.process_act(attrs, state)
+      assert {:ok, new_state} = Runtime.process_act(attrs, state)
       assert :queue.len(new_state.pending) == 1
       assert new_state.status == :paused
 
@@ -144,20 +144,20 @@ defmodule Jido.Agent.WorkerProcessTest do
       state = %{state | status: :planning}
       attrs = %{command: :move, destination: :kitchen}
 
-      assert {:error, {:invalid_state, :planning}} = Worker.process_act(attrs, state)
+      assert {:error, {:invalid_state, :planning}} = Runtime.process_act(attrs, state)
     end
   end
 
   describe "process_manage/4" do
     test "pauses agent", %{base_state: state} do
       state = %{state | status: :running}
-      assert {:ok, new_state} = Worker.process_manage(:pause, nil, nil, state)
+      assert {:ok, new_state} = Runtime.process_manage(:pause, nil, nil, state)
       assert new_state.status == :paused
     end
 
     test "resumes paused agent", %{base_state: state} do
       state = %{state | status: :paused}
-      assert {:ok, new_state} = Worker.process_manage(:resume, nil, nil, state)
+      assert {:ok, new_state} = Runtime.process_manage(:resume, nil, nil, state)
       assert new_state.status == :running
     end
 
@@ -168,13 +168,13 @@ defmodule Jido.Agent.WorkerProcessTest do
           pending: :queue.from_list([{:act, %{command: :custom, message: "test"}}])
       }
 
-      assert {:ok, new_state} = Worker.process_manage(:reset, nil, nil, state)
+      assert {:ok, new_state} = Runtime.process_manage(:reset, nil, nil, state)
       assert new_state.status == :idle
       assert :queue.len(new_state.pending) == 0
     end
 
     test "returns error for invalid command", %{base_state: state} do
-      assert {:error, :invalid_command} = Worker.process_manage(:invalid, nil, nil, state)
+      assert {:error, :invalid_command} = Runtime.process_manage(:invalid, nil, nil, state)
     end
   end
 
@@ -189,7 +189,7 @@ defmodule Jido.Agent.WorkerProcessTest do
       ]
 
       state = %{state | pending: :queue.from_list(commands)}
-      processed_state = Worker.process_pending_commands(state)
+      processed_state = Runtime.process_pending_commands(state)
 
       assert processed_state.status == :idle
       assert :queue.len(processed_state.pending) == 0
@@ -207,7 +207,7 @@ defmodule Jido.Agent.WorkerProcessTest do
       ]
 
       state = %{state | pending: :queue.from_list(commands)}
-      processed_state = Worker.process_pending_commands(state)
+      processed_state = Runtime.process_pending_commands(state)
 
       assert processed_state.status == :idle
       assert :queue.len(processed_state.pending) == 0
@@ -221,7 +221,7 @@ defmodule Jido.Agent.WorkerProcessTest do
           pending: :queue.from_list([{:act, %{command: :move, destination: :kitchen}}])
       }
 
-      assert ^state = Worker.process_pending_commands(state)
+      assert ^state = Runtime.process_pending_commands(state)
     end
   end
 
@@ -233,32 +233,32 @@ defmodule Jido.Agent.WorkerProcessTest do
       state = %{state | status: :running}
       attrs = %{command: :move, destination: :kitchen}
 
-      assert {:ok, updated_agent} = Worker.execute_action(state, attrs)
+      assert {:ok, updated_agent} = Runtime.execute_action(state, attrs)
       assert updated_agent.location == :kitchen
     end
 
     test "updates agent state when executing recharge command", %{base_state: state} do
       state = %{state | status: :running}
       state = put_in(state.agent.battery_level, 50)
-      attrs = %{command: :recharge}
+      attrs = %{command: :recharge, target_level: 100}
 
-      assert {:ok, updated_agent} = Worker.execute_action(state, attrs)
+      assert {:ok, updated_agent} = Runtime.execute_action(state, attrs)
       assert updated_agent.battery_level == 100
     end
 
     test "executes default action without changing state", %{base_state: state} do
       state = %{state | status: :running}
       initial_state = state.agent
-      attrs = %{message: "test message"}
+      attrs = %{}
 
-      assert {:ok, updated_agent} = Worker.execute_action(state, attrs)
+      assert {:ok, updated_agent} = Runtime.execute_action(state, attrs)
       # Default action only logs messages and sleeps, no state changes
       assert updated_agent == initial_state
     end
 
     test "fails if not in running state", %{base_state: state} do
       attrs = %{command: :move, destination: :kitchen}
-      assert {:error, {:invalid_state, :idle}} = Worker.execute_action(state, attrs)
+      assert {:error, {:invalid_state, :idle}} = Runtime.execute_action(state, attrs)
     end
   end
 end

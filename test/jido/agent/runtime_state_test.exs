@@ -1,7 +1,7 @@
-defmodule Jido.Agent.Worker.StateTest do
+defmodule Jido.Agent.Runtime.StateTest do
   use ExUnit.Case, async: true
-  alias Jido.Agent.Worker.State
-  alias JidoTest.SimpleAgent
+  alias Jido.Agent.Runtime.State
+  alias JidoTest.TestAgents.SimpleAgent
 
   describe "new state" do
     test "creates state with required fields" do

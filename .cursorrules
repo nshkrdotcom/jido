@@ -275,7 +275,7 @@ defmodule YourLibrary.Application do
 
   def start(_type, _args) do
     children = [
-      {YourLibrary.Worker, []},
+      {YourLibrary.Runtime, []},
       {YourLibrary.Cache, []}
     ]
 

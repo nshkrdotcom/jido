@@ -120,12 +120,16 @@ defmodule JidoTest.Commands do
        ]}
     end
 
+    def handle_command(:recharge, agent, params) when is_list(params) do
+      handle_command(:recharge, agent, Map.new(params))
+    end
+
     def handle_command(:recharge, _agent, %{target_level: level}) do
       {:ok,
        [
-         {Log, message: "Recharging battery to #{level}%..."},
+         {Log, message: "Recharging to #{level}%..."},
          {Recharge, target_level: level},
-         {Log, message: "Battery recharged!"}
+         {Log, message: "Recharged to #{level}%!"}
        ]}
     end
 

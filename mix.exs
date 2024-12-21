@@ -57,7 +57,7 @@ defmodule Jido.MixProject do
           Jido.Workflow.Tool
         ],
         Agent_Runtime: [
-          Jido.Agent.Worker,
+          Jido.Agent.Runtime,
           Jido.Agent.Supervisor
         ],
         Example_Actions: [
@@ -69,7 +69,7 @@ defmodule Jido.MixProject do
         Utilities: [
           Jido.Util,
           Jido.Error,
-          Jido.Agent.Worker.State
+          Jido.Agent.Runtime.State
         ]
       ]
     ]

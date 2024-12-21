@@ -1,6 +1,6 @@
 defmodule Jido.Actions.Files do
   @moduledoc """
-  Comprehensive file manipulation actions for the JITO SDK.
+  Comprehensive file manipulation actions for the Jido SDK.
 
   This module provides actions for:
   - File operations (read, write, copy, move, delete)

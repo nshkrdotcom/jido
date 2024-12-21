@@ -1,6 +1,6 @@
 defmodule Jido.Actions.Simplebot do
   @moduledoc """
-  A collection of actions for a simple robot simulation.
+  A collection of actions for a simple robot simulation. These are intended to be used as an example and reference for how to write your own bot logic.
 
   This module provides actions for:
   - Move: Simulates moving the robot to a specified location

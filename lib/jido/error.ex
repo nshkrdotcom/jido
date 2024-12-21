@@ -423,10 +423,13 @@ defmodule Jido.Error do
   def compensation_error(%__MODULE__{} = original_error, details, stacktrace \\ nil) do
     formatted_details = Map.put(details, :original_error, original_error)
 
+    # Strip the error type prefix from the message if it exists
+    original_message = String.replace(original_error.message, ~r/\[.*?\]\s+/, "")
+
     message =
       if details.compensated,
-        do: "Compensation completed for: #{original_error.message}",
-        else: "Compensation failed for: #{original_error.message}"
+        do: "Compensation completed for: #{original_message}",
+        else: "Compensation failed for: #{original_message}"
 
     new(:compensation_error, message, formatted_details, stacktrace)
   end

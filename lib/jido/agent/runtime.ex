@@ -243,6 +243,76 @@ defmodule Jido.Agent.Runtime do
     GenServer.call(server, signal)
   end
 
+  @doc """
+  Starts a new child process under the runtime's DynamicSupervisor.
+
+  ## Parameters
+
+    * `server` - Runtime pid or name
+    * `child_spec` - Child specification for the process to start
+
+  ## Returns
+
+    * `{:ok, pid}` - Successfully started child process
+    * `{:error, reason}` - Failed to start child process
+
+  ## Examples
+
+      iex> Runtime.start_process(worker, {MyWorker, arg: :value})
+      {:ok, #PID<0.234.0>}
+  """
+  @spec start_process(GenServer.server(), DynamicSupervisor.child_spec()) ::
+          DynamicSupervisor.on_start_child()
+  def start_process(server, child_spec) do
+    GenServer.call(server, {:start_process, child_spec})
+  end
+
+  @doc """
+  Lists all child processes running under this runtime's supervisor.
+
+  ## Parameters
+
+    * `server` - Runtime pid or name
+
+  ## Returns
+
+    * `{:ok, [{pid(), child_spec()}]}` - List of child processes and their specs
+    * `{:error, reason}` - Failed to list processes
+
+  ## Examples
+
+      iex> Runtime.list_processes(worker)
+      {:ok, [{#PID<0.234.0>, {MyWorker, :start_link, []}}, ...]}
+  """
+  @spec list_processes(GenServer.server()) ::
+          {:ok, [{pid(), DynamicSupervisor.child_spec()}]} | {:error, term()}
+  def list_processes(server) do
+    GenServer.call(server, :list_processes)
+  end
+
+  @doc """
+  Terminates a child process running under this runtime's supervisor.
+
+  ## Parameters
+
+    * `server` - Runtime pid or name
+    * `child_pid` - PID of the child process to terminate
+
+  ## Returns
+
+    * `:ok` - Successfully terminated process
+    * `{:error, reason}` - Failed to terminate process
+
+  ## Examples
+
+      iex> Runtime.terminate_process(worker, child_pid)
+      :ok
+  """
+  @spec terminate_process(GenServer.server(), pid()) :: :ok | {:error, term()}
+  def terminate_process(server, child_pid) do
+    GenServer.call(server, {:terminate_process, child_pid})
+  end
+
   # Server Callbacks
 
   @impl true
@@ -259,7 +329,8 @@ defmodule Jido.Agent.Runtime do
 
     with :ok <- validate_state(state),
          :ok <- subscribe_to_topic(state),
-         {:ok, running_state} <- State.transition(state, :idle) do
+         {:ok, supervisor} <- DynamicSupervisor.start_link(strategy: :one_for_one),
+         {:ok, running_state} <- State.transition(%{state | child_supervisor: supervisor}, :idle) do
       emit(running_state, :started, %{agent_id: agent.id})
       debug("Runtime initialized successfully", state: running_state)
       {:ok, running_state}
@@ -310,6 +381,35 @@ defmodule Jido.Agent.Runtime do
     end
   end
 
+  def handle_call({:start_process, child_spec}, _from, %{child_supervisor: sup} = state) do
+    case DynamicSupervisor.start_child(sup, child_spec) do
+      {:ok, pid} = result ->
+        debug("Started child process", pid: pid, spec: child_spec)
+        {:reply, result, state}
+
+      {:error, reason} = error ->
+        error("Failed to start child process", reason: reason, spec: child_spec)
+        {:reply, error, state}
+    end
+  end
+
+  def handle_call(:list_processes, _from, %{child_supervisor: sup} = state) do
+    children = DynamicSupervisor.which_children(sup)
+    {:reply, {:ok, children}, state}
+  end
+
+  def handle_call({:terminate_process, pid}, _from, %{child_supervisor: sup} = state) do
+    case DynamicSupervisor.terminate_child(sup, pid) do
+      :ok ->
+        debug("Terminated child process", pid: pid)
+        {:reply, :ok, state}
+
+      {:error, reason} = error ->
+        error("Failed to terminate child process", pid: pid, reason: reason)
+        {:reply, error, state}
+    end
+  end
+
   def handle_call(_msg, _from, state), do: {:reply, {:error, :invalid_command}, state}
 
   @impl true
@@ -339,6 +439,15 @@ defmodule Jido.Agent.Runtime do
   end
 
   def handle_info(_msg, state), do: {:noreply, state}
+
+  @impl true
+  def terminate(_reason, %{child_supervisor: supervisor} = state) when is_pid(supervisor) do
+    debug("Terminating runtime and cleaning up child processes")
+    DynamicSupervisor.stop(supervisor, :shutdown)
+    :ok
+  end
+
+  def terminate(_reason, _state), do: :ok
 
   # Private Methods
   private do

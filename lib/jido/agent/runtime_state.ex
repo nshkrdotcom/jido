@@ -39,6 +39,7 @@ defmodule Jido.Agent.Runtime.State do
   - `:status` - Current state of the worker (default: :idle)
   - `:pending` - Queue of pending commands awaiting execution
   - `:max_queue_size` - Maximum number of commands that can be queued (default: 10000)
+  - `:child_supervisor` - Dynamic supervisor PID for managing child processes
 
   ## Example
 
@@ -74,6 +75,7 @@ defmodule Jido.Agent.Runtime.State do
     field(:status, status(), default: :idle)
     field(:pending, :queue.queue(), default: :queue.new())
     field(:max_queue_size, non_neg_integer(), default: 10_000)
+    field(:child_supervisor, pid())
   end
 
   # Define valid state transitions and their conditions

@@ -9,7 +9,6 @@ defmodule Jido.Agent.RuntimeProcessTest do
 
   setup do
     {:ok, _} = start_supervised({Phoenix.PubSub, name: TestPubSub})
-    # {:ok, _} = start_supervised({Registry, keys: :unique, name: Jido.AgentRegistry})
 
     agent = SimpleAgent.new("test")
 

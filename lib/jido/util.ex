@@ -25,6 +25,16 @@ defmodule Jido.Util do
 
   @name_regex ~r/^[a-zA-Z][a-zA-Z0-9_]*$/
 
+  defmacro __using__(opts \\ []) do
+    quote do
+      import Jido.Util
+      require Jido.Util
+
+      @debug_opts unquote(opts)
+      @debug_enabled Keyword.get(unquote(opts), :debug_enabled, true)
+    end
+  end
+
   @doc """
   Generates a unique ID.
   """
@@ -170,16 +180,6 @@ defmodule Jido.Util do
   end
 
   defp validate_schema(_), do: {:error, "Schema must be a keyword list"}
-
-  defmacro __using__(opts \\ []) do
-    quote do
-      import Jido.Util
-      require Jido.Util
-
-      @debug_opts unquote(opts)
-      @debug_enabled Keyword.get(unquote(opts), :debug_enabled, true)
-    end
-  end
 
   defmacro debug(message, metadata \\ []) do
     quote do

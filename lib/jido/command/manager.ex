@@ -1,22 +1,22 @@
-defmodule Jido.CommandManager do
+defmodule Jido.Command.Manager do
   @moduledoc """
   Manages command registration and dispatch for Agents.
 
-  The CommandManager maintains an immutable state of registered commands
+  The Command Manager maintains an immutable state of registered commands
   and their specifications, handling validation and dispatch of commands
   to the appropriate handlers.
 
   ## Usage
 
       # Create a new manager
-      manager = CommandManager.new()
+      manager = Manager.new()
 
       # Register command modules
-      {:ok, manager} = CommandManager.register(manager, MyApp.ChatCommand)
-      {:ok, manager} = CommandManager.register(manager, MyApp.ImageCommand)
+      {:ok, manager} = Manager.register(manager, MyApp.ChatCommand)
+      {:ok, manager} = Manager.register(manager, MyApp.ImageCommand)
 
       # Dispatch commands
-      {:ok, actions} = CommandManager.dispatch(manager, :generate_text, agent, %{
+      {:ok, actions} = Manager.dispatch(manager, :generate_text, agent, %{
         prompt: "Hello!"
       })
 
@@ -47,7 +47,7 @@ defmodule Jido.CommandManager do
 
   typedstruct enforce: true do
     @typedoc """
-    CommandManager state containing:
+    Manager state containing:
     - modules: Map of registered command modules
     - commands: Map of command names to {module, spec} tuples
     - schemas: Map of command validation schemas
@@ -71,10 +71,59 @@ defmodule Jido.CommandManager do
                        )
 
   @doc """
-  Creates a new CommandManager instance
+  Creates a new Manager instance
   """
   @spec new() :: t()
   def new, do: %__MODULE__{}
+  # In Jido.Command.Manager
+
+  @doc """
+  Sets up a new Command Manager with the given command modules.
+  Optionally registers the Default command set first if specified.
+
+  ## Parameters
+    - modules: List of command modules to register
+    - opts: Options for setup
+      - register_default: Whether to register Jido.Commands.Default first (default: true)
+
+  ## Returns
+    - `{:ok, manager}` - Successfully initialized manager
+    - `{:error, reason}` - Error during initialization
+  """
+  @spec setup([module()], keyword()) :: {:ok, t()} | {:error, String.t()}
+  def setup(modules, opts \\ []) when is_list(modules) do
+    register_default = Keyword.get(opts, :register_default, true)
+    manager = new()
+
+    # Helper to register modules in sequence
+    register_modules = fn modules, manager ->
+      Enum.reduce_while(modules, {:ok, manager}, fn module, {:ok, acc} ->
+        case register(acc, module) do
+          {:ok, updated} ->
+            {:cont, {:ok, updated}}
+
+          {:error, reason} ->
+            Logger.warning("Failed to register command module",
+              module: module,
+              reason: reason
+            )
+
+            {:halt, {:error, reason}}
+        end
+      end)
+    end
+
+    # First register default command handler if requested
+    with {:ok, manager} <-
+           if(register_default,
+             do: register(manager, Jido.Commands.Default),
+             else: {:ok, manager}
+           ),
+         # Then register additional modules
+         {:ok, manager} <- register_modules.(modules, manager) do
+      {:ok, manager}
+    end
+  end
 
   @doc """
   Registers a command module with the manager.
@@ -99,7 +148,7 @@ defmodule Jido.CommandManager do
   Dispatches a command to its registered handler.
 
   ## Parameters
-    - manager: The CommandManager state
+    - manager: The Manager state
     - command: Atom name of command to execute
     - agent: Current Agent state
     - params: Command parameters (will be validated)
@@ -110,12 +159,12 @@ defmodule Jido.CommandManager do
 
   ## Examples
 
-      iex> CommandManager.dispatch(manager, :generate_text, agent, %{
+      iex> Manager.dispatch(manager, :generate_text, agent, %{
       ...>   prompt: "Hello!"
       ...> })
       {:ok, [{TextGeneration, %{prompt: "Hello!"}}]}
 
-      iex> CommandManager.dispatch(manager, :unknown, agent, %{})
+      iex> Manager.dispatch(manager, :unknown, agent, %{})
       {:error, :command_not_found, "Command :unknown not found"}
   """
   @spec dispatch(t(), atom(), Jido.Agent.t(), map()) ::

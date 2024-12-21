@@ -7,9 +7,9 @@ defmodule Jido.Command do
 
   ## Command Registration
 
-  Commands must be registered with the Agent's CommandManager before use:
+  Commands must be registered with the Agent's Command Manager before use:
 
-      {:ok, manager} = CommandManager.new() |> CommandManager.register(MyApp.ChatCommand)
+      {:ok, manager} = Manager.new() |> Manager.register(MyApp.ChatCommand)
       {:ok, agent} = Agent.new() |> Agent.set_command_manager(manager)
 
   ## Command Structure

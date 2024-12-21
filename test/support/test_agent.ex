@@ -11,12 +11,13 @@ end
 defmodule JidoTest.SimpleAgent do
   @moduledoc false
   alias Jido.Actions.Basic.Log
+  alias JidoTest.Commands.{Basic, Movement, Advanced}
 
   use Jido.Command
 
   use Jido.Agent,
     name: "SimpleBot",
-    commands: [Basic, Movement, Advanced, __MODULE__],
+    commands: [Basic, Movement, Advanced],
     schema: [
       location: [type: :atom, default: :home],
       battery_level: [type: :integer, default: 100]

@@ -71,17 +71,105 @@ defmodule Jido.Util do
     |> OK.failure()
   end
 
-  def validate_planner(planner) when is_atom(planner) do
-    if function_exported?(planner, :plan, 3) do
-      {:ok, planner}
-    else
-      {:error, "Planner module must implement the Jido.Planner behavior with a plan/3 function."}
+  @doc """
+  Validates a list of command modules.
+
+  Each module must implement the Jido.Command behavior and have valid command specifications.
+
+  ## Parameters
+
+  - `modules`: List of modules to validate
+
+  ## Returns
+
+  - `{:ok, modules}` if all modules are valid
+  - `{:error, reason}` if any module is invalid
+
+  ## Examples
+
+      iex> Jido.Util.validate_commands([MyApp.ValidCommand])
+      {:ok, [MyApp.ValidCommand]}
+
+      iex> Jido.Util.validate_commands([InvalidModule])
+      {:error, "Module InvalidModule does not implement Jido.Command behavior"}
+
+  """
+  @spec validate_commands([module()]) :: {:ok, [module()]} | {:error, String.t()}
+  def validate_commands(modules) when is_list(modules) do
+    modules
+    |> Enum.reduce_while({:ok, []}, fn module, {:ok, acc} ->
+      with true <- implements_command?(module),
+           {:ok, _commands} <- validate_command_specs(module) do
+        {:cont, {:ok, [module | acc]}}
+      else
+        false ->
+          {:halt, {:error, "Module #{inspect(module)} does not implement Jido.Command behavior"}}
+
+        {:error, reason} ->
+          {:halt, {:error, "Invalid command specifications in #{inspect(module)}: #{reason}"}}
+      end
+    end)
+  end
+
+  def validate_commands(_), do: {:error, "Expected list of modules"}
+
+  defp implements_command?(module) do
+    behaviours = module.module_info(:attributes)[:behaviour] || []
+    Jido.Command in behaviours
+  end
+
+  defp validate_command_specs(module) do
+    try do
+      commands = module.commands()
+
+      commands
+      |> Enum.reduce_while({:ok, []}, fn {name, spec}, {:ok, acc} ->
+        case validate_command_spec(name, spec) do
+          :ok -> {:cont, {:ok, [{name, spec} | acc]}}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+    rescue
+      UndefinedFunctionError ->
+        {:error, "Missing commands/0 implementation"}
     end
   end
 
-  def validate_planner(_) do
-    {:error, "Invalid planner format. Expected an atom representing a module."}
+  defp validate_command_spec(name, spec) when is_atom(name) do
+    required_keys = [:description, :schema]
+    keys = Keyword.keys(spec)
+
+    with :ok <- validate_required_keys(required_keys, keys),
+         :ok <- validate_description(spec[:description]),
+         :ok <- validate_schema(spec[:schema]) do
+      :ok
+    end
   end
+
+  defp validate_command_spec(name, _),
+    do: {:error, "Command name must be an atom, got: #{inspect(name)}"}
+
+  defp validate_required_keys(required, actual) do
+    case Enum.all?(required, &(&1 in actual)) do
+      true -> :ok
+      false -> {:error, "Missing required keys: #{inspect(required -- actual)}"}
+    end
+  end
+
+  defp validate_description(description) when is_binary(description), do: :ok
+  defp validate_description(_), do: {:error, "Description must be a string"}
+
+  defp validate_schema(schema) when is_list(schema) do
+    try do
+      NimbleOptions.new!(schema)
+      :ok
+    rescue
+      e in NimbleOptions.ValidationError ->
+        {:error, Exception.message(e)}
+    end
+  end
+
+  defp validate_schema(_), do: {:error, "Schema must be a keyword list"}
 
   defmacro __using__(opts \\ []) do
     quote do

@@ -10,82 +10,42 @@ end
 
 defmodule JidoTest.SimpleAgent do
   @moduledoc false
-  alias Jido.Actions.Basic.{Log, Sleep}
-  alias Jido.Actions.Simplebot.{Move, Recharge}
+  alias Jido.Actions.Basic.Log
+
+  use Jido.Command
 
   use Jido.Agent,
     name: "SimpleBot",
-    planner: JidoTest.SimpleAgent.Planner,
-    runner: JidoTest.SimpleAgent.Runner,
+    commands: [Basic, Movement, Advanced, __MODULE__],
     schema: [
       location: [type: :atom, default: :home],
       battery_level: [type: :integer, default: 100]
     ]
 
-  defmodule Planner do
-    @behaviour Jido.Planner
-
-    def plan(_agent, :default, _params) do
-      {:ok,
-       [
-         {Log, message: "Hello, world!"},
-         {Sleep, duration: 50},
-         {Log, message: "Goodbye, world!"}
-       ]}
-    end
-
-    def plan(agent, :move, %{destination: new_location}) do
-      {:ok,
-       [
-         {Log, message: "Moving from #{agent.location} to #{new_location}..."},
-         {Move, destination: new_location},
-         {Log, message: "Arrived at #{new_location}!"}
-       ]}
-    end
-
-    def plan(_agent, :recharge, _params) do
-      {:ok,
-       [
-         {Log, message: "Recharging battery..."},
-         Recharge,
-         {Log, message: "Battery recharged!"}
-       ]}
-    end
-
-    def plan(_agent, :sleep, %{duration: duration}) do
-      {:ok,
-       [
-         {Log, message: "Going to sleep..."},
-         {Sleep, duration: duration},
-         {Log, message: "Waking up!"}
-       ]}
-    end
-
-    def plan(_agent, :custom, %{message: message}) do
-      {:ok,
-       [
-         {Log, message: message},
-         {Sleep, duration: 100},
-         {Log, message: "Custom command completed"}
-       ]}
-    end
-
-    # Fallback for unknown commands
-    def plan(_agent, command, _params) do
-      {:ok,
-       [
-         {Log, message: "Unknown command: #{inspect(command)}"},
-         {Log, message: "Please use :default, :move, :recharge, or :sleep"}
-       ]}
-    end
+  @impl true
+  def commands do
+    [
+      simple: [
+        description: "A simple command",
+        schema: [
+          value: [type: :integer, required: true]
+        ]
+      ],
+      complex: [
+        description: "A complex command",
+        schema: [
+          value: [type: :integer, required: true]
+        ]
+      ]
+    ]
   end
 
-  defmodule Runner do
-    @behaviour Jido.Runner
-
-    def run(agent, actions, _opts) do
-      Jido.Runner.Chain.run(agent, actions)
-    end
+  @impl true
+  def handle_command(:simple, _agent, params) do
+    {:ok,
+     [
+       {Log, message: "Simple command executed with value: #{params.value}"}
+     ]}
   end
 end
 

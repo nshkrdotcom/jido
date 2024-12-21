@@ -300,8 +300,12 @@ defmodule Jido.Agent do
           @doc false
           @spec do_validate(map()) :: {:ok, map()} | {:error, String.t()}
           defp do_validate(state) do
-            case NimbleOptions.validate(Map.to_list(state), schema()) do
-              {:ok, validated} -> OK.success(validated)
+            schema = schema()
+            schema_keys = Keyword.keys(schema)
+            state_to_validate = Map.take(state, schema_keys)
+
+            case NimbleOptions.validate(Map.to_list(state_to_validate), schema) do
+              {:ok, validated} -> OK.success(Map.merge(state, Map.new(validated)))
               {:error, error} -> OK.failure(Error.format_nimble_validation_error(error, "Agent"))
             end
           end

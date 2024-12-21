@@ -31,6 +31,11 @@ defmodule JidoTest.Commands do
     end
 
     @impl true
+    def handle_command(:greet, _agent, params) when is_list(params) do
+      handle_command(:greet, _agent, Map.new(params))
+    end
+
+    @impl true
     def handle_command(:greet, _agent, %{name: name}) do
       {:ok,
        [
@@ -38,6 +43,10 @@ defmodule JidoTest.Commands do
          {Sleep, duration: 50},
          {Log, message: "Goodbye, #{name}!"}
        ]}
+    end
+
+    def handle_command(:wait, _agent, params) when is_list(params) do
+      handle_command(:wait, _agent, Map.new(params))
     end
 
     def handle_command(:wait, _agent, %{duration: duration}) do
@@ -98,6 +107,10 @@ defmodule JidoTest.Commands do
     end
 
     @impl true
+    def handle_command(:move, agent, params) when is_list(params) do
+      handle_command(:move, agent, Map.new(params))
+    end
+
     def handle_command(:move, agent, %{destination: dest}) do
       {:ok,
        [

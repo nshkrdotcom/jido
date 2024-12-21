@@ -441,7 +441,7 @@ defmodule Jido.Agent.Runtime do
   def handle_info(_msg, state), do: {:noreply, state}
 
   @impl true
-  def terminate(_reason, %{child_supervisor: supervisor} = state) when is_pid(supervisor) do
+  def terminate(_reason, %{child_supervisor: supervisor}) when is_pid(supervisor) do
     debug("Terminating runtime and cleaning up child processes")
     DynamicSupervisor.stop(supervisor, :shutdown)
     :ok

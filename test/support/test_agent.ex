@@ -32,7 +32,7 @@ defmodule JidoTest.TestAgents do
       ]
 
     @impl true
-    def on_before_plan(_agent, _command, _params) do
+    def on_before_plan(agent, _command, _params) do
       # Always use our basic_default command
       {:ok, {:basic_default, %{}}}
     end
@@ -110,7 +110,7 @@ defmodule JidoTest.TestAgents do
 
     # Handle default case
     @impl true
-    def on_before_plan(agent, command, params) do
+    def on_before_plan(_agent, command, params) do
       {:ok, {command, params}}
     end
   end

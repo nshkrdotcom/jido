@@ -31,8 +31,8 @@ defmodule JidoTest.Commands do
     end
 
     @impl true
-    def handle_command(:greet, _agent, params) when is_list(params) do
-      handle_command(:greet, _agent, Map.new(params))
+    def handle_command(:greet, agent, params) when is_list(params) do
+      handle_command(:greet, agent, Map.new(params))
     end
 
     @impl true
@@ -45,8 +45,8 @@ defmodule JidoTest.Commands do
        ]}
     end
 
-    def handle_command(:wait, _agent, params) when is_list(params) do
-      handle_command(:wait, _agent, Map.new(params))
+    def handle_command(:wait, agent, params) when is_list(params) do
+      handle_command(:wait, agent, Map.new(params))
     end
 
     def handle_command(:wait, _agent, %{duration: duration}) do

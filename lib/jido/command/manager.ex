@@ -45,37 +45,25 @@ defmodule Jido.Command.Manager do
   @type dispatch_error ::
           {:error, :command_not_found | :invalid_params | :execution_failed, String.t()}
 
+  @type command_info :: %{
+          module: module(),
+          description: String.t(),
+          schema: NimbleOptions.t() | nil
+        }
+
   typedstruct enforce: true do
     @typedoc """
     Manager state containing:
-    - modules: Map of registered command modules
-    - commands: Map of command names to {module, spec} tuples
-    - schemas: Map of command validation schemas
+    - commands: Map of command names to their full specifications
     """
-    field(:modules, %{optional(module()) => [{atom(), keyword()}]}, default: %{})
-    field(:commands, %{optional(atom()) => command_entry}, default: %{})
-    field(:schemas, %{optional(atom()) => NimbleOptions.t()}, default: %{})
+    field(:commands, %{optional(atom()) => command_info}, default: %{})
   end
-
-  @command_spec_schema NimbleOptions.new!(
-                         description: [
-                           type: :string,
-                           required: true,
-                           doc: "Description of what the command does"
-                         ],
-                         schema: [
-                           type: :keyword_list,
-                           required: true,
-                           doc: "NimbleOptions schema for command parameters"
-                         ]
-                       )
 
   @doc """
   Creates a new Manager instance
   """
   @spec new() :: t()
   def new, do: %__MODULE__{}
-  # In Jido.Command.Manager
 
   @doc """
   Sets up a new Command Manager with the given command modules.
@@ -95,7 +83,6 @@ defmodule Jido.Command.Manager do
     register_default = Keyword.get(opts, :register_default, true)
     manager = new()
 
-    # Helper to register modules in sequence
     register_modules = fn modules, manager ->
       Enum.reduce_while(modules, {:ok, manager}, fn module, {:ok, acc} ->
         case register(acc, module) do
@@ -113,13 +100,11 @@ defmodule Jido.Command.Manager do
       end)
     end
 
-    # First register default command handler if requested
     with {:ok, manager} <-
            if(register_default,
              do: register(manager, Jido.Commands.Default),
              else: {:ok, manager}
            ),
-         # Then register additional modules
          {:ok, manager} <- register_modules.(modules, manager) do
       {:ok, manager}
     end
@@ -133,9 +118,8 @@ defmodule Jido.Command.Manager do
   """
   @spec register(t(), module()) :: {:ok, t()} | {:error, String.t()}
   def register(%__MODULE__{} = manager, command_module) when is_atom(command_module) do
-    with commands when is_list(commands) <- command_module.commands(),
-         {:ok, validated} <- validate_command_specs(commands),
-         {:ok, manager} <- add_module(manager, command_module, validated),
+    with raw_commands when is_list(raw_commands) <- normalize_commands(command_module.commands()),
+         {:ok, validated} <- validate_command_specs(raw_commands),
          {:ok, manager} <- register_commands(manager, command_module, validated) do
       {:ok, manager}
     else
@@ -171,9 +155,8 @@ defmodule Jido.Command.Manager do
           {:ok, [Jido.Agent.action()]} | dispatch_error()
   def dispatch(%__MODULE__{} = manager, command, agent, params \\ %{}) do
     case Map.get(manager.commands, command) do
-      {module, _spec} ->
-        with {:ok, schema} <- Map.fetch(manager.schemas, command),
-             {:ok, validated_params} <- validate_params(schema, params),
+      %{module: module, schema: schema} = _info ->
+        with {:ok, validated_params} <- validate_params(schema, params),
              {:ok, actions} <- dispatch_command(module, command, agent, validated_params) do
           {:ok, actions}
         end
@@ -188,7 +171,10 @@ defmodule Jido.Command.Manager do
   """
   @spec registered_commands(t()) :: [{atom(), keyword()}]
   def registered_commands(%__MODULE__{} = manager) do
-    Enum.map(manager.commands, fn {name, {_mod, spec}} -> {name, spec} end)
+    manager.commands
+    |> Enum.map(fn {name, info} ->
+      {name, Map.take(info, [:description, :module])}
+    end)
   end
 
   @doc """
@@ -196,20 +182,59 @@ defmodule Jido.Command.Manager do
   """
   @spec registered_modules(t()) :: [module()]
   def registered_modules(%__MODULE__{} = manager) do
-    Map.keys(manager.modules)
+    manager.commands
+    |> Map.values()
+    |> Enum.map(& &1.module)
+    |> Enum.uniq()
   end
 
   # Private helpers
+  defp normalize_commands(commands) do
+    Enum.map(commands, fn
+      command when is_atom(command) ->
+        {command, [description: "No description provided", schema: []]}
+
+      {name, specs} when is_atom(name) and is_list(specs) ->
+        {name, specs}
+    end)
+  end
 
   defp validate_command_specs(commands) do
     commands
     |> Enum.map(fn {name, spec} ->
-      case NimbleOptions.validate(spec, @command_spec_schema) do
+      case validate_single_command(name, spec) do
         {:ok, validated} -> {:ok, {name, validated}}
-        {:error, error} -> {:error, "Invalid command #{name}: #{Exception.message(error)}"}
+        {:error, reason} -> {:error, reason}
       end
     end)
     |> collect_validation_results()
+  end
+
+  defp validate_single_command(name, spec) do
+    description = spec[:description] || "No description provided"
+
+    case spec[:schema] do
+      nil ->
+        {:ok, %{description: description, schema: nil}}
+
+      [] ->
+        {:ok, %{description: description, schema: nil}}
+
+      %NimbleOptions{} = schema ->
+        {:ok, %{description: description, schema: schema}}
+
+      schema when is_list(schema) ->
+        try do
+          nimble_schema = NimbleOptions.new!(schema)
+          {:ok, %{description: description, schema: nimble_schema}}
+        rescue
+          e in ArgumentError ->
+            {:error, "Invalid schema for command #{name}: #{Exception.message(e)}"}
+        end
+
+      invalid ->
+        {:error, "Invalid schema type for command #{name}: #{inspect(invalid)}"}
+    end
   end
 
   defp collect_validation_results(results) do
@@ -220,41 +245,27 @@ defmodule Jido.Command.Manager do
     end)
   end
 
-  defp add_module(manager, module, commands) do
-    case Map.get(manager.modules, module) do
-      nil ->
-        {:ok, %{manager | modules: Map.put(manager.modules, module, commands)}}
-
-      _existing ->
-        {:error, "Module #{inspect(module)} already registered"}
-    end
-  end
-
   defp register_commands(manager, module, commands) do
     commands
     |> Enum.reduce_while({:ok, manager}, fn {name, spec}, {:ok, acc} ->
       case Map.get(acc.commands, name) do
         nil ->
-          schema = NimbleOptions.new!(spec[:schema])
-
-          updated = %{
-            acc
-            | commands: Map.put(acc.commands, name, {module, spec}),
-              schemas: Map.put(acc.schemas, name, schema)
-          }
-
+          command_info = Map.put(spec, :module, module)
+          updated = %{acc | commands: Map.put(acc.commands, name, command_info)}
           {:cont, {:ok, updated}}
 
-        {existing_module, _} ->
+        %{module: existing_module} ->
           {:halt, {:error, "Command #{name} already registered by #{inspect(existing_module)}"}}
       end
     end)
   end
 
+  defp validate_params(nil, params), do: {:ok, params}
+
   defp validate_params(schema, params) do
     case NimbleOptions.validate(Map.to_list(params), schema) do
       {:ok, validated} ->
-        {:ok, validated}
+        {:ok, Map.new(validated)}
 
       {:error, %NimbleOptions.ValidationError{} = error} ->
         {:error, :invalid_params, Error.format_nimble_validation_error(error, "Command")}

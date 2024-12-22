@@ -26,8 +26,8 @@ defmodule JidoTest.CommandTest do
     end
 
     @impl true
-    def handle_command(:test_command, _agent, params) do
-      {:ok, [{BasicAction, params}]}
+    def handle_command(:test_command, _agent, params) when is_map(params) do
+      {:ok, [{BasicAction, Keyword.new([{:value, params.value}])}]}
     end
 
     @impl true
@@ -48,7 +48,7 @@ defmodule JidoTest.CommandTest do
     end
 
     test "handle_command/3 returns actions for valid command" do
-      assert {:ok, [{BasicAction, %{value: 123}}]} =
+      assert {:ok, [{BasicAction, [value: 123]}]} =
                TestCommand.handle_command(:test_command, nil, %{value: 123})
     end
 

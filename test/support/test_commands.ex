@@ -7,35 +7,75 @@ defmodule JidoTest.Commands do
     @moduledoc "Basic command set for testing core functionality"
     use Jido.Command
     alias Jido.Actions.Basic.{Log, Sleep}
+    alias JidoTest.TestActions.NoSchema
 
     @impl true
     def commands do
       [
-        greet: [
-          description: "Simple greeting command",
+        # Test command with no description or schema - should be handled gracefully
+        :blank_command,
+
+        # Test command with only description, no schema - should allow any params
+        ommitted_schema: [
+          description: "Ommitted schema command"
+        ],
+
+        # Test command with only schema, no description - should validate params but allow missing description
+        only_schema: [
           schema: [
             name: [type: :string, default: "world"]
           ]
         ],
-        wait: [
-          description: "Waits for specified duration",
+
+        # Test command with empty schema - should allow any params
+        empty_schema: [
+          description: "Empty schema command",
+          schema: []
+        ],
+
+        # Test command with nil schema - should allow any params
+        nil_schema: [
+          description: "Ommitted schema command",
+          schema: nil
+        ],
+
+        # Standard command with schema
+        greet: [
+          description: "Greet someone",
           schema: [
-            duration: [
-              type: :integer,
-              required: true,
-              doc: "Duration in milliseconds"
-            ]
+            name: [type: :string, required: true]
+          ]
+        ],
+        wait: [
+          description: "Wait for a duration",
+          schema: [
+            duration: [type: :integer, required: true]
           ]
         ]
       ]
     end
 
     @impl true
+    def handle_command(:blank_command, _agent, params) do
+      {:ok, [{NoSchema, params}]}
+    end
+
+    def handle_command(:ommitted_schema, _agent, params) do
+      {:ok, [{NoSchema, params}]}
+    end
+
+    def handle_command(:empty_schema, _agent, params) do
+      {:ok, [{NoSchema, params}]}
+    end
+
+    def handle_command(:nil_schema, _agent, params) do
+      {:ok, [{NoSchema, params}]}
+    end
+
     def handle_command(:greet, agent, params) when is_list(params) do
       handle_command(:greet, agent, Map.new(params))
     end
 
-    @impl true
     def handle_command(:greet, _agent, %{name: name}) do
       {:ok,
        [

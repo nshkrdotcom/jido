@@ -1,7 +1,7 @@
 defmodule JidoTest.AgentTest do
   use ExUnit.Case, async: true
 
-  alias JidoTest.TestAgents.{BasicAgent, AdvancedAgent}
+  alias JidoTest.TestAgents.{BasicAgent, AdvancedAgent, NoSchemaAgent}
   alias JidoTest.Commands.{Basic, Movement}
   alias Jido.Actions.Basic.{Log, Sleep}
 
@@ -10,8 +10,8 @@ defmodule JidoTest.AgentTest do
       agent = BasicAgent.new()
 
       assert agent.id != nil
-      assert agent.location == :home
-      assert agent.battery_level == 100
+      assert agent.state.location == :home
+      assert agent.state.battery_level == 100
       assert agent.dirty_state? == false
       assert agent.pending == :queue.new()
       assert is_struct(agent.command_manager, Jido.Command.Manager)
@@ -21,6 +21,19 @@ defmodule JidoTest.AgentTest do
       custom_id = "test_id"
       agent = BasicAgent.new(custom_id)
       assert agent.id == custom_id
+    end
+
+    test "creates agent without schema" do
+      agent = NoSchemaAgent.new()
+
+      assert agent.id != nil
+      assert agent.dirty_state? == false
+      assert agent.pending == :queue.new()
+      assert is_struct(agent.command_manager, Jido.Command.Manager)
+
+      # Should not have schema-defined fields
+      refute Map.has_key?(agent, :location)
+      refute Map.has_key?(agent, :battery_level)
     end
 
     test "generates unique ids for multiple agents" do
@@ -54,6 +67,18 @@ defmodule JidoTest.AgentTest do
       assert json.name == "AdvancedAgent"
       assert json.description == "Test agent with hooks"
     end
+
+    test "provides correct metadata for schema-less agent" do
+      assert NoSchemaAgent.name() == "NoSchemaAgent"
+      assert NoSchemaAgent.description() == nil
+      assert NoSchemaAgent.category() == nil
+      assert NoSchemaAgent.tags() == []
+      assert NoSchemaAgent.vsn() == nil
+
+      json = NoSchemaAgent.to_json()
+      assert json.name == "NoSchemaAgent"
+      assert json.schema == []
+    end
   end
 
   describe "state management" do
@@ -69,8 +94,8 @@ defmodule JidoTest.AgentTest do
           battery_level: 80
         })
 
-      assert updated.location == :office
-      assert updated.battery_level == 80
+      assert updated.state.location == :office
+      assert updated.state.battery_level == 80
       assert updated.dirty_state? == true
     end
 
@@ -92,10 +117,44 @@ defmodule JidoTest.AgentTest do
       assert updated.dirty_state? == false
     end
 
+    test "allows unknown fields in state", %{agent: agent} do
+      # Set boolean
+      {:ok, updated} = BasicAgent.set(agent, %{unknown_field: true})
+      assert updated.state.unknown_field == true
+      assert updated.dirty_state? == true
+
+      # Set integer
+      {:ok, updated} = BasicAgent.set(updated, %{unknown_field: 42})
+      assert updated.state.unknown_field == 42
+      assert updated.dirty_state? == true
+
+      # Set string
+      {:ok, updated} = BasicAgent.set(updated, %{unknown_field: "hello"})
+      assert updated.state.unknown_field == "hello"
+      assert updated.dirty_state? == true
+    end
+
     test "validates against schema", %{agent: agent} do
-      invalid_agent = Map.put(agent, :battery_level, "invalid")
+      invalid_agent = %{agent | state: Map.put(agent.state, :battery_level, "invalid")}
       assert {:error, error} = BasicAgent.validate(invalid_agent)
       assert error =~ "Invalid parameters for Agent"
+    end
+
+    test "allows any state updates for schema-less agent" do
+      agent = NoSchemaAgent.new()
+
+      {:ok, updated} =
+        NoSchemaAgent.set(agent, %{
+          custom_field: "value",
+          another_field: 123
+        })
+
+      assert updated.state.custom_field == "value"
+      assert updated.state.another_field == 123
+      assert updated.dirty_state? == true
+
+      # Should always validate since there's no schema
+      assert {:ok, _} = NoSchemaAgent.validate(updated)
     end
   end
 
@@ -178,7 +237,7 @@ defmodule JidoTest.AgentTest do
           destination: :work_area
         })
 
-      assert final.location == :work_area
+      assert final.state.location == :work_area
       assert final.pending == :queue.new()
       assert final.dirty_state? == false
     end
@@ -193,11 +252,11 @@ defmodule JidoTest.AgentTest do
         )
 
       # Original location
-      assert final.location == :home
+      assert final.state.location == :home
       assert final.pending == :queue.new()
       assert final.dirty_state? == false
       # Result should have the new location
-      assert result.location == :work_area
+      assert result.state.location == :work_area
     end
   end
 

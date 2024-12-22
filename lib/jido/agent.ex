@@ -60,6 +60,7 @@ defmodule Jido.Agent do
     field(:runner, module())
     field(:dirty_state?, boolean())
     field(:pending, :queue.queue(action()))
+    field(:state, map(), default: %{})
   end
 
   @agent_compiletime_options_schema NimbleOptions.new!(
@@ -134,6 +135,9 @@ defmodule Jido.Agent do
           required: false,
           default: nil,
           doc: "A queue of pending actions for the Agent."
+        ],
+        state: [
+          type: :any
         ]
       ]
       alias Jido.Agent
@@ -152,8 +156,7 @@ defmodule Jido.Agent do
           @initial_command_manager initial_manager
 
           # Add command_manager to struct keys
-          @struct_keys [:command_manager | Keyword.keys(@agent_runtime_schema)] ++
-                         Keyword.keys(@validated_opts[:schema])
+          @struct_keys [:command_manager | Keyword.keys(@agent_runtime_schema)]
           defstruct @struct_keys
 
           def name, do: @validated_opts[:name]
@@ -163,7 +166,7 @@ defmodule Jido.Agent do
           def vsn, do: @validated_opts[:vsn]
           def commands, do: @validated_opts[:commands]
           def runner, do: @validated_opts[:runner]
-          def schema, do: @agent_runtime_schema ++ @validated_opts[:schema]
+          def schema, do: @validated_opts[:schema]
 
           def to_json do
             %{
@@ -174,7 +177,7 @@ defmodule Jido.Agent do
               vsn: @validated_opts[:vsn],
               commands: @validated_opts[:commands],
               runner: @validated_opts[:runner],
-              schema: @agent_runtime_schema ++ @validated_opts[:schema]
+              schema: @validated_opts[:schema],
             }
           end
 
@@ -196,15 +199,17 @@ defmodule Jido.Agent do
           def new(id \\ nil) do
             generated_id = id || Util.generate_id()
 
-            defaults =
+            state_defaults =
               @validated_opts[:schema]
               |> Enum.map(fn {key, opts} -> {key, Keyword.get(opts, :default)} end)
-              |> Keyword.put(:id, generated_id)
-              |> Keyword.put(:dirty_state?, false)
-              |> Keyword.put(:pending, :queue.new())
-              |> Keyword.put(:command_manager, @initial_command_manager)
 
-            struct(__MODULE__, defaults)
+            struct(__MODULE__, %{
+              id: generated_id,
+              state: Map.new(state_defaults),
+              dirty_state?: false,
+              pending: :queue.new(),
+              command_manager: @initial_command_manager
+            })
           end
 
           @doc """
@@ -258,27 +263,22 @@ defmodule Jido.Agent do
             if Enum.empty?(attrs) do
               OK.success(agent)
             else
-              with {:ok, updated_agent} <- do_set(agent, attrs) do
-                %{updated_agent | dirty_state?: true}
-                |> OK.success()
+              with {:ok, updated_state} <- do_set(agent.state, attrs),
+                   {:ok, validated_agent} <- validate(%{agent | state: updated_state}) do
+                OK.success(%{validated_agent | dirty_state?: true})
               end
             end
           end
 
-          @spec do_set(t(), map() | keyword()) :: {:ok, t()} | {:error, String.t()}
-          defp do_set(%__MODULE__{} = agent, attrs) when is_map(attrs) or is_list(attrs) do
-            merged = DeepMerge.deep_merge(Map.from_struct(agent), Map.new(attrs))
-            updated_agent = struct(__MODULE__, merged)
-
-            if Map.equal?(Map.from_struct(agent), Map.from_struct(updated_agent)) do
-              OK.success(updated_agent)
-            else
-              validate(updated_agent)
-            end
+          @spec do_set(map(), map() | keyword()) :: {:ok, map()} | {:error, String.t()}
+          defp do_set(state, attrs) when is_map(attrs) or is_list(attrs) do
+            merged = DeepMerge.deep_merge(state, Map.new(attrs))
+            OK.success(merged)
           end
 
           @doc """
           Validates the agent's state by running it through validation hooks and schema validation.
+          Only validates fields defined in the schema, passing through any unknown fields.
 
           ## Parameters
             - agent: The agent struct to validate
@@ -289,23 +289,33 @@ defmodule Jido.Agent do
           """
           @spec validate(t()) :: {:ok, t()} | {:error, String.t()}
           def validate(%__MODULE__{} = agent) do
-            with {:ok, state} <- on_before_validate_state(Map.from_struct(agent)),
-                 {:ok, validated} <- do_validate(state),
-                 {:ok, final_state} <- on_after_validate_state(validated) do
-              OK.success(struct(__MODULE__, final_state))
+            with {:ok, state} <- on_before_validate_state(agent.state),
+                 {:ok, validated_state} <- do_validate(agent, state),
+                 {:ok, final_state} <- on_after_validate_state(validated_state) do
+              OK.success(%{agent | state: final_state})
             end
           end
 
-          @doc false
-          @spec do_validate(map()) :: {:ok, map()} | {:error, String.t()}
-          defp do_validate(state) do
+          @spec do_validate(t(), map()) :: {:ok, map()} | {:error, String.t()}
+          defp do_validate(%__MODULE__{} = _agent, state) do
             schema = schema()
-            schema_keys = Keyword.keys(schema)
-            state_to_validate = Map.take(state, schema_keys)
 
-            case NimbleOptions.validate(Map.to_list(state_to_validate), schema) do
-              {:ok, validated} -> OK.success(Map.merge(state, Map.new(validated)))
-              {:error, error} -> OK.failure(Error.format_nimble_validation_error(error, "Agent"))
+            if Enum.empty?(schema) do
+              OK.success(state)
+            else
+              # Split state into known and unknown fields
+              known_keys = Keyword.keys(schema)
+              {known_state, unknown_state} = Map.split(state, known_keys)
+
+              case NimbleOptions.validate(Enum.to_list(known_state), schema) do
+                {:ok, validated} ->
+                  # Merge validated known fields with unvalidated unknown fields
+                  OK.success(Map.merge(unknown_state, Map.new(validated)))
+
+                {:error, error} ->
+                  Error.format_nimble_validation_error(error, "Agent")
+                  |> OK.failure()
+              end
             end
           end
 
@@ -362,27 +372,23 @@ defmodule Jido.Agent do
               - :apply_state - Whether to apply results to agent state (default: true)
 
           ## Returns
-            - `{:ok, updated_agent}` - Actions executed successfully
-            - `{:error, error}` - Execution failed
+            - If apply_state is true: `{:ok, updated_agent}`
+            - If apply_state is false: `{:ok, result}`
           """
-          @spec run(t(), keyword()) :: {:ok, t()} | {:error, Jido.Error.t()}
-          def run(%__MODULE__{} = agent, opts \\ []) do
+          @spec run(t(), keyword()) :: {:ok, t()} | {:ok, map()} | {:error, Jido.Error.t()}
+          def run(%__MODULE__{state: state} = agent, opts \\ []) do
             pending_actions = :queue.to_list(agent.pending || :queue.new())
             apply_state = Keyword.get(opts, :apply_state, true)
             runner = runner()
 
             with {:ok, validated_actions} <- on_before_run(agent, pending_actions),
-                 {:ok, result} <- runner.run(agent, validated_actions, opts),
+                 {:ok, result} <- runner.run(%{agent | state: state}, validated_actions, opts),
                  {:ok, final_result} <- on_after_run(agent, result) do
-              base_updates = %{pending: :queue.new(), dirty_state?: false}
-
-              case {apply_state, agent.dirty_state?} do
-                {true, true} ->
-                  do_set(agent, Map.from_struct(final_result))
-                  |> OK.map(&struct(&1, base_updates))
-
-                {_, _} ->
-                  OK.success({struct(agent, base_updates), final_result})
+              if apply_state do
+                {:ok, reset_agent} = reset(agent)
+                OK.success(%{reset_agent | state: final_result.state})
+              else
+                OK.success(final_result)
               end
             end
           end
@@ -398,7 +404,7 @@ defmodule Jido.Agent do
           """
           @spec reset(t()) :: {:ok, t()}
           def reset(%__MODULE__{} = agent) do
-            OK.success(%{agent | pending: :queue.new()})
+            OK.success(%{agent | pending: :queue.new(), dirty_state?: false})
           end
 
           @doc """
@@ -423,12 +429,14 @@ defmodule Jido.Agent do
             - command: The command to execute (defaults to :default)
             - params: Optional parameters for the command
             - opts: Optional keyword list of execution options
+              - :apply_state - Whether to apply results to agent state (default: true)
 
           ## Returns
-            - `{:ok, updated_agent}` - Command executed successfully
-            - `{:error, error}` - Execution failed
+            - If apply_state is true: `{:ok, updated_agent}`
+            - If apply_state is false: `{:ok, {agent, result}}`
+            - On error: `{:error, error}`
           """
-          @spec act(t(), atom(), map(), keyword()) :: {:ok, t()} | {:error, Jido.Error.t()}
+          @spec act(t(), atom(), map(), keyword()) :: {:ok, t()} | {:ok, {t(), map()}} | {:error, Jido.Error.t()}
           def act(%__MODULE__{} = agent, command \\ :default, params \\ %{}, opts \\ []) do
             apply_state = Keyword.get(opts, :apply_state, true)
 
@@ -439,8 +447,13 @@ defmodule Jido.Agent do
                      else: OK.success(validated_agent)
                    ),
                  {:ok, planned_agent} <- plan(updated_agent, command, params),
-                 {:ok, final_agent} <- run(planned_agent, opts) do
-              OK.success(final_agent)
+                 {:ok, result} <- run(planned_agent, opts) do
+              if apply_state do
+                OK.success(result)
+              else
+                {:ok, reset_agent} = reset(agent)
+                OK.success({reset_agent, result})
+              end
             end
           end
 

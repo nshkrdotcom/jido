@@ -154,7 +154,7 @@ defmodule JidoTest.Commands do
     def handle_command(:move, agent, %{destination: dest}) do
       {:ok,
        [
-         {Log, message: "Moving from #{agent.location} to #{dest}..."},
+         {Log, message: "Moving from #{agent.state.location} to #{dest}..."},
          {Move, destination: dest},
          {Log, message: "Arrived at #{dest}!"}
        ]}

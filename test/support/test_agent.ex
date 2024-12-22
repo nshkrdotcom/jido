@@ -21,6 +21,13 @@ defmodule JidoTest.TestAgents do
     end
   end
 
+  defmodule NoSchemaAgent do
+    @moduledoc false
+    use Jido.Agent,
+      name: "NoSchemaAgent",
+      commands: [BasicCommands]
+  end
+
   defmodule BasicAgent do
     @moduledoc false
     use Jido.Agent,

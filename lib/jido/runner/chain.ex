@@ -4,6 +4,7 @@ defmodule Jido.Runner.Chain do
   """
 
   @behaviour Jido.Runner
+
   require Logger
   alias Jido.Workflow.Chain
 
@@ -15,15 +16,15 @@ defmodule Jido.Runner.Chain do
       opts: opts
     )
 
-    case Chain.chain(actions, agent) do
-      {:ok, final_state} = result ->
+    case Chain.chain(actions, agent.state) do
+      {:ok, final_state} ->
         Logger.debug("Action chain completed successfully",
           agent_id: agent.id,
-          initial_state: inspect(agent),
+          initial_state: inspect(agent.state),
           final_state: inspect(final_state)
         )
 
-        result
+        {:ok, %{state: final_state}}
 
       {:error, reason} = error ->
         Logger.warning("Action chain failed",

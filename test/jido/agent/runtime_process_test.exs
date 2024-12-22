@@ -82,7 +82,7 @@ defmodule Jido.Agent.RuntimeProcessTest do
   describe "process_signal/2" do
     test "processes act signal", %{base_state: state} do
       # Verify we start at home
-      assert state.agent.location == :home
+      assert state.agent.state.location == :home
 
       {:ok, signal} =
         Signal.new(%{
@@ -93,7 +93,7 @@ defmodule Jido.Agent.RuntimeProcessTest do
 
       assert {:ok, new_state} = Runtime.process_signal(signal, state)
       assert new_state.status == :idle
-      assert new_state.agent.location == :kitchen
+      assert new_state.agent.state.location == :kitchen
     end
 
     test "processes manage signal", %{base_state: state} do
@@ -119,12 +119,12 @@ defmodule Jido.Agent.RuntimeProcessTest do
   describe "process_act/2" do
     test "executes action and updates agent state", %{base_state: state} do
       # Verify we start at home
-      assert state.agent.location == :home
+      assert state.agent.state.location == :home
 
       attrs = %{command: :move, destination: :kitchen}
       assert {:ok, new_state} = Runtime.process_act(attrs, state)
       assert new_state.status == :idle
-      assert new_state.agent.location == :kitchen
+      assert new_state.agent.state.location == :kitchen
     end
 
     test "queues action when paused", %{base_state: state} do
@@ -180,7 +180,7 @@ defmodule Jido.Agent.RuntimeProcessTest do
   describe "process_pending_commands/1" do
     test "processes all pending commands in order", %{base_state: state} do
       # Verify we start at home
-      assert state.agent.location == :home
+      assert state.agent.state.location == :home
 
       commands = [
         {:act, %{command: :move, destination: :kitchen}},
@@ -192,12 +192,12 @@ defmodule Jido.Agent.RuntimeProcessTest do
 
       assert processed_state.status == :idle
       assert :queue.len(processed_state.pending) == 0
-      assert processed_state.agent.location == :living_room
+      assert processed_state.agent.state.location == :living_room
     end
 
     test "stops processing on error", %{base_state: state} do
       # Verify we start at home
-      assert state.agent.location == :home
+      assert state.agent.state.location == :home
 
       # First command is valid, second will fail
       commands = [
@@ -210,7 +210,7 @@ defmodule Jido.Agent.RuntimeProcessTest do
 
       assert processed_state.status == :idle
       assert :queue.len(processed_state.pending) == 0
-      assert processed_state.agent.location == :kitchen
+      assert processed_state.agent.state.location == :kitchen
     end
 
     test "skips processing when not idle", %{base_state: state} do
@@ -227,22 +227,22 @@ defmodule Jido.Agent.RuntimeProcessTest do
   describe "execute_action/2" do
     test "updates agent state when executing move command", %{base_state: state} do
       # Verify we start at home
-      assert state.agent.location == :home
+      assert state.agent.state.location == :home
 
       state = %{state | status: :running}
       attrs = %{command: :move, destination: :kitchen}
 
       assert {:ok, updated_agent} = Runtime.execute_action(state, attrs)
-      assert updated_agent.location == :kitchen
+      assert updated_agent.state.location == :kitchen
     end
 
     test "updates agent state when executing recharge command", %{base_state: state} do
       state = %{state | status: :running}
-      state = put_in(state.agent.battery_level, 50)
+      state = put_in(state.agent.state.battery_level, 50)
       attrs = %{command: :recharge, target_level: 100}
 
       assert {:ok, updated_agent} = Runtime.execute_action(state, attrs)
-      assert updated_agent.battery_level == 100
+      assert updated_agent.state.battery_level == 100
     end
 
     test "executes default action without changing state", %{base_state: state} do

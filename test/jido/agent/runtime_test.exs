@@ -75,9 +75,9 @@ defmodule Jido.Agent.RuntimeTest do
 
     test "synchronously executes action and returns new state", %{worker: pid} do
       {:ok, new_state} = Runtime.act(pid, :move, %{destination: :kitchen})
-      assert new_state.agent.location == :kitchen
+      assert new_state.agent.state.location == :kitchen
       # Verify actual state matches returned state
-      assert :sys.get_state(pid).agent.location == :kitchen
+      assert :sys.get_state(pid).agent.state.location == :kitchen
     end
 
     test "handles invalid action parameters synchronously", %{worker: pid} do
@@ -85,7 +85,7 @@ defmodule Jido.Agent.RuntimeTest do
       assert {:error, %Jido.Error{type: :validation_error}} = Runtime.act(pid, :move, %{})
       state = :sys.get_state(pid)
       # Location shouldn't change
-      assert state.agent.location == :home
+      assert state.agent.state.location == :home
     end
 
     test "queues synchronous actions when paused", %{worker: pid} do
@@ -99,7 +99,7 @@ defmodule Jido.Agent.RuntimeTest do
 
       # Resume and verify action is processed
       {:ok, running_state} = Runtime.manage(pid, :resume)
-      assert running_state.agent.location == :kitchen
+      assert running_state.agent.state.location == :kitchen
     end
 
     test "handles synchronous concurrent actions", %{worker: pid} do
@@ -113,7 +113,7 @@ defmodule Jido.Agent.RuntimeTest do
 
       # Last action should win
       state = :sys.get_state(pid)
-      assert state.agent.location in [:kitchen, :living_room, :bedroom]
+      assert state.agent.state.location in [:kitchen, :living_room, :bedroom]
     end
   end
 
@@ -128,7 +128,7 @@ defmodule Jido.Agent.RuntimeTest do
       # Wait a bit for async processing
       :timer.sleep(100)
       state = :sys.get_state(pid)
-      assert state.agent.location == :kitchen
+      assert state.agent.state.location == :kitchen
     end
 
     test "handles invalid action parameters asynchronously", %{worker: pid} do
@@ -137,7 +137,7 @@ defmodule Jido.Agent.RuntimeTest do
       :timer.sleep(100)
       state = :sys.get_state(pid)
       # Location shouldn't change
-      assert state.agent.location == :home
+      assert state.agent.state.location == :home
     end
 
     test "queues asynchronous actions when paused", %{worker: pid} do
@@ -164,7 +164,7 @@ defmodule Jido.Agent.RuntimeTest do
       :timer.sleep(100)
       # Last action should win
       state = :sys.get_state(pid)
-      assert state.agent.location in [:kitchen, :living_room, :bedroom]
+      assert state.agent.state.location in [:kitchen, :living_room, :bedroom]
     end
   end
 
@@ -226,7 +226,7 @@ defmodule Jido.Agent.RuntimeTest do
       # Wait for commands to process
       :timer.sleep(100)
       final_state = :sys.get_state(pid)
-      assert final_state.agent.location == :living_room
+      assert final_state.agent.state.location == :living_room
     end
 
     test "returns error for invalid command", %{worker: pid} do
@@ -343,7 +343,7 @@ defmodule Jido.Agent.RuntimeTest do
 
       # Verify the state has changed in some way
       state = :sys.get_state(pid)
-      refute state.agent.location == :home
+      refute state.agent.state.location == :home
     end
 
     test "handles custom max queue size", %{agent: _agent} do

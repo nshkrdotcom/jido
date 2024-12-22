@@ -41,7 +41,15 @@ defmodule Jido.MixProject do
       main: "Jido",
       source_ref: "v#{@version}",
       source_url: "https://github.com/agentjido/jido",
-      extras: ["README.md"],
+      extra_section: "Guides",
+      extras: [
+        {"README.md", title: "Home"},
+        {"guides/getting-started.md", title: "Getting Started"},
+        {"guides/actions.md", title: "Actions"},
+        {"guides/commands.md", title: "Commands"},
+        {"guides/agents.md", title: "Agents"},
+        {"guides/sensors.md", title: "Sensors"},
+      ],
       groups_for_modules: [
         Core: [
           Jido,

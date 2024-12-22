@@ -177,6 +177,34 @@ defmodule Jido do
   end
 
   @doc """
+  Retrieves a running Agent's PID by its ID.
+
+  ## Parameters
+
+  - `id`: A string or atom representing the unique identifier of the running Agent.
+
+  ## Returns
+
+  `{:ok, pid}` if the agent is found and running, `:error` otherwise.
+
+  ## Examples
+
+      iex> Jido.get_agent_by_id("my_agent")
+      {:ok, #PID<0.123.0>}
+
+      iex> Jido.get_agent_by_id("nonexistent_agent")
+      :error
+
+  """
+  @spec get_agent_by_id(String.t() | atom()) :: {:ok, pid()} | :error
+  def get_agent_by_id(id) when is_binary(id) or is_atom(id) do
+    case Registry.lookup(Jido.AgentRegistry, id) do
+      [{pid, _}] -> {:ok, pid}
+      [] -> {:error, :not_found}
+    end
+  end
+
+  @doc """
   Lists all Actions with optional filtering and pagination.
 
   ## Parameters

@@ -31,4 +31,36 @@ defmodule JidoTest do
       assert TestJido.config()[:pubsub] == "FakePubSub"
     end
   end
+
+  describe "get_agent_by_id" do
+    setup context do
+      test_name = context.test
+      pubsub_name = Module.concat(TestJido, "#{test_name}.PubSub")
+      registry_name = Module.concat(TestJido, "#{test_name}.Registry")
+
+      {:ok, _} = start_supervised({Phoenix.PubSub, name: pubsub_name})
+      {:ok, _} = start_supervised({Registry, keys: :unique, name: registry_name})
+
+      # Temporarily override the Jido.AgentRegistry name for this test
+      Application.put_env(:jido, :agent_registry, registry_name)
+      on_exit(fn -> Application.delete_env(:jido, :agent_registry) end)
+
+      {:ok, pubsub: pubsub_name, registry: registry_name}
+    end
+
+    test "returns the pid of an existing agent", %{pubsub: pubsub} do
+      # Set up test agent using BasicAgent from test_agent.ex
+      agent = JidoTest.TestAgents.BasicAgent.new("test_agent")
+      {:ok, runtime} = Jido.Agent.Runtime.start_link(agent: agent, pubsub: pubsub)
+
+      # Look up the agent by ID
+      assert {:ok, pid} = Jido.get_agent_by_id("test_agent")
+      assert pid == runtime
+      assert Process.alive?(pid)
+    end
+
+    test "returns error for non-existent agent", %{pubsub: pubsub} do
+      assert {:error, :not_found} = Jido.get_agent_by_id("nonexistent")
+    end
+  end
 end

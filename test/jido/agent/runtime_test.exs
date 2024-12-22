@@ -67,35 +67,101 @@ defmodule Jido.Agent.RuntimeTest do
     end
   end
 
-  describe "act/2" do
+  describe "act/3" do
     setup %{agent: agent} do
       {:ok, pid} = Runtime.start_link(agent: agent, pubsub: TestPubSub)
       %{worker: pid}
     end
 
-    test "sends act command to worker", %{worker: pid} do
-      assert :ok = Runtime.act(pid, %{command: :move, destination: :kitchen})
-      state = :sys.get_state(pid)
-      assert state.agent.location == :kitchen
+    test "synchronously executes action and returns new state", %{worker: pid} do
+      {:ok, new_state} = Runtime.act(pid, :move, %{destination: :kitchen})
+      assert new_state.agent.location == :kitchen
+      # Verify actual state matches returned state
+      assert :sys.get_state(pid).agent.location == :kitchen
     end
 
-    test "handles invalid action parameters", %{worker: pid} do
-      # Missing destination
-      assert :ok = Runtime.act(pid, %{command: :move})
+    test "handles invalid action parameters synchronously", %{worker: pid} do
+      # Missing destination for move command
+      assert {:error, %Jido.Error{type: :validation_error}} = Runtime.act(pid, :move, %{})
       state = :sys.get_state(pid)
       # Location shouldn't change
       assert state.agent.location == :home
     end
 
-    test "handles concurrent actions", %{worker: pid} do
+    test "queues synchronous actions when paused", %{worker: pid} do
+      # First put the worker in paused state
+      {:ok, _} = Runtime.manage(pid, :resume)
+      {:ok, _} = Runtime.manage(pid, :pause)
+
+      {:ok, state} = Runtime.act(pid, :move, %{destination: :kitchen})
+      assert state.status == :paused
+      assert :queue.len(state.pending) == 1
+
+      # Resume and verify action is processed
+      {:ok, running_state} = Runtime.manage(pid, :resume)
+      assert running_state.agent.location == :kitchen
+    end
+
+    test "handles synchronous concurrent actions", %{worker: pid} do
       tasks =
         for dest <- [:kitchen, :living_room, :bedroom] do
-          Task.async(fn -> Runtime.act(pid, %{command: :move, destination: dest}) end)
+          Task.async(fn -> Runtime.act(pid, :move, %{destination: dest}) end)
+        end
+
+      results = Task.await_many(tasks)
+      assert Enum.all?(results, &match?({:ok, _}, &1))
+
+      # Last action should win
+      state = :sys.get_state(pid)
+      assert state.agent.location in [:kitchen, :living_room, :bedroom]
+    end
+  end
+
+  describe "act_async/3" do
+    setup %{agent: agent} do
+      {:ok, pid} = Runtime.start_link(agent: agent, pubsub: TestPubSub)
+      %{worker: pid}
+    end
+
+    test "asynchronously executes action", %{worker: pid} do
+      assert :ok = Runtime.act_async(pid, :move, %{destination: :kitchen})
+      # Wait a bit for async processing
+      :timer.sleep(100)
+      state = :sys.get_state(pid)
+      assert state.agent.location == :kitchen
+    end
+
+    test "handles invalid action parameters asynchronously", %{worker: pid} do
+      # Missing destination
+      assert :ok = Runtime.act_async(pid, :move, %{})
+      :timer.sleep(100)
+      state = :sys.get_state(pid)
+      # Location shouldn't change
+      assert state.agent.location == :home
+    end
+
+    test "queues asynchronous actions when paused", %{worker: pid} do
+      # First put the worker in paused state
+      {:ok, _} = Runtime.manage(pid, :resume)
+      {:ok, _} = Runtime.manage(pid, :pause)
+
+      assert :ok = Runtime.act_async(pid, :move, %{destination: :kitchen})
+      state = :sys.get_state(pid)
+      assert state.status == :paused
+      assert :queue.len(state.pending) == 1
+    end
+
+    test "handles asynchronous concurrent actions", %{worker: pid} do
+      tasks =
+        for dest <- [:kitchen, :living_room, :bedroom] do
+          Task.async(fn -> Runtime.act_async(pid, :move, %{destination: dest}) end)
         end
 
       results = Task.await_many(tasks)
       assert Enum.all?(results, &(&1 == :ok))
 
+      # Wait for processing
+      :timer.sleep(100)
       # Last action should win
       state = :sys.get_state(pid)
       assert state.agent.location in [:kitchen, :living_room, :bedroom]
@@ -151,8 +217,8 @@ defmodule Jido.Agent.RuntimeTest do
       {:ok, _} = Runtime.manage(pid, :resume)
       {:ok, _} = Runtime.manage(pid, :pause)
 
-      Runtime.act(pid, %{command: :move, destination: :kitchen})
-      Runtime.act(pid, %{command: :move, destination: :living_room})
+      Runtime.act(pid, :move, %{destination: :kitchen})
+      Runtime.act(pid, :move, %{destination: :living_room})
 
       {:ok, state} = Runtime.manage(pid, :resume)
       assert state.status == :running
@@ -189,7 +255,7 @@ defmodule Jido.Agent.RuntimeTest do
     end
 
     test "emits events for completed actions", %{worker: pid} do
-      Runtime.act(pid, %{command: :move, destination: :kitchen})
+      Runtime.act(pid, :move, %{destination: :kitchen})
       assert_receive %Signal{type: "jido.agent.act_completed"}, 1000
     end
 
@@ -199,7 +265,7 @@ defmodule Jido.Agent.RuntimeTest do
 
       # Runtime should still be alive and functioning
       assert Process.alive?(pid)
-      assert :ok = Runtime.act(pid, %{command: :move, destination: :kitchen})
+      assert :ok = Runtime.act_async(pid, :move, %{destination: :kitchen})
     end
   end
 
@@ -228,7 +294,7 @@ defmodule Jido.Agent.RuntimeTest do
     test "accepts commands up to max queue size", %{worker: pid, max_queue_size: max_size} do
       # Fill queue to capacity
       for i <- 1..max_size do
-        assert :ok = Runtime.act(pid, %{command: :move, destination: "loc_#{i}"})
+        assert :ok = Runtime.act_async(pid, :move, %{destination: "loc_#{i}"})
       end
 
       # Verify no overflow events were emitted
@@ -238,12 +304,11 @@ defmodule Jido.Agent.RuntimeTest do
     test "drops commands when queue is full", %{worker: pid, max_queue_size: max_size} do
       # Fill queue to capacity
       for i <- 1..max_size do
-        assert :ok = Runtime.act(pid, %{command: :move, destination: "loc_#{i}"})
+        assert :ok = Runtime.act_async(pid, :move, %{destination: "loc_#{i}"})
       end
 
       # Send one more command that should be dropped
-      overflow_command = %{command: :move, destination: :overflow_location}
-      assert :ok = Runtime.act(pid, overflow_command)
+      assert :ok = Runtime.act_async(pid, :move, %{destination: :overflow_location})
 
       # Verify overflow event was emitted with correct data
       assert_receive %Signal{
@@ -251,19 +316,16 @@ defmodule Jido.Agent.RuntimeTest do
         data: %{
           queue_size: ^max_size,
           max_size: ^max_size,
-          dropped_command: {:act, ^overflow_command}
+          dropped_command: {:act, %{command: :move, destination: :overflow_location}}
         }
       }
     end
 
     test "processes queued commands after resume", %{worker: pid, max_queue_size: max_size} do
       # Queue up commands - using simple move commands
-      commands =
-        for _i <- 1..max_size do
-          %{command: :move, destination: :kitchen}
-        end
-
-      Enum.each(commands, &Runtime.act(pid, &1))
+      for _i <- 1..max_size do
+        assert :ok = Runtime.act_async(pid, :move, %{destination: :kitchen})
+      end
 
       # Resume worker and wait for state change
       {:ok, _} = Runtime.manage(pid, :resume)
@@ -303,19 +365,18 @@ defmodule Jido.Agent.RuntimeTest do
 
       # Fill queue to custom capacity
       for i <- 1..custom_size do
-        assert :ok = Runtime.act(pid, %{command: :move, destination: "loc_#{i}"})
+        assert :ok = Runtime.act_async(pid, :move, %{destination: "loc_#{i}"})
       end
 
       # Verify next command is dropped
-      overflow_command = %{command: :move, destination: :overflow_location}
-      assert :ok = Runtime.act(pid, overflow_command)
+      assert :ok = Runtime.act_async(pid, :move, %{destination: :overflow_location})
 
       assert_receive %Signal{
         type: "jido.agent.queue_overflow",
         data: %{
           queue_size: ^custom_size,
           max_size: ^custom_size,
-          dropped_command: {:act, ^overflow_command}
+          dropped_command: {:act, %{command: :move, destination: :overflow_location}}
         }
       }
     end

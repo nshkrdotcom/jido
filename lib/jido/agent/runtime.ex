@@ -71,7 +71,7 @@ defmodule Jido.Agent.Runtime do
   """
   use GenServer
   use Private
-  use Jido.Util, debug_enabled: true
+  use Jido.Util, debug_enabled: false
   alias Jido.Signal
   alias Jido.Agent.Runtime.State
   require Logger
@@ -173,6 +173,44 @@ defmodule Jido.Agent.Runtime do
   end
 
   @doc """
+  Sends a synchronous action command to the worker.
+
+  This function blocks until the action is completed and returns the result.
+
+  ## Parameters
+
+    * `server` - Runtime pid or name
+    * `command` - Action command as atom
+    * `args` - Map of additional arguments for the command
+
+  ## Returns
+
+    * `{:ok, new_state}` - Action completed successfully with new state
+    * `{:error, reason}` - Action failed
+
+  ## Examples
+
+      iex> Runtime.act(worker, :move, %{destination: :kitchen})
+      {:ok, %State{}}
+
+      iex> Runtime.act(worker, :recharge, %{})
+      {:ok, %State{}}
+  """
+  @spec act(GenServer.server(), atom(), map()) :: {:ok, State.t()} | {:error, term()}
+  def act(server, command, args \\ %{}) do
+    debug("Received synchronous act command", server: server, command: command, args: args)
+
+    {:ok, signal} =
+      Signal.new(%{
+        type: "jido.agent.act",
+        source: "/agent/act",
+        data: Map.put(args, :command, command)
+      })
+
+    GenServer.call(server, signal)
+  end
+
+  @doc """
   Sends an asynchronous action command to the worker.
 
   The command is processed based on the worker's current state:
@@ -183,25 +221,31 @@ defmodule Jido.Agent.Runtime do
   ## Parameters
 
     * `server` - Runtime pid or name
-    * `attrs` - Map of command attributes including :command key
+    * `command` - Action command as atom
+    * `args` - Map of additional arguments for the command
+
+  ## Returns
+
+    * `:ok` - Command accepted for processing
+    * `{:error, reason}` - Command rejected
 
   ## Examples
 
-      iex> Runtime.act(worker, %{command: :move, destination: :kitchen})
+      iex> Runtime.act_async(worker, :move, %{destination: :kitchen})
       :ok
 
-      iex> Runtime.act(worker, %{command: :recharge})
+      iex> Runtime.act_async(worker, :recharge, %{})
       :ok
   """
-  @spec act(GenServer.server(), map()) :: :ok
-  def act(server, attrs) do
-    debug("Received act command", server: server, attrs: attrs)
+  @spec act_async(GenServer.server(), atom(), map()) :: :ok | {:error, term()}
+  def act_async(server, command, args \\ %{}) do
+    debug("Received asynchronous act command", server: server, command: command, args: args)
 
     {:ok, signal} =
       Signal.new(%{
         type: "jido.agent.act",
         source: "/agent/act",
-        data: attrs
+        data: Map.put(args, :command, command)
       })
 
     GenServer.cast(server, signal)
@@ -361,6 +405,25 @@ defmodule Jido.Agent.Runtime do
   end
 
   def handle_cast(_msg, state), do: {:noreply, state}
+
+  @impl true
+  def handle_call(%Signal{type: "jido.agent.act", data: attrs}, from, state) do
+    debug("Handling synchronous act signal", attrs: attrs, from: from)
+
+    case process_act(attrs, state) do
+      {:ok, new_state} ->
+        debug("Act processed successfully", new_state: new_state)
+        {:reply, {:ok, new_state}, process_pending_commands(new_state)}
+
+      {:error, :queue_overflow} ->
+        debug("Act dropped due to queue overflow")
+        {:reply, {:error, :queue_overflow}, state}
+
+      {:error, reason} = error ->
+        error("Failed to process act", reason: reason)
+        {:reply, error, state}
+    end
+  end
 
   @impl true
   def handle_call(

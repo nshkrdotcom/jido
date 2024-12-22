@@ -1,495 +1,338 @@
 # Getting Started with Jido
 
-Welcome to the **Jido** Elixir module! This guide is designed to help you get up and running with Jido, even if you've never built anything with agents before. We'll walk you through writing actions, combining them into workflow commands, loading these commands into an agent, defining and running an agent, and finally integrating your agent into a Phoenix supervision tree to send commands via PubSub.
+Welcome to **Jido**, a powerful yet approachable Elixir framework for defining Agents that plan and execute _Actions_ organized by _Commands_ (collectively forming simple or complex workflows). If you’ve never built anything with Agents, Actions, or Commands before, this guide will help you get up and running step by step.
+
+---
 
 ## Table of Contents
 
-1. [Introduction](#introduction)
-2. [Writing Actions](#writing-actions)
-   - [Defining an Action](#defining-an-action)
-   - [Example: Creating a Simple Log Action](#example-creating-a-simple-log-action)
-3. [Writing and Combining Actions into Workflow Commands](#writing-and-combining-actions-into-workflow-commands)
-   - [Defining a Command](#defining-a-command)
-   - [Combining Actions into a Command](#combining-actions-into-a-command)
-   - [Example: Creating a Greeting Command](#example-creating-a-greeting-command)
-4. [Loading Commands into an Agent](#loading-commands-into-an-agent)
-   - [Defining an Agent](#defining-an-agent)
-   - [Assigning Commands to the Agent](#assigning-commands-to-the-agent)
-   - [Example: Setting Up a Basic Agent](#example-setting-up-a-basic-agent)
-5. [Running an Agent](#running-an-agent)
-   - [Starting the Agent](#starting-the-agent)
-   - [Sending Commands to the Agent](#sending-commands-to-the-agent)
-   - [Example: Executing a Command](#example-executing-a-command)
-6. [Integrating with Phoenix Supervision Tree](#integrating-with-phoenix-supervision-tree)
-   - [Adding the Agent to the Supervision Tree](#adding-the-agent-to-the-supervision-tree)
-   - [Sending Commands via PubSub](#sending-commands-via-pubsub)
-   - [Example: Supervising the Agent in Phoenix](#example-supervising-the-agent-in-phoenix)
-7. [Conclusion](#conclusion)
+- [Getting Started with Jido](#getting-started-with-jido)
+  - [Table of Contents](#table-of-contents)
+  - [1. Overview of Jido Concepts](#1-overview-of-jido-concepts)
+    - [Actions](#actions)
+    - [Commands](#commands)
+    - [Agents](#agents)
+  - [2. Creating Your First Action](#2-creating-your-first-action)
+    - [Action Explanation](#action-explanation)
+      - [Schema](#schema)
+      - [run/2 Function](#run2-function)
+    - [Combining Actions into a Command](#combining-actions-into-a-command)
+    - [Command Explanation](#command-explanation)
+    - [Defining an Agent with Commands](#defining-an-agent-with-commands)
+    - [Agent Explanation](#agent-explanation)
+    - [Running the Agent](#running-the-agent)
+- [Steps in detail:](#steps-in-detail)
+- [We'll assume our runtime was started with name: "announcer\_1"](#well-assume-our-runtime-was-started-with-name-announcer_1)
+- [... handle other events or unknown signals](#-handle-other-events-or-unknown-signals)
 
 ---
 
-## Introduction
+## 1. Overview of Jido Concepts
 
-**Jido** is a robust Elixir framework designed to manage complex workflows through agents and actions. By leveraging Elixir's powerful concurrency and fault-tolerance features, Jido allows you to define reusable actions, combine them into commands, and orchestrate these commands within agents. This guide will help you harness the full potential of Jido to build scalable and maintainable applications.
+### Actions
+An **Action** is a small, discrete piece of logic you can execute. 
+
+Each Action:
+- Implements the `Jido.Action` behavior.
+- Defines a **schema** describing its parameters (which NimbleOptions validates).
+- Has a `run/2` callback that does the work.
+
+### Commands
+A **Command** is essentially a _named_ group of Actions that the Agent can plan and then execute. 
+
+Commands are:
+- Implement the `Jido.Command` behavior.
+- Define a list of possible **command specs** (like `:move`, `:greet`, etc.), each with its own parameter schema.
+- Provide a `handle_command/3` function that returns a list of Actions (or a single Action) to be executed.
+
+### Agents
+An **Agent** in Jido is a data-driven entity that can hold state, register _Commands_, and run workflows composed of _Actions_. 
+
+Agents:
+- Have a **state schema** (defined via NimbleOptions) that validates state changes.
+- Contain hooks (callbacks) for customizing behavior before/after validation, planning, execution, and error handling.
+- Can be extended by registering more **Commands**.
+
+The lifecycle looks something like this:
+1. **Plan** a command with an Agent → validated and turned into pending Actions.
+2. **Run** those pending Actions → applying changes to the Agent’s state.
+
+There is a convenience function `act/4` that validates state, plans the command, and runs all pending Actions all in a single step.
 
 ---
 
-## Writing Actions
+## 2. Creating Your First Action
 
-Actions are the fundamental building blocks in Jido. They represent discrete operations that your agent can perform, such as logging messages, manipulating data, or interacting with external systems.
+Let’s create a simple Action that logs a message. We’ll call it `LogMessage`.
 
-### Defining an Action
-
-To define an action in Jido, you need to create a module that uses the `Jido.Action` behaviour. This involves specifying the action's name, description, and schema (input parameters). Each action must implement the `run/2` function, which contains the logic to execute the action.
-
-Here's a breakdown of the steps:
-
-1. **Use the `Jido.Action` behaviour:**
-   ```elixir
-   use Jido.Action,
-     name: "action_name",
-     description: "Description of the action",
-     schema: [
-       param1: [type: :string, required: true],
-       param2: [type: :integer, default: 10]
-     ]
-Implement the run/2 function:
-elixir
-Copy code
-@impl true
-def run(params, _context) do
-  # Action logic here
-  {:ok, %{result: "Action executed successfully"}}
-end
-Example: Creating a Simple Log Action
-Let's create a simple action that logs a message.
-
-elixir
-Copy code
-defmodule Jido.Actions.Basic.Log do
+```elixir
+defmodule MyApp.Actions.LogMessage do
   @moduledoc """
-  Logs a message with a specified level.
+  An Action that logs a message at a specified log level.
   """
-
   use Jido.Action,
-    name: "log_action",
-    description: "Logs a message at a specified log level",
+    name: "log_message",
+    description: "Logs a message",
     schema: [
-      level: [type: {:in, [:debug, :info, :warn, :error]}, default: :info, doc: "Log level"],
-      message: [type: :string, required: true, doc: "Message to log"]
+      level: [type: {:in, [:debug, :info, :warning, :error]}, default: :info],
+      message: [type: :string, required: true]
     ]
 
   require Logger
 
   @impl true
-  def run(%{level: level, message: message}, _context) do
+  def run(%{level: level, message: msg}, _context) do
     case level do
-      :debug -> Logger.debug(message)
-      :info -> Logger.info(message)
-      :warn -> Logger.warn(message)
-      :error -> Logger.error(message)
+      :debug   -> Logger.debug(msg)
+      :info    -> Logger.info(msg)
+      :warning -> Logger.warning(msg, [])
+      :error   -> Logger.error(msg)
     end
 
-    {:ok, %{message: "Logged at #{level} level"}}
+    # The return tuple of {:ok, new_params} indicates success
+    {:ok, %{logged: true, message: msg}}
   end
 end
-Explanation:
+```
 
-Module Definition: We define a module Jido.Actions.Basic.Log that uses the Jido.Action behaviour.
-Action Metadata: We specify the action's name as "log_action", provide a description, and define the schema for input parameters.
-Run Function: The run/2 function logs the provided message at the specified log level using Elixir's Logger module.
-Writing and Combining Actions into Workflow Commands
-Commands in Jido are sequences of actions that define a complete workflow. By combining multiple actions into a single command, you can orchestrate complex operations within your agents.
+### Action Explanation
 
-Defining a Command
-To define a command, you create a module that uses the Jido.Command behaviour. Commands specify a list of actions that should be executed in order when the command is invoked.
+The Action module above demonstrates two key concepts:
 
-elixir
-Copy code
-defmodule Jido.Commands.MyCommand do
+#### Schema
+- Defines required parameters (`message`) and optional ones (`level`)
+- Sets default values (`:info` for `level`)
+- Validates parameter types and allowed values
+
+#### run/2 Function
+- Takes validated parameters and context as arguments
+- Performs the actual logging operation
+- Returns `{:ok, map()}` on success
+  - The returned map can be passed to subsequent Actions in a workflow
+
+### Combining Actions into a Command
+
+Next, let's create a Command named `:announce` that logs two messages in sequence. We'll implement this in a new module `MyApp.Commands.Announcements` using the `Jido.Command` behavior:
+
+```elixir
+defmodule MyApp.Commands.Announcements do
   @moduledoc """
-  A command that performs a series of actions.
+  A Command set for logging announcements.
   """
-
   use Jido.Command
 
-  alias Jido.Actions.Basic.Log
-  alias Jido.Actions.Basic.Sleep
+  alias MyApp.Actions.LogMessage
 
   @impl true
   def commands do
     [
-      my_workflow: [
-        description: "Performs a custom workflow",
+      # Command name is :announce
+      announce: [
+        description: "Logs two messages in sequence",
         schema: [
-          user: [type: :string, required: true],
-          delay: [type: :integer, default: 1000]
+          msg1: [type: :string, required: true],
+          msg2: [type: :string, required: true]
         ]
       ]
     ]
   end
 
   @impl true
-  def handle_command(:my_workflow, _agent, %{user: user, delay: delay}) do
-    {:ok, [
-      {Log, level: :info, message: "Starting workflow for #{user}"},
-      {Sleep, duration_ms: delay},
-      {Log, level: :info, message: "Completed workflow for #{user}"}
-    ]}
+  def handle_command(:announce, _agent, %{msg1: m1, msg2: m2}) do
+    actions = [
+      {LogMessage, message: m1, level: :info},
+      {LogMessage, message: m2, level: :info}
+    ]
+
+    # Return an {:ok, actions_list} tuple
+    {:ok, actions}
   end
 end
-Combining Actions into a Command
-In the above example, the command :my_workflow combines three actions:
+```
 
-Log Action: Logs the start of the workflow.
-Sleep Action: Introduces a delay.
-Log Action: Logs the completion of the workflow.
-By structuring commands this way, you can create reusable and modular workflows that agents can execute.
+### Command Explanation
 
-Example: Creating a Greeting Command
-Let's create a command that greets a user, waits for a moment, and then says goodbye.
+The `commands/0` function declares what commands exist (in this case, `:announce`) and their parameter schemas.
 
-elixir
-Copy code
-defmodule Jido.Commands.GreetCommand do
+The `handle_command/3` function converts the command call (`:announce`, agent, params) into a list of Actions that get executed.
+
+### Defining an Agent with Commands
+
+Now that we have a Command module (`MyApp.Commands.Announcements`), we want to define an Agent that can use it. Here's a minimal example:
+
+```elixir
+defmodule MyApp.Agents.AnnouncerAgent do
   @moduledoc """
-  A command that greets a user, waits, and then bids farewell.
+  A simple Agent that can announce messages using commands from Announcements.
   """
-
-  use Jido.Command
-
-  alias Jido.Actions.Basic.Log
-  alias Jido.Actions.Basic.Sleep
+  use Jido.Agent,
+    name: "announcer_agent",
+    description: "An agent that can log announcements",
+    commands: [MyApp.Commands.Announcements],
+    schema: [
+      # optional schema fields for this Agent
+      announcements_made: [type: :integer, default: 0]
+    ]
 
   @impl true
-  def commands do
-    [
-      greet: [
-        description: "Greets a user and says goodbye after a delay",
-        schema: [
-          name: [type: :string, required: true],
-          delay: [type: :integer, default: 1000, doc: "Delay in milliseconds"]
-        ]
-      ]
-    ]
+  def on_before_plan(agent, :announce, params) do
+    # Maybe we want to do some custom logic or transformations
+    new_params = Map.put(params, :msg1, "[ANNOUNCE] " <> params.msg1)
+    {:ok, {:announce, new_params}}
   end
 
   @impl true
-  def handle_command(:greet, _agent, %{name: name, delay: delay}) do
-    {:ok, [
-      {Log, level: :info, message: "Hello, #{name}!"},
-      {Sleep, duration_ms: delay},
-      {Log, level: :info, message: "Goodbye, #{name}!"}
-    ]}
+  def on_after_run(agent, result) do
+    # Suppose we track how many announcements we've done
+    announcements_count = agent.state.announcements_made + 1
+    new_state = %{agent.state | announcements_made: announcements_count}
+    {:ok, %{result | state: new_state}}
   end
 end
-Explanation:
+```
 
-Command Definition: The :greet command takes a name and an optional delay.
-Action Sequence: It logs a greeting, sleeps for the specified duration, and then logs a farewell.
-Schema Validation: The command ensures that the name parameter is provided and that delay defaults to 1000 milliseconds if not specified.
-Loading Commands into an Agent
-Agents in Jido are entities that manage and execute commands. By loading commands into an agent, you equip it with the ability to perform predefined workflows.
+### Agent Explanation
 
-Defining an Agent
-To define an agent, you create a module that uses the Jido.Agent behaviour. Agents have unique names, descriptions, categories, tags, versions, commands, and schemas for their state.
+The `use Jido.Agent` macro configures the agent with:
+- A name and description for identification
+- Command modules like `MyApp.Commands.Announcements` that define available commands
+- A schema validated by NimbleOptions, with fields like `announcements_made` defaulting to 0
 
-elixir
-Copy code
-defmodule MyApp.Agents.GreetingAgent do
-  @moduledoc """
-  An agent that handles greeting workflows.
-  """
+The agent provides lifecycle callbacks like `on_before_plan/3` that can be overridden to customize planning and execution.
 
-  use Jido.Agent,
-    name: "greeting_agent",
-    description: "Handles greeting and farewell workflows",
-    category: "communication",
-    tags: ["greeting", "farewell"],
-    vsn: "1.0.0",
-    commands: [Jido.Commands.GreetCommand],
-    schema: [
-      last_greeted: [type: :string, default: nil]
-    ]
-end
-Assigning Commands to the Agent
-When defining the agent, you specify the list of commands it can execute via the commands option. This ensures that the agent knows how to handle each command when invoked.
+### Running the Agent
 
-Example:
+Let's see how to plan and run a command:
 
-In the GreetingAgent above, we assigned the GreetCommand:
+```elixir
+defmodule MyApp.Example do
+  def run_demo do
+    # 1. Create a new agent instance
+    agent = MyApp.Agents.AnnouncerAgent.new()
 
-elixir
-Copy code
-commands: [Jido.Commands.GreetCommand]
-This tells the agent to use the GreetCommand module when handling the :greet command.
+    # 2. Plan the :announce command with the required params
+    {:ok, planned_agent} =
+      MyApp.Agents.AnnouncerAgent.plan(agent, :announce, %{msg1: "Hello", msg2: "World"})
 
-Example: Setting Up a Basic Agent
-Let's set up an agent that can handle greeting commands.
+    # 3. Execute all pending actions
+    {:ok, final_agent} = MyApp.Agents.AnnouncerAgent.run(planned_agent)
 
-elixir
-Copy code
-defmodule MyApp.Agents.BasicGreetingAgent do
-  @moduledoc """
-  A basic agent that performs greeting workflows.
-  """
-
-  use Jido.Agent,
-    name: "basic_greeting_agent",
-    description: "Performs basic greeting workflows",
-    category: "utility",
-    tags: ["greeting", "basic"],
-    vsn: "1.0.0",
-    commands: [Jido.Commands.GreetCommand],
-    schema: [
-      last_greeted: [type: :string, default: nil]
-    ]
-end
-Explanation:
-
-Name & Description: Identifies the agent and describes its purpose.
-Category & Tags: Helps categorize and tag the agent for easier management.
-Version (vsn): Tracks the agent's version.
-Commands: Assigns the GreetCommand to the agent.
-Schema: Defines the agent's state, in this case, tracking the last_greeted user.
-Running an Agent
-Once you've defined your agent and loaded it with commands, it's time to run the agent and execute commands.
-
-Starting the Agent
-Agents are typically started under a supervision tree to ensure they are monitored and can recover from failures.
-
-Example:
-
-elixir
-Copy code
-defmodule MyApp.Application do
-  use Application
-
-  def start(_type, _args) do
-    children = [
-      # Start the PubSub system
-      {Phoenix.PubSub, name: MyApp.PubSub},
-      
-      # Start the Greeting Agent
-      {MyApp.Agents.BasicGreetingAgent, []}
-    ]
-
-    opts = [strategy: :one_for_one, name: MyApp.Supervisor]
-    Supervisor.start_link(children, opts)
+    IO.inspect(final_agent.state, label: "Agent final state")
   end
 end
-Explanation:
+```
 
-Phoenix.PubSub: Initializes the PubSub system required for communication.
-BasicGreetingAgent: Starts the agent under the supervision tree.
-Sending Commands to the Agent
-Commands can be sent to the agent either synchronously or asynchronously.
+# Steps in detail:
 
-Synchronous (act/3): Waits for the command to complete and returns the result.
-Asynchronous (act_async/3): Sends the command without waiting for completion.
-Example: Sending a Synchronous Command
+Create: MyApp.Agents.AnnouncerAgent.new().
+Plan: plan(agent, :announce, %{msg1: "Hello", msg2: "World"}) → returns an updated agent with queued actions.
+Run: run(agent) executes the queued actions (in this case, two LogMessage calls).
+You’ll see the logs appear in your console, and the announcements_made field will be incremented to 1.
 
-elixir
-Copy code
-{:ok, new_state} = Jido.Agent.act(MyApp.Agents.BasicGreetingAgent, :greet, %{name: "Alice"})
-Example: Sending an Asynchronous Command
+Shortcut: You can do everything in one shot with act/4:
 
 elixir
 Copy code
-:ok = Jido.Agent.act_async(MyApp.Agents.BasicGreetingAgent, :greet, %{name: "Bob"})
-Example: Executing a Command
-Let's execute the :greet command to greet a user named "Charlie".
+{:ok, final_agent} =
+  MyApp.Agents.AnnouncerAgent.act(agent, :announce, %{msg1: "Hello", msg2: "World"})
+This will validate state, plan the command, and run all pending actions, returning the updated agent.
+
+6. Integrating an Agent in a Phoenix Application
+Agents in Jido are often long-running processes so that external systems (HTTP requests, channels, etc.) can interact with them. A typical approach is:
+
+Start a Runtime process (from Jido.Agent.Runtime) in your Phoenix application.ex.
+Supervise that runtime so it stays alive, allowing commands to be dispatched to it via GenServer or PubSub.
+For example, in your lib/my_app/application.ex:
+
+```elixir
+def start(_type, _args) do
+  children = [
+    # Start the Phoenix endpoint
+    MyAppWeb.Endpoint,
+    # Start the PubSub system
+    {Phoenix.PubSub, name: MyApp.PubSub},
+    # Start a Jido Runtime with our agent
+    {
+      Jido.Agent.Runtime,
+      agent: MyApp.Agents.AnnouncerAgent.new("announcer_1"),
+      pubsub: MyApp.PubSub
+      # Optionally specify topic or max_queue_size, etc.
+      # topic: "custom.topic"
+    }
+  ]
+
+  opts = [strategy: :one_for_one, name: MyApp.Supervisor]
+  Supervisor.start_link(children, opts)
+end
+```
+
+What happens here?
+
+Jido.Agent.Runtime starts up with a specific agent instance. We give it a unique ID like "announcer_1".
+We pass in pubsub: MyApp.PubSub so that it can broadcast/receive events on that named PubSub system.
+Once it’s running, we can call Runtime.act/3, Runtime.manage/3, etc., on that PID or name.
+7. Sending Commands via PubSub
+Jido provides built-in support for PubSub signals. If you have the runtime started (as shown above), you can do something like:
 
 elixir
 Copy code
-defmodule MyApp.GreetingController do
+# We'll assume our runtime was started with name: "announcer_1"
+alias Jido.Agent.Runtime
+
+defmodule MyAppWeb.AnnounceController do
   use MyAppWeb, :controller
 
-  alias Jido.Agent
+  @runtime_server {:via, Registry, {Jido.AgentRegistry, "announcer_1"}}
 
-  def greet(conn, %{"name" => name}) do
-    case Agent.act(MyApp.Agents.BasicGreetingAgent, :greet, %{name: name}) do
-      {:ok, _new_state} ->
-        text(conn, "Greeting sent to #{name}!")
+  def create(conn, %{"msg1" => msg1, "msg2" => msg2}) do
+    # Asynchronously trigger announcement
+    :ok = Runtime.act_async(@runtime_server, :announce, %{msg1: msg1, msg2: msg2})
 
-      {:error, reason} ->
-        text(conn, "Failed to send greeting: #{reason}")
+    conn
+    |> put_flash(:info, "Announcement queued!")
+    |> redirect(to: "/announcements/new")
+  end
+end
+Here’s what’s happening:
+
+We define a @runtime_server referencing the Jido runtime process. Jido automatically registers it under Jido.AgentRegistry.
+We call Runtime.act_async/3 to dispatch the :announce command. This enqueues and executes the command in our supervised agent process.
+Phoenix.PubSub is used under the hood so that events, state transitions, or failures can be broadcast to subscribers.
+If you wanted to subscribe to agent events (like :act_completed or :queue_overflow signals), you can do:
+
+elixir
+Copy code
+defmodule MyAppWeb.AgentEventsLive do
+  use Phoenix.LiveView
+  alias Jido.Signal
+
+  @topic "jido.agent.announcer_1"
+
+  def mount(_params, _session, socket) do
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(MyApp.PubSub, @topic)
     end
-  end
-end
-Explanation:
 
-Controller Action: Defines a greet action that takes a name parameter from the request.
-Sending the Command: Uses Agent.act/3 to send the :greet command synchronously.
-Handling the Response: Returns a success message if the command executes successfully or an error message otherwise.
-Integrating with Phoenix Supervision Tree
-Integrating your Jido agent into a Phoenix application ensures that it is properly supervised and can recover from unexpected failures. Additionally, using Phoenix's PubSub system allows you to send commands to the agent from different parts of your application.
-
-Adding the Agent to the Supervision Tree
-To add your agent to the Phoenix supervision tree, include it in the list of children in your application's start/2 function.
-
-Example:
-
-elixir
-Copy code
-defmodule MyApp.Application do
-  use Application
-
-  def start(_type, _args) do
-    children = [
-      # Start the PubSub system
-      {Phoenix.PubSub, name: MyApp.PubSub},
-      
-      # Start the Greeting Agent
-      {MyApp.Agents.BasicGreetingAgent, []}
-    ]
-
-    opts = [strategy: :one_for_one, name: MyApp.Supervisor]
-    Supervisor.start_link(children, opts)
-  end
-end
-Sending Commands via PubSub
-You can send commands to the agent using Phoenix's PubSub system. This allows different parts of your application to communicate with the agent without direct process references.
-
-Steps:
-
-Broadcast a Command Message:
-
-elixir
-Copy code
-Phoenix.PubSub.broadcast(MyApp.PubSub, "agent_commands", {:greet, %{name: "Diana"}})
-Subscribe to the Command Topic in the Agent:
-
-Modify your agent to listen to the agent_commands topic.
-
-elixir
-Copy code
-defmodule MyApp.Agents.BasicGreetingAgent do
-  @moduledoc """
-  A basic agent that performs greeting workflows.
-  """
-
-  use Jido.Agent,
-    name: "basic_greeting_agent",
-    description: "Performs basic greeting workflows",
-    category: "utility",
-    tags: ["greeting", "basic"],
-    vsn: "1.0.0",
-    commands: [Jido.Commands.GreetCommand],
-    schema: [
-      last_greeted: [type: :string, default: nil]
-    ]
-
-  @impl true
-  def on_before_validate_state(state), do: {:ok, state}
-
-  @impl true
-  def on_after_validate_state(state), do: {:ok, state}
-
-  @impl true
-  def on_before_plan(agent, command, params), do: {:ok, {command, params}}
-
-  @impl true
-  def on_before_run(agent, actions), do: {:ok, actions}
-
-  @impl true
-  def on_after_run(agent, result), do: {:ok, result}
-
-  @impl true
-  def on_error(agent, error, context), do: {:error, error}
-end
-Handle Incoming PubSub Messages:
-
-Ensure that your agent is subscribed to the agent_commands topic. This is typically handled during the agent's initialization.
-
-elixir
-Copy code
-defmodule MyApp.Agents.BasicGreetingAgent do
-  # ... existing code ...
-
-  @impl true
-  def init(%{agent: agent, pubsub: pubsub, topic: topic, max_queue_size: max_queue_size}) do
-    # ... existing initialization ...
-
-    # Subscribe to the agent_commands topic
-    Phoenix.PubSub.subscribe(pubsub, "agent_commands")
-
-    # ... rest of the initialization ...
-  end
-end
-Example: Supervising the Agent in Phoenix
-Here's how you can integrate the BasicGreetingAgent into your Phoenix application's supervision tree and send it commands via PubSub.
-
-Update application.ex:
-
-elixir
-Copy code
-defmodule MyApp.Application do
-  use Application
-
-  def start(_type, _args) do
-    children = [
-      # Start the PubSub system
-      {Phoenix.PubSub, name: MyApp.PubSub},
-      
-      # Start the Greeting Agent
-      {MyApp.Agents.BasicGreetingAgent, []}
-    ]
-
-    opts = [strategy: :one_for_one, name: MyApp.Supervisor]
-    Supervisor.start_link(children, opts)
-  end
-end
-Send a Command via PubSub:
-
-You can broadcast a command from anywhere in your Phoenix application, such as a controller or a LiveView.
-
-elixir
-Copy code
-defmodule MyAppWeb.GreetingController do
-  use MyAppWeb, :controller
-
-  alias Phoenix.PubSub
-
-  def send_greeting(conn, %{"name" => name}) do
-    PubSub.broadcast(MyApp.PubSub, "agent_commands", {:greet, %{name: name}})
-    text(conn, "Greeting command sent to #{name}!")
-  end
-end
-Handle the Command in the Agent:
-
-Ensure that your agent is listening to the agent_commands topic and handles incoming :greet commands.
-
-elixir
-Copy code
-defmodule MyApp.Agents.BasicGreetingAgent do
-  use Jido.Agent,
-    name: "basic_greeting_agent",
-    # ... other options ...
-    commands: [Jido.Commands.GreetCommand],
-    # ... schema ...
-
-  @impl true
-  def init(state) do
-    # Subscribe to the agent_commands topic
-    Phoenix.PubSub.subscribe(state.pubsub, "agent_commands")
-    super(state)
+    {:ok, socket}
   end
 
-  @impl true
-  def handle_info({:greet, params}, state) do
-    Agent.act_async(self(), :greet, params)
-    {:noreply, state}
+  def handle_info(%Signal{type: "jido.agent.act_completed"} = signal, socket) do
+    # E.g. handle the completion event
+    IO.puts("Action completed with data: #{inspect(signal.data)}")
+    {:noreply, socket}
   end
+
+  # ... handle other events or unknown signals
+  def handle_info(_other, socket), do: {:noreply, socket}
 end
-Explanation:
+That’s it! Your Jido Agent can now be driven by HTTP requests, WebSockets, or internal messages—making it easy to build robust, stateful workflows in your Phoenix app.
 
-Supervision Tree: The agent is added as a child to the supervision tree in application.ex.
-Broadcasting Commands: The GreetingController sends a greeting command by broadcasting to the agent_commands topic.
-Agent Subscription: The agent subscribes to the agent_commands topic during initialization and handles incoming :greet commands by invoking act_async/3.
-Conclusion
-Congratulations! You've successfully set up Jido in your Elixir Phoenix application. By defining actions, combining them into commands, loading these commands into agents, and integrating agents into your supervision tree, you can build powerful, scalable, and maintainable workflows. Jido leverages Elixir's strengths in concurrency and fault-tolerance, providing a solid foundation for complex distributed systems.
+8. Next Steps
+Add More Actions: Create new use Jido.Action modules for your domain (file manipulations, external APIs, arithmetic, etc.).
+Organize Commands: Group them in modules using use Jido.Command—each command can orchestrate multiple actions.
+Extend Agent: Overwrite lifecycle callbacks (on_before_plan/3, on_after_run/2, etc.) to handle advanced logic.
+Distribute: Spin up multiple agents across nodes for parallel, fault-tolerant workflows.
+Testing: Use ExUnit or property-based tests to ensure reliability. Jido is easy to test in isolation—just instantiate your Agent with new(), plan commands, and run them.
+Jido opens up a flexible approach to building composable, functional workflows in Elixir. By leveraging Actions (reusable building blocks) and Commands (aggregated behavior), your Agent can handle anything from simple sequential tasks to complex asynchronous flows, with powerful PubSub-driven eventing for a real-time experience.
 
-Feel free to explore more advanced features of Jido, such as custom lifecycle hooks, dynamic command loading, and integrating with other Elixir libraries to further enhance your application's capabilities.
-
-Happy coding!
+Happy hacking with Jido! If you have any questions or want to learn more about advanced features like compensation, parallel workflows, or advanced hooks, check out the rest of our documentation and examples.

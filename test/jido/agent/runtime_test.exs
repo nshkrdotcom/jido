@@ -267,6 +267,10 @@ defmodule Jido.Agent.RuntimeTest do
       assert Process.alive?(pid)
       assert :ok = Runtime.act_async(pid, :move, %{destination: :kitchen})
     end
+
+    test "returns configured topic", %{worker: pid, topic: topic} do
+      assert {:ok, ^topic} = Runtime.get_topic(pid)
+    end
   end
 
   describe "max queue size" do

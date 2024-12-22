@@ -71,7 +71,7 @@ defmodule Jido.Agent.Runtime do
   """
   use GenServer
   use Private
-  use Jido.Util, debug_enabled: false
+  use Jido.Util, debug_enabled: true
   alias Jido.Signal
   alias Jido.Agent.Runtime.State
   require Logger
@@ -288,6 +288,28 @@ defmodule Jido.Agent.Runtime do
   end
 
   @doc """
+  Gets the topic for an agent runtime process.
+
+  ## Parameters
+
+    * `server` - Runtime pid or name
+
+  ## Returns
+
+    * `{:ok, topic}` - The topic string for the agent
+    * `{:error, reason}` - Failed to get topic
+
+  ## Examples
+
+      iex> Runtime.get_topic(worker)
+      {:ok, "jido.agent.my_agent_1"}
+  """
+  @spec get_topic(GenServer.server()) :: {:ok, String.t()} | {:error, term()}
+  def get_topic(server) do
+    GenServer.call(server, :get_topic)
+  end
+
+  @doc """
   Starts a new child process under the runtime's DynamicSupervisor.
 
   ## Parameters
@@ -405,6 +427,12 @@ defmodule Jido.Agent.Runtime do
   end
 
   def handle_cast(_msg, state), do: {:noreply, state}
+
+  @impl true
+  def handle_call(:get_topic, _from, %{topic: topic} = state) do
+    debug("Getting topic", topic: topic)
+    {:reply, {:ok, topic}, state}
+  end
 
   @impl true
   def handle_call(%Signal{type: "jido.agent.act", data: attrs}, from, state) do

@@ -116,7 +116,7 @@ defmodule Jido.Util do
           {:halt, {:error, "Module #{inspect(module)} does not implement Jido.Command behavior"}}
 
         {:error, reason} ->
-          {:halt, {:error, "Invalid command specifications in #{inspect(module)}: #{reason}"}}
+          {:halt, {:error, reason}}
       end
     end)
   end
@@ -133,53 +133,34 @@ defmodule Jido.Util do
       commands = module.commands()
 
       commands
-      |> Enum.reduce_while({:ok, []}, fn {name, spec}, {:ok, acc} ->
-        case validate_command_spec(name, spec) do
-          :ok -> {:cont, {:ok, [{name, spec} | acc]}}
-          {:error, reason} -> {:halt, {:error, reason}}
-        end
+      |> Enum.reduce_while({:ok, []}, fn
+        name, {:ok, acc} when is_atom(name) ->
+          {:cont, {:ok, [name | acc]}}
+
+        {name, spec}, {:ok, acc} when is_atom(name) and is_list(spec) ->
+          case validate_spec(spec) do
+            :ok -> {:cont, {:ok, [name | acc]}}
+            {:error, reason} -> {:halt, {:error, "Invalid command #{name}: #{reason}"}}
+          end
+
+        invalid, {:ok, _} ->
+          {:halt, {:error, "Invalid command format: #{inspect(invalid)}"}}
       end)
     rescue
-      UndefinedFunctionError ->
-        {:error, "Missing commands/0 implementation"}
+      UndefinedFunctionError -> {:error, "Missing commands/0 implementation"}
     end
   end
 
-  defp validate_command_spec(name, spec) when is_atom(name) do
-    required_keys = [:description, :schema]
-    keys = Keyword.keys(spec)
+  defp validate_spec(spec) do
+    desc = Keyword.get(spec, :description)
+    schema = Keyword.get(spec, :schema)
 
-    with :ok <- validate_required_keys(required_keys, keys),
-         :ok <- validate_description(spec[:description]),
-         :ok <- validate_schema(spec[:schema]) do
-      :ok
-    end
-  end
-
-  defp validate_command_spec(name, _),
-    do: {:error, "Command name must be an atom, got: #{inspect(name)}"}
-
-  defp validate_required_keys(required, actual) do
-    case Enum.all?(required, &(&1 in actual)) do
+    cond do
+      desc != nil and not is_binary(desc) -> {:error, "description must be a string"}
+      schema != nil and not is_list(schema) -> {:error, "schema must be a keyword list"}
       true -> :ok
-      false -> {:error, "Missing required keys: #{inspect(required -- actual)}"}
     end
   end
-
-  defp validate_description(description) when is_binary(description), do: :ok
-  defp validate_description(_), do: {:error, "Description must be a string"}
-
-  defp validate_schema(schema) when is_list(schema) do
-    try do
-      NimbleOptions.new!(schema)
-      :ok
-    rescue
-      e in NimbleOptions.ValidationError ->
-        {:error, Exception.message(e)}
-    end
-  end
-
-  defp validate_schema(_), do: {:error, "Schema must be a keyword list"}
 
   defmacro debug(message, metadata \\ []) do
     quote do

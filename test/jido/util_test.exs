@@ -35,6 +35,23 @@ defmodule JidoTest.UtilTest do
 
       def commands do
         [
+          :blank_command,
+          ommitted_schema: [
+            description: "Ommitted schema command"
+          ],
+          only_schema: [
+            schema: [
+              name: [type: :string, default: "world"]
+            ]
+          ],
+          empty_schema: [
+            description: "Empty schema command",
+            schema: []
+          ],
+          nil_schema: [
+            description: "Ommitted schema command",
+            schema: nil
+          ],
           test_command: [
             description: "A test command",
             schema: [

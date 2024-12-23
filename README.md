@@ -1,28 +1,17 @@
-<p align="center">
-  <h1>Jido (自動)</h1>
-</p>
+# Jido (自動)
 
-<p align="center">
-  自動 (Jido) - A flexible framework for building distributed Agents and Workflows in Elixir.
-</p>
+自動 (Jido) - A flexible framework for building distributed Agents and Workflows in Elixir.
 
-<p align="center">
-  <a href="https://hex.pm/packages/jido">
-    <img alt="Hex Version" src="https://img.shields.io/hexpm/v/jido.svg">
-  </a>
+[![Hex Version](https://img.shields.io/hexpm/v/jido.svg)](https://hex.pm/packages/jido)
+[![Hex Docs](http://img.shields.io/badge/hex.pm-docs-green.svg?style=flat)](https://hexdocs.pm/jido)
+[![CI Status](https://github.com/agentjido/jido/workflows/ci/badge.svg)](https://github.com/agentjido/jido/actions)
+[![Apache 2 License](https://img.shields.io/hexpm/l/jido)](https://opensource.org/licenses/Apache-2.0)
 
-  <a href="https://hexdocs.pm/jido">
-    <img alt="Hex Docs" src="http://img.shields.io/badge/hex.pm-docs-green.svg?style=flat">
-  </a>
+## Current Status
 
-  <a href="https://github.com/agentjido/jido/actions">
-    <img alt="CI Status" src="https://github.com/agentjido/jido/workflows/ci/badge.svg">
-  </a>
+Jido is under active development. The API of this library is usable, but not stable. We are actively working on stabilizing the current API and preparing for a 1.0 release.
 
-  <a href="https://opensource.org/licenses/Apache-2.0">
-    <img alt="Apache 2 License" src="https://img.shields.io/hexpm/l/jido">
-  </a>
-</p>
+We welcome feedback and contributions! Please feel free to open an issue or submit a PR.
 
 ## Features
 

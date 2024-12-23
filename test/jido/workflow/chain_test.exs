@@ -55,6 +55,40 @@ defmodule JidoTest.Workflow.ChainTest do
       end)
     end
 
+    test "executes a chain with map workflow parameters" do
+      capture_log(fn ->
+        result = Chain.chain([Add, {Multiply, %{amount: 3}}, Subtract], %{value: 5})
+        assert {:ok, %{value: 15, amount: 3}} = result
+      end)
+    end
+
+    test "handles string keys in workflow parameters" do
+      capture_log(fn ->
+        result = Chain.chain([Add, {Multiply, %{"amount" => 3}}, Subtract], %{value: 5})
+        assert {:error, %Error{type: :bad_request}} = result
+      end)
+    end
+
+    test "handles empty map workflow parameters" do
+      capture_log(fn ->
+        result = Chain.chain([Add, {Multiply, %{}}, Subtract], %{value: 5, amount: 2})
+        assert {:ok, %{value: 12, amount: 2}} = result
+      end)
+    end
+
+    test "handles nil workflow parameters" do
+      capture_log(fn ->
+        result = Chain.chain([Add, {Multiply, nil}, Subtract], %{value: 5})
+
+        assert {:error,
+                %Error{
+                  type: :bad_request,
+                  message: "Invalid chain workflow",
+                  details: %{workflow: {Multiply, nil}}
+                }} = result
+      end)
+    end
+
     test "handles errors in the chain" do
       capture_log(fn ->
         result = Chain.chain([Add, ErrorAction, Multiply], %{value: 5, error_type: :runtime})

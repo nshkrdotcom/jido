@@ -5,34 +5,37 @@ defmodule Jido.Runner.Chain do
 
   @behaviour Jido.Runner
 
+  use Jido.Util, debug_enabled: true
   require Logger
   alias Jido.Workflow.Chain
 
   @impl true
   def run(agent, actions, opts \\ []) do
-    Logger.debug("Running action chain",
+    debug("Starting action chain execution",
       agent_id: agent.id,
       actions: inspect(actions),
       opts: opts
     )
 
     case Chain.chain(actions, agent.state) do
-      {:ok, final_state} ->
-        Logger.debug("Action chain completed successfully",
+      {:ok, final_state} = result ->
+        debug("Action chain completed successfully",
           agent_id: agent.id,
           initial_state: inspect(agent.state),
           final_state: inspect(final_state)
         )
 
+        debug("Returning successful result", result: result)
         {:ok, %{state: final_state}}
 
       {:error, reason} = error ->
-        Logger.warning("Action chain failed",
+        error("Action chain failed",
           agent_id: agent.id,
           reason: inspect(reason),
           actions: inspect(actions)
         )
 
+        debug("Returning error result", error: error)
         error
     end
   end

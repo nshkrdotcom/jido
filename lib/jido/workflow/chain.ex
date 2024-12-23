@@ -7,7 +7,7 @@ defmodule Jido.Workflow.Chain do
   Execution can be interrupted between workflows using an interruption check function.
   """
 
-  use Jido.Util, debug_enabled: false
+  use Jido.Util, debug_enabled: true
 
   alias Jido.Error
   alias Jido.Workflow
@@ -82,6 +82,13 @@ defmodule Jido.Workflow.Chain do
             Logger.debug("Chain interrupted before workflow", %{workflow: workflow})
             {:halt, {:interrupted, params}}
           else
+            debug("Processing workflow", %{
+              workflow: workflow,
+              params: params,
+              context: context,
+              opts: opts
+            })
+
             process_workflow(workflow, params, context, opts)
           end
       end)
@@ -101,16 +108,32 @@ defmodule Jido.Workflow.Chain do
   end
 
   defp process_workflow({workflow, workflow_opts}, params, context, opts)
-       when is_atom(workflow) and is_list(workflow_opts) do
+       when is_atom(workflow) and (is_list(workflow_opts) or is_map(workflow_opts)) do
     debug("Processing workflow with options", %{
       workflow: workflow,
       workflow_opts: workflow_opts,
       params: params
     })
 
-    merged_params = Map.merge(params, Map.new(workflow_opts))
-    debug("Merged params", %{merged_params: merged_params})
-    run_workflow(workflow, merged_params, context, opts)
+    with {:ok, workflow_params} <- validate_workflow_params(workflow_opts) do
+      merged_params = Map.merge(params, workflow_params)
+      debug("Merged params", %{merged_params: merged_params})
+      run_workflow(workflow, merged_params, context, opts)
+    else
+      {:error, error} -> {:halt, {:error, error}}
+    end
+  end
+
+  defp validate_workflow_params(opts) when is_list(opts) do
+    {:ok, Map.new(opts)}
+  end
+
+  defp validate_workflow_params(opts) when is_map(opts) do
+    if Enum.all?(Map.keys(opts), &is_atom/1) do
+      {:ok, opts}
+    else
+      {:error, Error.bad_request("Workflow parameters must use atom keys")}
+    end
   end
 
   defp process_workflow(invalid_workflow, _params, _context, _opts) do

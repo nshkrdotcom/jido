@@ -1,6 +1,7 @@
 defmodule Jido.Agent.RuntimeTest do
   use ExUnit.Case, async: true
   require Logger
+  import ExUnit.CaptureLog
 
   alias Jido.Signal
   alias Jido.Agent.Runtime
@@ -81,11 +82,13 @@ defmodule Jido.Agent.RuntimeTest do
     end
 
     test "handles invalid action parameters synchronously", %{worker: pid} do
-      # Missing destination for move command
-      assert {:error, %Jido.Error{type: :validation_error}} = Runtime.act(pid, :move, %{})
-      state = :sys.get_state(pid)
-      # Location shouldn't change
-      assert state.agent.state.location == :home
+      capture_log(fn ->
+        # Missing destination for move command
+        assert {:error, %Jido.Error{type: :validation_error}} = Runtime.act(pid, :move, %{})
+        state = :sys.get_state(pid)
+        # Location shouldn't change
+        assert state.agent.state.location == :home
+      end)
     end
 
     test "queues synchronous actions when paused", %{worker: pid} do
@@ -132,12 +135,14 @@ defmodule Jido.Agent.RuntimeTest do
     end
 
     test "handles invalid action parameters asynchronously", %{worker: pid} do
-      # Missing destination
-      assert :ok = Runtime.act_async(pid, :move, %{})
-      :timer.sleep(100)
-      state = :sys.get_state(pid)
-      # Location shouldn't change
-      assert state.agent.state.location == :home
+      capture_log(fn ->
+        # Missing destination
+        assert :ok = Runtime.act_async(pid, :move, %{})
+        :timer.sleep(100)
+        state = :sys.get_state(pid)
+        # Location shouldn't change
+        assert state.agent.state.location == :home
+      end)
     end
 
     test "queues asynchronous actions when paused", %{worker: pid} do
@@ -194,22 +199,26 @@ defmodule Jido.Agent.RuntimeTest do
     end
 
     test "handles invalid state transitions", %{worker: pid} do
-      # Try to pause when already idle
-      {:error, {:invalid_state, :idle}} = Runtime.manage(pid, :pause)
+      capture_log(fn ->
+        # Try to pause when already idle
+        {:error, {:invalid_state, :idle}} = Runtime.manage(pid, :pause)
 
-      # Try to resume when already running
-      {:ok, _} = Runtime.manage(pid, :resume)
-      {:error, {:invalid_state, :running}} = Runtime.manage(pid, :resume)
+        # Try to resume when already running
+        {:ok, _} = Runtime.manage(pid, :resume)
+        {:error, {:invalid_state, :running}} = Runtime.manage(pid, :resume)
+      end)
     end
 
     test "resets worker", %{worker: pid} do
-      # Queue some commands
-      Runtime.act(pid, %{command: :move, destination: :kitchen})
-      Runtime.act(pid, %{command: :move, destination: :living_room})
+      capture_log(fn ->
+        # Queue some commands
+        Runtime.act(pid, %{command: :move, destination: :kitchen})
+        Runtime.act(pid, %{command: :move, destination: :living_room})
 
-      {:ok, state} = Runtime.manage(pid, :reset)
-      assert state.status == :idle
-      assert :queue.len(state.pending) == 0
+        {:ok, state} = Runtime.manage(pid, :reset)
+        assert state.status == :idle
+        assert :queue.len(state.pending) == 0
+      end)
     end
 
     test "handles state transitions during pending commands", %{worker: pid} do
@@ -230,7 +239,9 @@ defmodule Jido.Agent.RuntimeTest do
     end
 
     test "returns error for invalid command", %{worker: pid} do
-      assert {:error, :invalid_command} = Runtime.manage(pid, :invalid_command)
+      capture_log(fn ->
+        assert {:error, :invalid_command} = Runtime.manage(pid, :invalid_command)
+      end)
     end
   end
 
@@ -260,12 +271,14 @@ defmodule Jido.Agent.RuntimeTest do
     end
 
     test "handles malformed signals", %{worker: pid, topic: topic} do
-      # Send malformed signal directly
-      Phoenix.PubSub.broadcast(TestPubSub, topic, %{invalid: "signal"})
+      capture_log(fn ->
+        # Send malformed signal directly
+        Phoenix.PubSub.broadcast(TestPubSub, topic, %{invalid: "signal"})
 
-      # Runtime should still be alive and functioning
-      assert Process.alive?(pid)
-      assert :ok = Runtime.act_async(pid, :move, %{destination: :kitchen})
+        # Runtime should still be alive and functioning
+        assert Process.alive?(pid)
+        assert :ok = Runtime.act_async(pid, :move, %{destination: :kitchen})
+      end)
     end
 
     test "returns configured topic", %{worker: pid, topic: topic} do

@@ -1,6 +1,7 @@
 defmodule Jido.Agent.RuntimeChildTest do
   use ExUnit.Case, async: true
   require Logger
+  import ExUnit.CaptureLog
 
   alias Jido.Agent.Runtime
   alias JidoTest.TestAgents.SimpleAgent
@@ -29,7 +30,9 @@ defmodule Jido.Agent.RuntimeChildTest do
         start: {:not_a_module, :not_a_function, []}
       }
 
-      assert {:error, _reason} = Runtime.start_process(runtime, invalid_spec)
+      capture_log(fn ->
+        assert {:error, _reason} = Runtime.start_process(runtime, invalid_spec)
+      end)
     end
   end
 
@@ -84,7 +87,9 @@ defmodule Jido.Agent.RuntimeChildTest do
       non_existent_pid = spawn(fn -> :ok end)
       Process.exit(non_existent_pid, :kill)
 
-      assert {:error, :not_found} = Runtime.terminate_process(runtime, non_existent_pid)
+      capture_log(fn ->
+        assert {:error, :not_found} = Runtime.terminate_process(runtime, non_existent_pid)
+      end)
     end
   end
 

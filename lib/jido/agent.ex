@@ -61,6 +61,7 @@ defmodule Jido.Agent do
     field(:dirty_state?, boolean())
     field(:pending, :queue.queue(action()))
     field(:state, map(), default: %{})
+    field(:result, term(), default: nil)
   end
 
   @agent_compiletime_options_schema NimbleOptions.new!(
@@ -137,7 +138,12 @@ defmodule Jido.Agent do
           doc: "A queue of pending actions for the Agent."
         ],
         state: [
-          type: :any
+          type: :any,
+          doc: "The current state of the Agent."
+        ],
+        result: [
+          type: :any,
+          doc: "The result of the last action executed by the Agent."
         ]
       ]
       alias Jido.Agent
@@ -384,11 +390,12 @@ defmodule Jido.Agent do
             with {:ok, validated_actions} <- on_before_run(agent, pending_actions),
                  {:ok, result} <- runner.run(%{agent | state: state}, validated_actions, opts),
                  {:ok, final_result} <- on_after_run(agent, result) do
+              {:ok, reset_agent} = reset(agent)
+
               if apply_state do
-                {:ok, reset_agent} = reset(agent)
-                OK.success(%{reset_agent | state: final_result.state})
+                OK.success(%{reset_agent | state: final_result.state, result: final_result.state})
               else
-                OK.success(final_result)
+                OK.success(%{reset_agent | result: final_result.state})
               end
             end
           end
@@ -404,7 +411,7 @@ defmodule Jido.Agent do
           """
           @spec reset(t()) :: {:ok, t()}
           def reset(%__MODULE__{} = agent) do
-            OK.success(%{agent | pending: :queue.new(), dirty_state?: false})
+            OK.success(%{agent | pending: :queue.new(), dirty_state?: false, result: nil})
           end
 
           @doc """
@@ -439,22 +446,26 @@ defmodule Jido.Agent do
           @spec act(t(), atom(), map(), keyword()) ::
                   {:ok, t()} | {:ok, {t(), map()}} | {:error, Jido.Error.t()}
           def act(%__MODULE__{} = agent, command \\ :default, params \\ %{}, opts \\ []) do
-            apply_state = Keyword.get(opts, :apply_state, true)
-
-            with {:ok, validated_agent} <- validate(agent),
-                 {:ok, updated_agent} <-
-                   if(apply_state,
-                     do: set(validated_agent, params),
-                     else: OK.success(validated_agent)
-                   ),
+            with {:ok, updated_agent} <- set(agent, params),
                  {:ok, planned_agent} <- plan(updated_agent, command, params),
-                 {:ok, result} <- run(planned_agent, opts) do
-              if apply_state do
-                OK.success(result)
-              else
-                {:ok, reset_agent} = reset(agent)
-                OK.success({reset_agent, result})
-              end
+                 {:ok, final_agent} <- run(planned_agent, opts) do
+              OK.success(final_agent)
+            else
+              {:error, %Error{type: :validation_error} = error} ->
+                Error.validation_error("Invalid agent state or parameters", %{error: error})
+                |> OK.failure()
+
+              {:error, %Error{type: :planning_error} = error} ->
+                Error.execution_error("Failed to plan agent actions", %{error: error})
+                |> OK.failure()
+
+              {:error, %Error{type: :execution_error} = error} ->
+                Error.execution_error("Failed to execute agent actions", %{error: error})
+                |> OK.failure()
+
+              {:error, error} ->
+                Error.execution_error("Agent execution failed", %{error: error})
+                |> OK.failure()
             end
           end
 

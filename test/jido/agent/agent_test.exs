@@ -2,7 +2,6 @@ defmodule JidoTest.AgentTest do
   use ExUnit.Case, async: true
 
   alias JidoTest.TestAgents.{BasicAgent, AdvancedAgent, NoSchemaAgent}
-  alias JidoTest.Commands.{Basic, Movement}
   alias Jido.Actions.Basic.{Log, Sleep}
 
   describe "agent creation" do
@@ -223,6 +222,27 @@ defmodule JidoTest.AgentTest do
       assert :queue.len(planned.pending) == 0
       assert planned.dirty_state? == true
     end
+
+    test "run with apply_state: true updates agent state", %{agent: agent} do
+      {:ok, planned} = AdvancedAgent.plan(agent, :move, %{destination: :work_area})
+      {:ok, final} = AdvancedAgent.run(planned, apply_state: true)
+
+      assert final.state.location == :work_area
+      assert final.pending == :queue.new()
+      assert final.dirty_state? == false
+    end
+
+    test "run with apply_state: false preserves original state", %{agent: agent} do
+      {:ok, planned} = AdvancedAgent.plan(agent, :move, %{destination: :work_area})
+      {:ok, final} = AdvancedAgent.run(planned, apply_state: false)
+
+      # Original location preserved
+      assert final.state.location == :home
+      # Result contains new state
+      assert final.result.location == :work_area
+      assert final.pending == :queue.new()
+      assert final.dirty_state? == false
+    end
   end
 
   describe "combined operations with act/4" do
@@ -243,7 +263,7 @@ defmodule JidoTest.AgentTest do
     end
 
     test "preserves state with apply_state: false", %{agent: agent} do
-      {:ok, {final, result}} =
+      {:ok, final_agent} =
         AdvancedAgent.act(
           agent,
           :move,
@@ -252,11 +272,11 @@ defmodule JidoTest.AgentTest do
         )
 
       # Original location
-      assert final.state.location == :home
-      assert final.pending == :queue.new()
-      assert final.dirty_state? == false
+      assert final_agent.state.location == :home
+      assert final_agent.pending == :queue.new()
+      assert final_agent.dirty_state? == false
       # Result should have the new location
-      assert result.state.location == :work_area
+      assert final_agent.result.location == :work_area
     end
   end
 

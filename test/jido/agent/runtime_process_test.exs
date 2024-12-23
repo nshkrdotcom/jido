@@ -1,6 +1,7 @@
 defmodule Jido.Agent.RuntimeProcessTest do
   use ExUnit.Case, async: true
   require Logger
+  import ExUnit.CaptureLog
 
   alias Jido.Signal
   alias Jido.Agent.Runtime
@@ -143,7 +144,9 @@ defmodule Jido.Agent.RuntimeProcessTest do
       state = %{state | status: :planning}
       attrs = %{command: :move, destination: :kitchen}
 
-      assert {:error, {:invalid_state, :planning}} = Runtime.process_act(attrs, state)
+      capture_log(fn ->
+        assert {:error, {:invalid_state, :planning}} = Runtime.process_act(attrs, state)
+      end)
     end
   end
 
@@ -173,7 +176,9 @@ defmodule Jido.Agent.RuntimeProcessTest do
     end
 
     test "returns error for invalid command", %{base_state: state} do
-      assert {:error, :invalid_command} = Runtime.process_manage(:invalid, nil, nil, state)
+      capture_log(fn ->
+        assert {:error, :invalid_command} = Runtime.process_manage(:invalid, nil, nil, state)
+      end)
     end
   end
 
@@ -206,11 +211,14 @@ defmodule Jido.Agent.RuntimeProcessTest do
       ]
 
       state = %{state | pending: :queue.from_list(commands)}
-      processed_state = Runtime.process_pending_commands(state)
 
-      assert processed_state.status == :idle
-      assert :queue.len(processed_state.pending) == 0
-      assert processed_state.agent.state.location == :kitchen
+      capture_log(fn ->
+        processed_state = Runtime.process_pending_commands(state)
+
+        assert processed_state.status == :idle
+        assert :queue.len(processed_state.pending) == 0
+        assert processed_state.agent.state.location == :kitchen
+      end)
     end
 
     test "skips processing when not idle", %{base_state: state} do
@@ -252,12 +260,16 @@ defmodule Jido.Agent.RuntimeProcessTest do
 
       assert {:ok, updated_agent} = Runtime.execute_action(state, attrs)
       # Default action only logs messages and sleeps, no state changes
-      assert updated_agent == initial_state
+      assert updated_agent.state == initial_state.state
+      assert updated_agent.result == initial_state.state
     end
 
     test "fails if not in running state", %{base_state: state} do
       attrs = %{command: :move, destination: :kitchen}
-      assert {:error, {:invalid_state, :idle}} = Runtime.execute_action(state, attrs)
+
+      capture_log(fn ->
+        assert {:error, {:invalid_state, :idle}} = Runtime.execute_action(state, attrs)
+      end)
     end
   end
 end

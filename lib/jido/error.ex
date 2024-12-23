@@ -62,6 +62,7 @@ defmodule Jido.Error do
   - `:timeout`: Used when an workflow exceeds its time limit.
   - `:invalid_async_ref`: Indicates an invalid asynchronous workflow reference.
   - `:compensation_error`: Indicates an error occurred during compensation.
+  - `:planning_error`: Used when an error occurs during workflow planning.
   """
   @type error_type ::
           :invalid_action
@@ -70,6 +71,7 @@ defmodule Jido.Error do
           | :validation_error
           | :config_error
           | :execution_error
+          | :planning_error
           | :workflow_error
           | :internal_server_error
           | :timeout
@@ -282,6 +284,31 @@ defmodule Jido.Error do
   @spec execution_error(String.t(), map() | nil, list() | nil) :: t()
   def execution_error(message, details \\ nil, stacktrace \\ nil) do
     new(:execution_error, message, details, stacktrace)
+  end
+
+  @doc """
+  Creates a new planning error.
+
+  Use this when an error occurs during workflow planning.
+
+  ## Parameters
+  - `message`: A string describing the planning error.
+  - `details`: (optional) A map containing additional error details.
+  - `stacktrace`: (optional) The stacktrace at the point of error.
+
+  ## Example
+
+      iex> Jido.Error.planning_error("Failed to plan workflow", %{step: "goal_analysis"})
+      %Jido.Error{
+        type: :planning_error,
+        message: "Failed to plan workflow",
+        details: %{step: "goal_analysis"},
+        stacktrace: [...]
+      }
+  """
+  @spec planning_error(String.t(), map() | nil, list() | nil) :: t()
+  def planning_error(message, details \\ nil, stacktrace \\ nil) do
+    new(:planning_error, message, details, stacktrace)
   end
 
   @doc """

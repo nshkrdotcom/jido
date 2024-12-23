@@ -7,7 +7,7 @@ defmodule Jido.Workflow.Chain do
   Execution can be interrupted between workflows using an interruption check function.
   """
 
-  use Jido.Util, debug_enabled: true
+  use Jido.Util, debug_enabled: false
 
   alias Jido.Error
   alias Jido.Workflow
@@ -124,6 +124,12 @@ defmodule Jido.Workflow.Chain do
     end
   end
 
+  defp process_workflow(invalid_workflow, _params, _context, _opts) do
+    debug("Encountered invalid workflow", %{invalid_workflow: invalid_workflow})
+
+    {:halt, {:error, Error.bad_request("Invalid chain workflow", %{workflow: invalid_workflow})}}
+  end
+
   defp validate_workflow_params(opts) when is_list(opts) do
     {:ok, Map.new(opts)}
   end
@@ -134,12 +140,6 @@ defmodule Jido.Workflow.Chain do
     else
       {:error, Error.bad_request("Workflow parameters must use atom keys")}
     end
-  end
-
-  defp process_workflow(invalid_workflow, _params, _context, _opts) do
-    debug("Encountered invalid workflow", %{invalid_workflow: invalid_workflow})
-
-    {:halt, {:error, Error.bad_request("Invalid chain workflow", %{workflow: invalid_workflow})}}
   end
 
   defp run_workflow(workflow, params, context, opts) do

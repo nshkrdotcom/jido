@@ -532,8 +532,13 @@ defmodule Jido.Agent.Runtime do
   def handle_info(_msg, state), do: {:noreply, state}
 
   @impl true
-  def terminate(_reason, %{child_supervisor: supervisor}) when is_pid(supervisor) do
-    debug("Terminating runtime and cleaning up child processes")
+  def terminate(reason, %{child_supervisor: supervisor} = state) when is_pid(supervisor) do
+    debug("Runtime terminating",
+      reason: inspect(reason),
+      agent_id: state.agent.id,
+      status: state.status
+    )
+
     DynamicSupervisor.stop(supervisor, :shutdown)
     :ok
   end
@@ -660,19 +665,36 @@ defmodule Jido.Agent.Runtime do
     defp process_pending_commands(state), do: state
 
     defp execute_action(%{status: status} = _state, _attrs) when status != :running do
+      debug("Invalid state for action execution", status: status)
       {:error, {:invalid_state, status}}
     end
 
-    defp execute_action(%{status: :running} = state, %{command: command} = attrs) do
-      params = Map.delete(attrs, :command)
-      state.agent.__struct__.act(state.agent, command, params)
-    end
-
     defp execute_action(%{status: :running} = state, attrs) do
-      state.agent.__struct__.act(state.agent, :default, attrs)
+      command = Map.get(attrs, :command, :default)
+      params = Map.delete(attrs, :command)
+
+      debug("Executing action", command: command, attrs: attrs)
+
+      try do
+        state.agent.__struct__.act(state.agent, command, params)
+      rescue
+        error ->
+          debug("Action execution failed",
+            command: command,
+            error: inspect(error),
+            stacktrace: __STACKTRACE__
+          )
+
+          {:error, error}
+      end
     end
 
     defp ensure_running_state(%{status: :idle} = state) do
+      debug("Transitioning from idle to running",
+        agent_id: state.agent.id,
+        pending_commands: :queue.len(state.pending)
+      )
+
       with {:ok, running_state} <- State.transition(state, :running) do
         emit(running_state, :state_changed, %{from: :idle, to: :running})
         {:ok, running_state}

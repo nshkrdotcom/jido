@@ -5,9 +5,11 @@ defmodule Jido.Runner.Chain do
 
   @behaviour Jido.Runner
 
-  use Jido.Util, debug_enabled: true
+  use Jido.Util, debug_enabled: false
   require Logger
   alias Jido.Workflow.Chain
+  alias Jido.Error
+  require OK
 
   @impl true
   def run(agent, actions, opts \\ []) do
@@ -17,26 +19,58 @@ defmodule Jido.Runner.Chain do
       opts: opts
     )
 
-    case Chain.chain(actions, agent.state) do
-      {:ok, final_state} = result ->
-        debug("Action chain completed successfully",
+    Chain.chain(actions, agent.state)
+    |> handle_chain_result(agent, actions)
+    |> handle_final_result()
+  end
+
+  defp handle_chain_result({:ok, final_state}, agent, _actions) do
+    debug("Action chain completed successfully",
+      agent_id: agent.id,
+      initial_state: inspect(agent.state),
+      final_state: inspect(final_state)
+    )
+
+    OK.success(final_state)
+  end
+
+  defp handle_chain_result({:error, %Error{} = error}, agent, actions) do
+    error("Action chain failed with error",
+      agent_id: agent.id,
+      error: inspect(error),
+      actions: inspect(actions)
+    )
+
+    OK.failure(error)
+  end
+
+  defp handle_chain_result({:error, reason}, agent, actions) do
+    error =
+      Error.execution_error(
+        "Action chain failed",
+        %{
           agent_id: agent.id,
-          initial_state: inspect(agent.state),
-          final_state: inspect(final_state)
-        )
+          reason: reason,
+          actions: actions
+        }
+      )
 
-        debug("Returning successful result", result: result)
-        {:ok, %{state: final_state}}
+    error("Action chain failed",
+      agent_id: agent.id,
+      reason: inspect(reason),
+      actions: inspect(actions)
+    )
 
-      {:error, reason} = error ->
-        error("Action chain failed",
-          agent_id: agent.id,
-          reason: inspect(reason),
-          actions: inspect(actions)
-        )
+    OK.failure(error)
+  end
 
-        debug("Returning error result", error: error)
-        error
-    end
+  defp handle_final_result({:ok, final_state}) do
+    debug("Returning successful result", state: inspect(final_state))
+    OK.success(%{state: final_state})
+  end
+
+  defp handle_final_result({:error, _error} = error) do
+    debug("Returning error result", error: inspect(error))
+    error
   end
 end

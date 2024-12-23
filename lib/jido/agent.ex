@@ -177,7 +177,7 @@ defmodule Jido.Agent do
               vsn: @validated_opts[:vsn],
               commands: @validated_opts[:commands],
               runner: @validated_opts[:runner],
-              schema: @validated_opts[:schema],
+              schema: @validated_opts[:schema]
             }
           end
 
@@ -436,7 +436,8 @@ defmodule Jido.Agent do
             - If apply_state is false: `{:ok, {agent, result}}`
             - On error: `{:error, error}`
           """
-          @spec act(t(), atom(), map(), keyword()) :: {:ok, t()} | {:ok, {t(), map()}} | {:error, Jido.Error.t()}
+          @spec act(t(), atom(), map(), keyword()) ::
+                  {:ok, t()} | {:ok, {t(), map()}} | {:error, Jido.Error.t()}
           def act(%__MODULE__{} = agent, command \\ :default, params \\ %{}, opts \\ []) do
             apply_state = Keyword.get(opts, :apply_state, true)
 

@@ -48,7 +48,7 @@ defmodule Jido.MixProject do
         {"guides/actions.md", title: "Actions"},
         {"guides/commands.md", title: "Commands"},
         {"guides/agents.md", title: "Agents"},
-        {"guides/sensors.md", title: "Sensors"},
+        {"guides/sensors.md", title: "Sensors"}
       ],
       groups_for_modules: [
         Core: [

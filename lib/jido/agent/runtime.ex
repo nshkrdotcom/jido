@@ -71,7 +71,7 @@ defmodule Jido.Agent.Runtime do
   """
   use GenServer
   use Private
-  use Jido.Util, debug_enabled: true
+  use Jido.Util, debug_enabled: false
   alias Jido.Signal
   alias Jido.Agent.Runtime.State
   require Logger

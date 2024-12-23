@@ -142,6 +142,19 @@ defmodule Jido.Command do
         {:error, "Command #{inspect(command)} not implemented"}
       end
 
+      # Command metadata for discovery
+      # def __command_metadata__ do
+      # # commands() is a required callback, so it must exist at runtime
+      # # But during compilation/discovery it may not be defined yet
+      # # So we need to check if it's loaded and defined
+      # if Code.ensure_loaded?(__MODULE__) and function_exported?(__MODULE__, :commands, 0) do
+      # commands()
+      # else
+      #   Logger.warning("Module #{inspect(__MODULE__)} does not have commands/0 loaded yet")
+      #   []
+      # end
+      # end
+
       defoverridable handle_command: 3
     end
   end

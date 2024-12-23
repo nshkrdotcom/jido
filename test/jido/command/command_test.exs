@@ -52,14 +52,15 @@ defmodule JidoTest.CommandTest do
                TestCommand.handle_command(:test_command, nil, %{value: 123})
     end
 
-    test "default handle_command/3 returns error with command name" do
+    test "handle_command/3 raises UndefinedFunctionError when not implemented" do
       defmodule EmptyCommand do
         use Command
         def commands, do: []
       end
 
-      assert {:error, "Command :any not implemented"} =
-               EmptyCommand.handle_command(:any, nil, %{})
+      assert_raise UndefinedFunctionError, fn ->
+        EmptyCommand.handle_command(:any, nil, %{})
+      end
     end
   end
 end

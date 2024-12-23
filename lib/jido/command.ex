@@ -17,13 +17,17 @@ defmodule Jido.Command do
   Each command requires:
   - A unique name (atom)
   - A description explaining its purpose
-  - A schema defining its parameters using NimbleOptions
   - A handle_command/3 implementation that returns Actions
 
   ## Example Implementation
 
       defmodule MyApp.ChatCommand do
-        use Jido.Command
+        use Jido.Command,
+          name: "chat_command",
+          description: "Handles chat-related commands",
+          category: "chat",
+          tags: ["conversation", "text"],
+          vsn: "1.0.0"
 
         @impl true
         def commands do
@@ -72,6 +76,49 @@ defmodule Jido.Command do
 
   See `Jido.CommandTest` for examples of testing Command implementations.
   """
+
+  alias Jido.Error
+
+  require OK
+
+  use TypedStruct
+
+  typedstruct do
+    field(:name, String.t(), enforce: true)
+    field(:description, String.t())
+    field(:category, String.t())
+    field(:tags, [String.t()], default: [])
+    field(:vsn, String.t())
+  end
+
+  @command_config_schema NimbleOptions.new!(
+                           name: [
+                             type: {:custom, Jido.Util, :validate_name, []},
+                             required: true,
+                             doc:
+                               "The name of the Command. Must contain only letters, numbers, and underscores."
+                           ],
+                           description: [
+                             type: :string,
+                             required: false,
+                             doc: "A description of what the Command does."
+                           ],
+                           category: [
+                             type: :string,
+                             required: false,
+                             doc: "The category of the Command."
+                           ],
+                           tags: [
+                             type: {:list, :string},
+                             default: [],
+                             doc: "A list of tags associated with the Command."
+                           ],
+                           vsn: [
+                             type: :string,
+                             required: false,
+                             doc: "The version of the Command."
+                           ]
+                         )
 
   @type command :: atom()
   @type command_spec :: [
@@ -127,35 +174,44 @@ defmodule Jido.Command do
   @callback handle_command(command(), Jido.Agent.t(), params :: map()) ::
               {:ok, [action()]} | error()
 
-  defmacro __using__(_opts) do
+  defmacro __using__(opts) do
+    escaped_schema = Macro.escape(@command_config_schema)
+
     quote location: :keep do
       @behaviour Jido.Command
       require Logger
+      require OK
 
-      # Default implementations
-      def handle_command(command, _agent, _params) do
-        Logger.warning("Unimplemented command handler",
-          command: command,
-          module: __MODULE__
-        )
+      case NimbleOptions.validate(unquote(opts), unquote(escaped_schema)) do
+        {:ok, validated_opts} ->
+          @validated_opts validated_opts
 
-        {:error, "Command #{inspect(command)} not implemented"}
+          def name, do: @validated_opts[:name]
+          def description, do: @validated_opts[:description]
+          def category, do: @validated_opts[:category]
+          def tags, do: @validated_opts[:tags]
+          def vsn, do: @validated_opts[:vsn]
+
+          def to_json do
+            %{
+              name: @validated_opts[:name],
+              description: @validated_opts[:description],
+              category: @validated_opts[:category],
+              tags: @validated_opts[:tags],
+              vsn: @validated_opts[:vsn]
+            }
+          end
+
+          def __command_metadata__ do
+            to_json()
+          end
+
+        {:error, error} ->
+          error
+          |> Error.format_nimble_config_error("Command")
+          |> Error.config_error()
+          |> OK.failure()
       end
-
-      # Command metadata for discovery
-      # def __command_metadata__ do
-      # # commands() is a required callback, so it must exist at runtime
-      # # But during compilation/discovery it may not be defined yet
-      # # So we need to check if it's loaded and defined
-      # if Code.ensure_loaded?(__MODULE__) and function_exported?(__MODULE__, :commands, 0) do
-      # commands()
-      # else
-      #   Logger.warning("Module #{inspect(__MODULE__)} does not have commands/0 loaded yet")
-      #   []
-      # end
-      # end
-
-      defoverridable handle_command: 3
     end
   end
 end

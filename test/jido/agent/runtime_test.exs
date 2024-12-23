@@ -75,7 +75,7 @@ defmodule Jido.Agent.RuntimeTest do
     end
 
     test "synchronously executes action and returns new state", %{worker: pid} do
-      {:ok, new_state} = Runtime.act(pid, :move, %{destination: :kitchen})
+      {:ok, new_state} = Runtime.cmd(pid, :move, %{destination: :kitchen})
       assert new_state.agent.state.location == :kitchen
       # Verify actual state matches returned state
       assert :sys.get_state(pid).agent.state.location == :kitchen
@@ -84,7 +84,7 @@ defmodule Jido.Agent.RuntimeTest do
     test "handles invalid action parameters synchronously", %{worker: pid} do
       capture_log(fn ->
         # Missing destination for move command
-        assert {:error, %Jido.Error{type: :validation_error}} = Runtime.act(pid, :move, %{})
+        assert {:error, %Jido.Error{type: :validation_error}} = Runtime.cmd(pid, :move, %{})
         state = :sys.get_state(pid)
         # Location shouldn't change
         assert state.agent.state.location == :home
@@ -96,7 +96,7 @@ defmodule Jido.Agent.RuntimeTest do
       {:ok, _} = Runtime.manage(pid, :resume)
       {:ok, _} = Runtime.manage(pid, :pause)
 
-      {:ok, state} = Runtime.act(pid, :move, %{destination: :kitchen})
+      {:ok, state} = Runtime.cmd(pid, :move, %{destination: :kitchen})
       assert state.status == :paused
       assert :queue.len(state.pending) == 1
 
@@ -108,7 +108,7 @@ defmodule Jido.Agent.RuntimeTest do
     test "handles synchronous concurrent actions", %{worker: pid} do
       tasks =
         for dest <- [:kitchen, :living_room, :bedroom] do
-          Task.async(fn -> Runtime.act(pid, :move, %{destination: dest}) end)
+          Task.async(fn -> Runtime.cmd(pid, :move, %{destination: dest}) end)
         end
 
       results = Task.await_many(tasks)
@@ -120,14 +120,14 @@ defmodule Jido.Agent.RuntimeTest do
     end
   end
 
-  describe "act_async/3" do
+  describe "cmd_async/3" do
     setup %{agent: agent} do
       {:ok, pid} = Runtime.start_link(agent: agent, pubsub: TestPubSub)
       %{worker: pid}
     end
 
     test "asynchronously executes action", %{worker: pid} do
-      assert :ok = Runtime.act_async(pid, :move, %{destination: :kitchen})
+      assert :ok = Runtime.cmd_async(pid, :move, %{destination: :kitchen})
       # Wait a bit for async processing
       :timer.sleep(100)
       state = :sys.get_state(pid)
@@ -137,7 +137,7 @@ defmodule Jido.Agent.RuntimeTest do
     test "handles invalid action parameters asynchronously", %{worker: pid} do
       capture_log(fn ->
         # Missing destination
-        assert :ok = Runtime.act_async(pid, :move, %{})
+        assert :ok = Runtime.cmd_async(pid, :move, %{})
         :timer.sleep(100)
         state = :sys.get_state(pid)
         # Location shouldn't change
@@ -150,7 +150,7 @@ defmodule Jido.Agent.RuntimeTest do
       {:ok, _} = Runtime.manage(pid, :resume)
       {:ok, _} = Runtime.manage(pid, :pause)
 
-      assert :ok = Runtime.act_async(pid, :move, %{destination: :kitchen})
+      assert :ok = Runtime.cmd_async(pid, :move, %{destination: :kitchen})
       state = :sys.get_state(pid)
       assert state.status == :paused
       assert :queue.len(state.pending) == 1
@@ -159,7 +159,7 @@ defmodule Jido.Agent.RuntimeTest do
     test "handles asynchronous concurrent actions", %{worker: pid} do
       tasks =
         for dest <- [:kitchen, :living_room, :bedroom] do
-          Task.async(fn -> Runtime.act_async(pid, :move, %{destination: dest}) end)
+          Task.async(fn -> Runtime.cmd_async(pid, :move, %{destination: dest}) end)
         end
 
       results = Task.await_many(tasks)
@@ -212,8 +212,8 @@ defmodule Jido.Agent.RuntimeTest do
     test "resets worker", %{worker: pid} do
       capture_log(fn ->
         # Queue some commands
-        Runtime.act(pid, %{command: :move, destination: :kitchen})
-        Runtime.act(pid, %{command: :move, destination: :living_room})
+        Runtime.cmd(pid, %{command: :move, destination: :kitchen})
+        Runtime.cmd(pid, %{command: :move, destination: :living_room})
 
         {:ok, state} = Runtime.manage(pid, :reset)
         assert state.status == :idle
@@ -226,8 +226,8 @@ defmodule Jido.Agent.RuntimeTest do
       {:ok, _} = Runtime.manage(pid, :resume)
       {:ok, _} = Runtime.manage(pid, :pause)
 
-      Runtime.act(pid, :move, %{destination: :kitchen})
-      Runtime.act(pid, :move, %{destination: :living_room})
+      Runtime.cmd(pid, :move, %{destination: :kitchen})
+      Runtime.cmd(pid, :move, %{destination: :living_room})
 
       {:ok, state} = Runtime.manage(pid, :resume)
       assert state.status == :running
@@ -266,8 +266,8 @@ defmodule Jido.Agent.RuntimeTest do
     end
 
     test "emits events for completed actions", %{worker: pid} do
-      Runtime.act(pid, :move, %{destination: :kitchen})
-      assert_receive %Signal{type: "jido.agent.act_completed"}, 1000
+      Runtime.cmd(pid, :move, %{destination: :kitchen})
+      assert_receive %Signal{type: "jido.agent.cmd_completed"}, 1000
     end
 
     test "handles malformed signals", %{worker: pid, topic: topic} do
@@ -277,7 +277,7 @@ defmodule Jido.Agent.RuntimeTest do
 
         # Runtime should still be alive and functioning
         assert Process.alive?(pid)
-        assert :ok = Runtime.act_async(pid, :move, %{destination: :kitchen})
+        assert :ok = Runtime.cmd_async(pid, :move, %{destination: :kitchen})
       end)
     end
 
@@ -311,7 +311,7 @@ defmodule Jido.Agent.RuntimeTest do
     test "accepts commands up to max queue size", %{worker: pid, max_queue_size: max_size} do
       # Fill queue to capacity
       for i <- 1..max_size do
-        assert :ok = Runtime.act_async(pid, :move, %{destination: "loc_#{i}"})
+        assert :ok = Runtime.cmd_async(pid, :move, %{destination: "loc_#{i}"})
       end
 
       # Verify no overflow events were emitted
@@ -321,11 +321,11 @@ defmodule Jido.Agent.RuntimeTest do
     test "drops commands when queue is full", %{worker: pid, max_queue_size: max_size} do
       # Fill queue to capacity
       for i <- 1..max_size do
-        assert :ok = Runtime.act_async(pid, :move, %{destination: "loc_#{i}"})
+        assert :ok = Runtime.cmd_async(pid, :move, %{destination: "loc_#{i}"})
       end
 
       # Send one more command that should be dropped
-      assert :ok = Runtime.act_async(pid, :move, %{destination: :overflow_location})
+      assert :ok = Runtime.cmd_async(pid, :move, %{destination: :overflow_location})
 
       # Verify overflow event was emitted with correct data
       assert_receive %Signal{
@@ -341,7 +341,7 @@ defmodule Jido.Agent.RuntimeTest do
     test "processes queued commands after resume", %{worker: pid, max_queue_size: max_size} do
       # Queue up commands - using simple move commands
       for _i <- 1..max_size do
-        assert :ok = Runtime.act_async(pid, :move, %{destination: :kitchen})
+        assert :ok = Runtime.cmd_async(pid, :move, %{destination: :kitchen})
       end
 
       # Resume worker and wait for state change
@@ -351,8 +351,8 @@ defmodule Jido.Agent.RuntimeTest do
       # Wait for either completion or failure signals
       for _ <- 1..max_size do
         receive do
-          %Signal{type: "jido.agent.act_completed"} -> :ok
-          %Signal{type: "jido.agent.act_failed"} -> :ok
+          %Signal{type: "jido.agent.cmd_completed"} -> :ok
+          %Signal{type: "jido.agent.cmd_failed"} -> :ok
         after
           1000 -> flunk("Command processing timeout")
         end
@@ -382,11 +382,11 @@ defmodule Jido.Agent.RuntimeTest do
 
       # Fill queue to custom capacity
       for i <- 1..custom_size do
-        assert :ok = Runtime.act_async(pid, :move, %{destination: "loc_#{i}"})
+        assert :ok = Runtime.cmd_async(pid, :move, %{destination: "loc_#{i}"})
       end
 
       # Verify next command is dropped
-      assert :ok = Runtime.act_async(pid, :move, %{destination: :overflow_location})
+      assert :ok = Runtime.cmd_async(pid, :move, %{destination: :overflow_location})
 
       assert_receive %Signal{
         type: "jido.agent.queue_overflow",

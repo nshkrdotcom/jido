@@ -57,7 +57,7 @@ defmodule Jido.Agent.Runtime do
   The worker emits these events on its PubSub topic:
   - `jido.agent.started` - Runtime initialization complete
   - `jido.agent.state_changed` - Runtime state transitions
-  - `jido.agent.act_completed` - Action execution completed
+  - `jido.agent.cmd_completed` - Action execution completed
   - `jido.agent.queue_overflow` - Queue size exceeded max_queue_size
 
   ## Error Handling
@@ -182,6 +182,8 @@ defmodule Jido.Agent.Runtime do
     * `server` - Runtime pid or name
     * `command` - Action command as atom
     * `args` - Map of additional arguments for the command
+    * `opts` - Optional keyword list of options:
+      - `:apply_state` - Whether to apply results to agent state (default: true)
 
   ## Returns
 
@@ -190,28 +192,38 @@ defmodule Jido.Agent.Runtime do
 
   ## Examples
 
-      iex> Runtime.act(worker, :move, %{destination: :kitchen})
+      iex> Runtime.cmd(worker, :move, %{destination: :kitchen})
       {:ok, %State{}}
 
-      iex> Runtime.act(worker, :recharge, %{})
+      iex> Runtime.cmd(worker, :recharge, %{}, apply_state: false)
       {:ok, %State{}}
   """
-  @spec act(GenServer.server(), atom(), map()) :: {:ok, State.t()} | {:error, term()}
-  def act(server, command, args \\ %{}) do
-    debug("Received synchronous act command", server: server, command: command, args: args)
+  @spec cmd(GenServer.server(), atom(), map(), keyword()) :: {:ok, State.t()} | {:error, term()}
+  def cmd(server, command \\ :default, args \\ %{}, opts \\ []) do
+    debug("Received synchronous command",
+      server: server,
+      command: command,
+      args: args,
+      opts: opts
+    )
+
+    data =
+      args
+      |> Map.put(:command, command)
+      |> Map.put(:apply_state, Keyword.get(opts, :apply_state, true))
 
     {:ok, signal} =
       Signal.new(%{
-        type: "jido.agent.act",
-        source: "/agent/act",
-        data: Map.put(args, :command, command)
+        type: "jido.agent.cmd",
+        source: "/agent/cmd",
+        data: data
       })
 
     GenServer.call(server, signal)
   end
 
   @doc """
-  Sends an asynchronous action command to the worker.
+  Sends an asynchronous command to the worker.
 
   The command is processed based on the worker's current state:
   - If :running or :idle - Executed immediately
@@ -223,6 +235,8 @@ defmodule Jido.Agent.Runtime do
     * `server` - Runtime pid or name
     * `command` - Action command as atom
     * `args` - Map of additional arguments for the command
+    * `opts` - Optional keyword list of options:
+      - `:apply_state` - Whether to apply results to agent state (default: true)
 
   ## Returns
 
@@ -231,21 +245,26 @@ defmodule Jido.Agent.Runtime do
 
   ## Examples
 
-      iex> Runtime.act_async(worker, :move, %{destination: :kitchen})
+      iex> Runtime.cmd_async(worker, :move, %{destination: :kitchen})
       :ok
 
-      iex> Runtime.act_async(worker, :recharge, %{})
+      iex> Runtime.cmd_async(worker, :recharge, %{}, apply_state: false)
       :ok
   """
-  @spec act_async(GenServer.server(), atom(), map()) :: :ok | {:error, term()}
-  def act_async(server, command, args \\ %{}) do
+  @spec cmd_async(GenServer.server(), atom(), map(), keyword()) :: :ok | {:error, term()}
+  def cmd_async(server, command \\ :default, args \\ %{}, opts \\ []) do
     debug("Received asynchronous act command", server: server, command: command, args: args)
+
+    data =
+      args
+      |> Map.put(:command, command)
+      |> Map.put(:apply_state, Keyword.get(opts, :apply_state, true))
 
     {:ok, signal} =
       Signal.new(%{
-        type: "jido.agent.act",
-        source: "/agent/act",
-        data: Map.put(args, :command, command)
+        type: "jido.agent.cmd",
+        source: "/agent/cmd_async",
+        data: data
       })
 
     GenServer.cast(server, signal)
@@ -408,20 +427,20 @@ defmodule Jido.Agent.Runtime do
   end
 
   @impl true
-  def handle_cast(%Signal{type: "jido.agent.act", data: attrs}, state) do
+  def handle_cast(%Signal{type: "jido.agent.cmd", data: attrs}, state) do
     debug("Handling act signal", attrs: attrs, state: state)
 
-    case process_act(attrs, state) do
+    case process_cmd(attrs, state) do
       {:ok, new_state} ->
-        debug("Act processed successfully", new_state: new_state)
+        debug("Command processed successfully", new_state: new_state)
         {:noreply, process_pending_commands(new_state)}
 
       {:error, :queue_overflow} ->
-        debug("Act dropped due to queue overflow")
+        debug("Command dropped due to queue overflow")
         {:noreply, state}
 
       {:error, reason} ->
-        error("Failed to process act", reason: reason)
+        error("Failed to process command", reason: reason)
         {:noreply, state}
     end
   end
@@ -435,20 +454,20 @@ defmodule Jido.Agent.Runtime do
   end
 
   @impl true
-  def handle_call(%Signal{type: "jido.agent.act", data: attrs}, from, state) do
+  def handle_call(%Signal{type: "jido.agent.cmd", data: attrs}, from, state) do
     debug("Handling synchronous act signal", attrs: attrs, from: from)
 
-    case process_act(attrs, state) do
+    case process_cmd(attrs, state) do
       {:ok, new_state} ->
-        debug("Act processed successfully", new_state: new_state)
+        debug("Command processed successfully", new_state: new_state)
         {:reply, {:ok, new_state}, process_pending_commands(new_state)}
 
       {:error, :queue_overflow} ->
-        debug("Act dropped due to queue overflow")
+        debug("Command dropped due to queue overflow")
         {:reply, {:error, :queue_overflow}, state}
 
       {:error, reason} = error ->
-        error("Failed to process act", reason: reason)
+        error("Failed to process command", reason: reason)
         {:reply, error, state}
     end
   end
@@ -519,6 +538,12 @@ defmodule Jido.Agent.Runtime do
       {:error, reason} ->
         error("Failed to process signal", reason: reason)
 
+        debug("Invalid signal received",
+          signal: signal,
+          reason: reason,
+          agent_id: state.agent.id
+        )
+
         Logger.warning("Invalid signal received",
           signal: signal,
           reason: reason,
@@ -547,9 +572,9 @@ defmodule Jido.Agent.Runtime do
 
   # Private Methods
   private do
-    defp process_signal(%Signal{type: "jido.agent.act", data: data}, state) do
-      debug("Processing act signal", data: data)
-      process_act(data, state)
+    defp process_signal(%Signal{type: "jido.agent.cmd", data: data}, state) do
+      debug("Processing cmd signal", data: data)
+      process_cmd(data, state)
     end
 
     defp process_signal(
@@ -562,10 +587,10 @@ defmodule Jido.Agent.Runtime do
 
     defp process_signal(_signal, _state), do: :ignore
 
-    defp process_act(attrs, state) do
+    defp process_cmd(attrs, state) do
       case state.status do
         :paused ->
-          debug("Queueing act while paused", attrs: attrs)
+          debug("Queueing command while paused", attrs: attrs)
 
           case queue_command(state, {:act, attrs}) do
             {:ok, new_state} -> {:ok, new_state}
@@ -573,14 +598,18 @@ defmodule Jido.Agent.Runtime do
           end
 
         status when status in [:idle, :running] ->
-          debug("Processing act in #{status} state", attrs: attrs)
+          debug("Processing command in #{status} state", attrs: attrs)
 
           with {:ok, running_state} <- ensure_running_state(state),
-               {:ok, new_agent} <- execute_action(running_state, attrs),
+               {:ok, new_agent} <- execute_command(running_state, attrs),
                {:ok, idle_state} <- State.transition(%{running_state | agent: new_agent}, :idle) do
-            emit(idle_state, :act_completed, %{
-              initial_state: state.agent,
-              final_state: new_agent
+            # emit(idle_state, :act_completed, %{
+            #   initial_state: state.agent,
+            #   final_state: new_agent
+            # })
+            emit(idle_state, :cmd_completed, %{
+              command: Map.get(attrs, :command, :default),
+              result: new_agent
             })
 
             {:ok, idle_state}
@@ -652,7 +681,7 @@ defmodule Jido.Agent.Runtime do
         {{:value, {:act, attrs}}, new_queue} ->
           state_with_new_queue = %{state | pending: new_queue}
 
-          case process_act(attrs, state_with_new_queue) do
+          case process_cmd(attrs, state_with_new_queue) do
             {:ok, new_state} -> process_pending_commands(new_state)
             {:error, _reason} -> state_with_new_queue
           end
@@ -664,22 +693,23 @@ defmodule Jido.Agent.Runtime do
 
     defp process_pending_commands(state), do: state
 
-    defp execute_action(%{status: status} = _state, _attrs) when status != :running do
-      debug("Invalid state for action execution", status: status)
+    defp execute_command(%{status: status} = _state, _attrs) when status != :running do
+      debug("Invalid state for command execution", status: status)
       {:error, {:invalid_state, status}}
     end
 
-    defp execute_action(%{status: :running} = state, attrs) do
+    defp execute_command(%{status: :running} = state, attrs) do
       command = Map.get(attrs, :command, :default)
-      params = Map.delete(attrs, :command)
+      opts = [apply_state: Map.get(attrs, :apply_state, true)]
+      params = attrs |> Map.delete(:command) |> Map.delete(:apply_state)
 
-      debug("Executing action", command: command, attrs: attrs)
+      debug("Executing command", command: command, params: params, opts: opts)
 
       try do
-        state.agent.__struct__.act(state.agent, command, params)
+        state.agent.__struct__.cmd(state.agent, command, params, opts)
       rescue
         error ->
-          debug("Action execution failed",
+          debug("Command execution failed",
             command: command,
             error: inspect(error),
             stacktrace: __STACKTRACE__

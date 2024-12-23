@@ -316,7 +316,7 @@ defmodule MyAppWeb.AgentEventsLive do
     {:ok, socket}
   end
 
-  def handle_info(%Signal{type: "jido.agent.act_completed"} = signal, socket) do
+  def handle_info(%Signal{type: "jido.agent.cmd_completed"} = signal, socket) do
     # E.g. handle the completion event
     IO.puts("Action completed with data: #{inspect(signal.data)}")
     {:noreply, socket}

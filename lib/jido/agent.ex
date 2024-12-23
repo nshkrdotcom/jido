@@ -401,6 +401,47 @@ defmodule Jido.Agent do
           end
 
           @doc """
+          Validates, plans and executes a command for the agent.
+
+          ## Parameters
+            - agent: The agent struct to act on
+            - command: The command to execute (defaults to :default)
+            - params: Optional parameters for the command
+            - opts: Optional keyword list of execution options
+              - :apply_state - Whether to apply results to agent state (default: true)
+
+          ## Returns
+            - If apply_state is true: `{:ok, updated_agent}`
+            - If apply_state is false: `{:ok, {agent, result}}`
+            - On error: `{:error, error}`
+          """
+          @spec cmd(t(), atom(), map(), keyword()) ::
+                  {:ok, t()} | {:ok, {t(), map()}} | {:error, Jido.Error.t()}
+          def cmd(%__MODULE__{} = agent, command \\ :default, params \\ %{}, opts \\ []) do
+            with {:ok, updated_agent} <- set(agent, params),
+                 {:ok, planned_agent} <- plan(updated_agent, command, params),
+                 {:ok, final_agent} <- run(planned_agent, opts) do
+              OK.success(final_agent)
+            else
+              {:error, %Error{type: :validation_error} = error} ->
+                Error.validation_error("Invalid agent state or parameters", %{error: error})
+                |> OK.failure()
+
+              {:error, %Error{type: :planning_error} = error} ->
+                Error.execution_error("Failed to plan agent actions", %{error: error})
+                |> OK.failure()
+
+              {:error, %Error{type: :execution_error} = error} ->
+                Error.execution_error("Failed to execute agent actions", %{error: error})
+                |> OK.failure()
+
+              {:error, error} ->
+                Error.execution_error("Agent execution failed", %{error: error})
+                |> OK.failure()
+            end
+          end
+
+          @doc """
           Resets the agent's pending action queue.
 
           ## Parameters
@@ -426,47 +467,6 @@ defmodule Jido.Agent do
           @spec pending?(t()) :: non_neg_integer()
           def pending?(%__MODULE__{} = agent) do
             :queue.len(agent.pending)
-          end
-
-          @doc """
-          Validates, plans and executes a command for the agent.
-
-          ## Parameters
-            - agent: The agent struct to act on
-            - command: The command to execute (defaults to :default)
-            - params: Optional parameters for the command
-            - opts: Optional keyword list of execution options
-              - :apply_state - Whether to apply results to agent state (default: true)
-
-          ## Returns
-            - If apply_state is true: `{:ok, updated_agent}`
-            - If apply_state is false: `{:ok, {agent, result}}`
-            - On error: `{:error, error}`
-          """
-          @spec act(t(), atom(), map(), keyword()) ::
-                  {:ok, t()} | {:ok, {t(), map()}} | {:error, Jido.Error.t()}
-          def act(%__MODULE__{} = agent, command \\ :default, params \\ %{}, opts \\ []) do
-            with {:ok, updated_agent} <- set(agent, params),
-                 {:ok, planned_agent} <- plan(updated_agent, command, params),
-                 {:ok, final_agent} <- run(planned_agent, opts) do
-              OK.success(final_agent)
-            else
-              {:error, %Error{type: :validation_error} = error} ->
-                Error.validation_error("Invalid agent state or parameters", %{error: error})
-                |> OK.failure()
-
-              {:error, %Error{type: :planning_error} = error} ->
-                Error.execution_error("Failed to plan agent actions", %{error: error})
-                |> OK.failure()
-
-              {:error, %Error{type: :execution_error} = error} ->
-                Error.execution_error("Failed to execute agent actions", %{error: error})
-                |> OK.failure()
-
-              {:error, error} ->
-                Error.execution_error("Agent execution failed", %{error: error})
-                |> OK.failure()
-            end
           end
 
           def on_before_validate_state(state), do: OK.success(state)

@@ -59,7 +59,7 @@ defmodule JidoTest do
       assert Process.alive?(pid)
     end
 
-    test "returns error for non-existent agent", %{pubsub: pubsub} do
+    test "returns error for non-existent agent", %{pubsub: _pubsub} do
       assert {:error, :not_found} = Jido.get_agent_by_id("nonexistent")
     end
   end

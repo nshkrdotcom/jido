@@ -87,7 +87,7 @@ defmodule Jido.Agent.RuntimeProcessTest do
 
       {:ok, signal} =
         Signal.new(%{
-          type: "jido.agent.act",
+          type: "jido.agent.cmd",
           source: "/test",
           data: %{command: :move, destination: :kitchen}
         })
@@ -117,13 +117,13 @@ defmodule Jido.Agent.RuntimeProcessTest do
     end
   end
 
-  describe "process_act/2" do
+  describe "process_cmd/2" do
     test "executes action and updates agent state", %{base_state: state} do
       # Verify we start at home
       assert state.agent.state.location == :home
 
       attrs = %{command: :move, destination: :kitchen}
-      assert {:ok, new_state} = Runtime.process_act(attrs, state)
+      assert {:ok, new_state} = Runtime.process_cmd(attrs, state)
       assert new_state.status == :idle
       assert new_state.agent.state.location == :kitchen
     end
@@ -132,7 +132,7 @@ defmodule Jido.Agent.RuntimeProcessTest do
       state = %{state | status: :paused}
       attrs = %{command: :move, destination: :kitchen}
 
-      assert {:ok, new_state} = Runtime.process_act(attrs, state)
+      assert {:ok, new_state} = Runtime.process_cmd(attrs, state)
       assert :queue.len(new_state.pending) == 1
       assert new_state.status == :paused
 
@@ -145,7 +145,7 @@ defmodule Jido.Agent.RuntimeProcessTest do
       attrs = %{command: :move, destination: :kitchen}
 
       capture_log(fn ->
-        assert {:error, {:invalid_state, :planning}} = Runtime.process_act(attrs, state)
+        assert {:error, {:invalid_state, :planning}} = Runtime.process_cmd(attrs, state)
       end)
     end
   end
@@ -232,7 +232,7 @@ defmodule Jido.Agent.RuntimeProcessTest do
     end
   end
 
-  describe "execute_action/2" do
+  describe "execute_command/2" do
     test "updates agent state when executing move command", %{base_state: state} do
       # Verify we start at home
       assert state.agent.state.location == :home
@@ -240,7 +240,7 @@ defmodule Jido.Agent.RuntimeProcessTest do
       state = %{state | status: :running}
       attrs = %{command: :move, destination: :kitchen}
 
-      assert {:ok, updated_agent} = Runtime.execute_action(state, attrs)
+      assert {:ok, updated_agent} = Runtime.execute_command(state, attrs)
       assert updated_agent.state.location == :kitchen
     end
 
@@ -249,7 +249,7 @@ defmodule Jido.Agent.RuntimeProcessTest do
       state = put_in(state.agent.state.battery_level, 50)
       attrs = %{command: :recharge, target_level: 100}
 
-      assert {:ok, updated_agent} = Runtime.execute_action(state, attrs)
+      assert {:ok, updated_agent} = Runtime.execute_command(state, attrs)
       assert updated_agent.state.battery_level == 100
     end
 
@@ -258,7 +258,7 @@ defmodule Jido.Agent.RuntimeProcessTest do
       initial_state = state.agent
       attrs = %{}
 
-      assert {:ok, updated_agent} = Runtime.execute_action(state, attrs)
+      assert {:ok, updated_agent} = Runtime.execute_command(state, attrs)
       # Default action only logs messages and sleeps, no state changes
       assert updated_agent.state == initial_state.state
       assert updated_agent.result == initial_state.state
@@ -268,7 +268,7 @@ defmodule Jido.Agent.RuntimeProcessTest do
       attrs = %{command: :move, destination: :kitchen}
 
       capture_log(fn ->
-        assert {:error, {:invalid_state, :idle}} = Runtime.execute_action(state, attrs)
+        assert {:error, {:invalid_state, :idle}} = Runtime.execute_command(state, attrs)
       end)
     end
   end

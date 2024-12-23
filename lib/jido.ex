@@ -79,9 +79,9 @@ defmodule Jido do
 
       # Delegate high-level API methods to Jido module
       defdelegate get_agent_by_id(id), to: Jido
-      defdelegate act(agent, command, params \\ %{}), to: Jido
-      defdelegate act_async(agent, command, params \\ %{}), to: Jido
-      defdelegate manage(agent, command, params \\ %{}), to: Jido
+      defdelegate cmd(agent, command, params, opts), to: Jido
+      defdelegate cmd_async(agent, command, params, opts), to: Jido
+      defdelegate manage(agent, command, params), to: Jido
       defdelegate get_agent_topic(agent_or_id), to: Jido
     end
   end
@@ -147,13 +147,15 @@ defmodule Jido do
   end
 
   @doc """
-  Sends a synchronous action command to an agent.
+  Sends a synchronous command to an agent.
 
   ## Parameters
 
   - `agent`: Agent pid or return value from get_agent_by_id
   - `command`: The command to execute
   - `params`: Optional map of command parameters
+  - `opts`: Optional keyword list of options:
+    - `:apply_state` - Whether to apply results to agent state (default: true)
 
   ## Returns
 
@@ -162,14 +164,19 @@ defmodule Jido do
   ## Examples
 
       iex> {:ok, agent} = Jido.get_agent_by_id("my-agent")
-      iex> Jido.act(agent, :generate_response, %{prompt: "Hello"})
+      iex> Jido.cmd(agent, :generate_response, %{prompt: "Hello"})
+      {:ok, %{response: "Hi there!"}}
+
+      # Without applying state
+      iex> Jido.cmd(agent, :generate_response, %{prompt: "Hello"}, apply_state: false)
       {:ok, %{response: "Hi there!"}}
   """
-  @spec act(pid() | {:ok, pid()}, atom(), map()) :: any()
-  def act({:ok, pid}, command, params), do: act(pid, command, params)
+  @spec cmd(pid() | {:ok, pid()}, atom(), map(), keyword()) :: any()
+  def cmd(pid_or_tuple, command \\ :default, params \\ %{}, opts \\ [])
+  def cmd({:ok, pid}, command, params, opts), do: cmd(pid, command, params, opts)
 
-  def act(pid, command, params) when is_pid(pid) do
-    Jido.Agent.Runtime.act(pid, command, params)
+  def cmd(pid, command, params, opts) when is_pid(pid) do
+    Jido.Agent.Runtime.cmd(pid, command, params, opts)
   end
 
   @doc """
@@ -192,11 +199,13 @@ defmodule Jido do
       iex> Jido.act_async(agent, :generate_response, %{prompt: "Hello"})
       :ok
   """
-  @spec act_async(pid() | {:ok, pid()}, atom(), map()) :: :ok | {:error, term()}
-  def act_async({:ok, pid}, command, params), do: act_async(pid, command, params)
+  @spec cmd_async(pid() | {:ok, pid()}, atom(), map(), keyword()) :: :ok | {:error, term()}
+  def cmd_async(pid_or_tuple, command \\ :default, params \\ %{}, opts \\ [])
 
-  def act_async(pid, command, params) when is_pid(pid) do
-    Jido.Agent.Runtime.act_async(pid, command, params)
+  def cmd_async({:ok, pid}, command, params, opts), do: cmd_async(pid, command, params, opts)
+
+  def cmd_async(pid, command, params, opts) when is_pid(pid) do
+    Jido.Agent.Runtime.cmd_async(pid, command, params, opts)
   end
 
   @doc """

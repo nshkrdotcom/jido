@@ -253,7 +253,7 @@ defmodule JidoTest.AgentTest do
 
     test "validates, plans and executes", %{agent: agent} do
       {:ok, final} =
-        AdvancedAgent.act(agent, :move, %{
+        AdvancedAgent.cmd(agent, :move, %{
           destination: :work_area
         })
 
@@ -264,7 +264,7 @@ defmodule JidoTest.AgentTest do
 
     test "preserves state with apply_state: false", %{agent: agent} do
       {:ok, final_agent} =
-        AdvancedAgent.act(
+        AdvancedAgent.cmd(
           agent,
           :move,
           %{destination: :work_area},

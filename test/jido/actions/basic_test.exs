@@ -2,6 +2,8 @@ defmodule JidoTest.Actions.BasicActionsTest do
   use ExUnit.Case, async: true
   alias Jido.Actions.Basic
 
+  @moduletag :capture_log
+
   setup do
     # Forcibly set the log level to :debug to ensure all log messages are captured
     Logger.configure(level: :debug)

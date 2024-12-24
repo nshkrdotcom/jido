@@ -1,23 +1,16 @@
 defmodule JidoTest.TestAgents do
   @moduledoc false
 
-  defmodule BasicCommands do
+  defmodule BasicActions do
     @moduledoc false
-    use Jido.Command
+    use Jido.Action,
+      name: "basic_default",
+      description: "Default action for testing",
+      schema: []
 
     @impl true
-    def commands do
-      [
-        basic_default: [
-          description: "Default command for testing",
-          schema: []
-        ]
-      ]
-    end
-
-    @impl true
-    def handle_command(:basic_default, _agent, _params) do
-      {:ok, [{Jido.Actions.Basic.Log, message: "Default action"}]}
+    def run(_params, _context) do
+      {:ok, %{message: "Default action"}}
     end
   end
 
@@ -25,65 +18,50 @@ defmodule JidoTest.TestAgents do
     @moduledoc false
     use Jido.Agent,
       name: "NoSchemaAgent",
-      commands: [BasicCommands]
+      actions: [JidoTest.TestActions.BasicAction]
   end
 
   defmodule BasicAgent do
     @moduledoc false
     use Jido.Agent,
       name: "BasicAgent",
-      commands: [BasicCommands],
+      actions: [JidoTest.TestActions.BasicAction, JidoTest.TestActions.NoSchema],
       schema: [
         location: [type: :atom, default: :home],
         battery_level: [type: :integer, default: 100]
       ]
 
     @impl true
-    def on_before_plan(_agent, _command, _params) do
-      {:ok, {:basic_default, %{}}}
+    def on_before_plan(_agent, _action, _params) do
+      {:ok, {JidoTest.TestActions.BasicAction, %{value: 1}}}
     end
   end
 
   defmodule SimpleAgent do
     @moduledoc false
-    alias Jido.Actions.Basic.Log
-    alias JidoTest.Commands.{Basic, Movement, Advanced}
-
-    use Jido.Command
+    alias JidoTest.TestActions.{
+      BasicAction,
+      NoSchema,
+      DelayAction,
+      RawResultAction,
+      CompensateAction,
+      RetryAction
+    }
 
     use Jido.Agent,
       name: "SimpleBot",
-      commands: [Basic, Movement, Advanced],
+      actions: [
+        BasicAction,
+        NoSchema,
+        RawResultAction,
+        CompensateAction,
+        RetryAction,
+        DelayAction
+      ],
       schema: [
         location: [type: :atom, default: :home],
         battery_level: [type: :integer, default: 100]
       ]
-
-    @impl true
-    def commands do
-      [
-        simple: [
-          description: "A simple command",
-          schema: [
-            value: [type: :integer, required: true]
-          ]
-        ],
-        complex: [
-          description: "A complex command",
-          schema: [
-            value: [type: :integer, required: true]
-          ]
-        ]
-      ]
-    end
-
-    @impl true
-    def handle_command(:simple, _agent, params) do
-      {:ok,
-       [
-         {Log, message: "Simple command executed with value: #{params.value}"}
-       ]}
-    end
   end
 
   defmodule AdvancedAgent do
@@ -94,7 +72,12 @@ defmodule JidoTest.TestAgents do
       category: "test",
       tags: ["test", "hooks"],
       vsn: "1.0.0",
-      commands: [JidoTest.Commands.Basic, JidoTest.Commands.Movement],
+      actions: [
+        JidoTest.TestActions.Add,
+        JidoTest.TestActions.Multiply,
+        JidoTest.TestActions.DelayAction,
+        JidoTest.TestActions.ContextAction
+      ],
       schema: [
         location: [type: :atom, default: :home],
         battery_level: [type: :integer, default: 100],
@@ -110,14 +93,43 @@ defmodule JidoTest.TestAgents do
 
     @impl true
     def on_before_plan(_agent, :special, _params) do
-      # Transform special command into default with no params since default command has empty schema
-      {:ok, {:default, %{}}}
+      # Transform special action into basic with default value
+      {:ok, {JidoTest.TestActions.BasicAction, %{value: 1}}}
     end
 
     # Handle default case
     @impl true
-    def on_before_plan(_agent, command, params) do
-      {:ok, {command, params}}
+    def on_before_plan(_agent, action, params) do
+      {:ok, {action, params}}
     end
+  end
+
+  defmodule SyscallAgent do
+    @moduledoc false
+    alias JidoTest.TestActions.{
+      StreamingAction,
+      ConcurrentAction,
+      LongRunningAction,
+      SpawnerAction
+    }
+
+    use Jido.Agent,
+      name: "SyscallAgent",
+      description: "Test agent for system calls",
+      category: "test",
+      tags: ["test", "syscall"],
+      vsn: "1.0.0",
+      actions: [
+        StreamingAction,
+        ConcurrentAction,
+        LongRunningAction,
+        SpawnerAction
+      ],
+      schema: [
+        processes: [type: {:map, :pid, :any}, default: %{}],
+        subscriptions: [type: {:list, :string}, default: []],
+        checkpoints: [type: {:map, :any, :map}, default: %{}],
+        location: [type: :atom, default: :home]
+      ]
   end
 end

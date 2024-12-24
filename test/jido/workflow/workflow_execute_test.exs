@@ -16,6 +16,8 @@ defmodule JidoTest.WorkflowExecuteTest do
   alias JidoTest.TestActions.SlowKilledAction
   alias JidoTest.TestActions.SpawnerAction
 
+  @moduletag :capture_log
+
   describe "execute_action/3" do
     test "successfully executes a Action" do
       assert {:ok, %{value: 5}} = Workflow.execute_action(BasicAction, %{value: 5}, %{})

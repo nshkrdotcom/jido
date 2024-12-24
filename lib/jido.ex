@@ -78,11 +78,12 @@ defmodule Jido do
       end
 
       # Delegate high-level API methods to Jido module
-      defdelegate get_agent_by_id(id), to: Jido
-      defdelegate cmd(agent, command, params, opts), to: Jido
-      defdelegate cmd_async(agent, command, params, opts), to: Jido
-      defdelegate manage(agent, command, params), to: Jido
+      defdelegate cmd(agent, action, args \\ %{}, opts \\ []), to: Jido
+      defdelegate get_agent(id), to: Jido
       defdelegate get_agent_topic(agent_or_id), to: Jido
+      defdelegate get_agent_status(agent_or_id), to: Jido
+      defdelegate get_agent_supervisor(agent_or_id), to: Jido
+      defdelegate get_agent_state(agent_or_id), to: Jido
     end
   end
 
@@ -102,15 +103,15 @@ defmodule Jido do
 
   ## Examples
 
-      iex> {:ok, agent} = Jido.get_agent_by_id("my-agent")
+      iex> {:ok, agent} = Jido.get_agent("my-agent")
       {:ok, #PID<0.123.0>}
 
       # Using a custom registry
-      iex> {:ok, agent} = Jido.get_agent_by_id("my-agent", registry: MyApp.Registry)
+      iex> {:ok, agent} = Jido.get_agent("my-agent", registry: MyApp.Registry)
       {:ok, #PID<0.123.0>}
   """
-  @spec get_agent_by_id(String.t() | atom(), keyword()) :: {:ok, pid()} | {:error, :not_found}
-  def get_agent_by_id(id, opts \\ []) when is_binary(id) or is_atom(id) do
+  @spec get_agent(String.t() | atom(), keyword()) :: {:ok, pid()} | {:error, :not_found}
+  def get_agent(id, opts \\ []) when is_binary(id) or is_atom(id) do
     registry = opts[:registry] || Jido.AgentRegistry
 
     case Registry.lookup(registry, id) do
@@ -120,7 +121,7 @@ defmodule Jido do
   end
 
   @doc """
-  Pipe-friendly version of get_agent_by_id that raises on errors.
+  Pipe-friendly version of get_agent that raises on errors.
 
   ## Parameters
 
@@ -135,27 +136,26 @@ defmodule Jido do
 
   ## Examples
 
-      iex> "my-agent" |> Jido.get_agent_by_id!() |> Jido.act(:command)
+      iex> "my-agent" |> Jido.get_agent!() |> Jido.cmd(:command)
       :ok
   """
-  @spec get_agent_by_id!(String.t() | atom(), keyword()) :: pid()
-  def get_agent_by_id!(id, opts \\ []) do
-    case get_agent_by_id(id, opts) do
+  @spec get_agent!(String.t() | atom(), keyword()) :: pid()
+  def get_agent!(id, opts \\ []) do
+    case get_agent(id, opts) do
       {:ok, pid} -> pid
       {:error, :not_found} -> raise "Agent not found: #{id}"
     end
   end
 
   @doc """
-  Sends a synchronous command to an agent.
+  Sends a command to an agent.
 
   ## Parameters
 
-  - `agent`: Agent pid or return value from get_agent_by_id
-  - `command`: The command to execute
-  - `params`: Optional map of command parameters
-  - `opts`: Optional keyword list of options:
-    - `:apply_state` - Whether to apply results to agent state (default: true)
+  - `agent`: Agent pid or return value from get_agent
+  - `action`: The action to execute
+  - `args`: Optional map of action arguments
+  - `opts`: Optional keyword list of options
 
   ## Returns
 
@@ -163,75 +163,16 @@ defmodule Jido do
 
   ## Examples
 
-      iex> {:ok, agent} = Jido.get_agent_by_id("my-agent")
+      iex> {:ok, agent} = Jido.get_agent("my-agent")
       iex> Jido.cmd(agent, :generate_response, %{prompt: "Hello"})
-      {:ok, %{response: "Hi there!"}}
-
-      # Without applying state
-      iex> Jido.cmd(agent, :generate_response, %{prompt: "Hello"}, apply_state: false)
       {:ok, %{response: "Hi there!"}}
   """
   @spec cmd(pid() | {:ok, pid()}, atom(), map(), keyword()) :: any()
-  def cmd(pid_or_tuple, command \\ :default, params \\ %{}, opts \\ [])
-  def cmd({:ok, pid}, command, params, opts), do: cmd(pid, command, params, opts)
+  def cmd(pid_or_tuple, action \\ :default, args \\ %{}, opts \\ [])
+  def cmd({:ok, pid}, action, args, opts), do: cmd(pid, action, args, opts)
 
-  def cmd(pid, command, params, opts) when is_pid(pid) do
-    Jido.Agent.Runtime.cmd(pid, command, params, opts)
-  end
-
-  @doc """
-  Sends an asynchronous action command to an agent.
-
-  ## Parameters
-
-  - `agent`: Agent pid or return value from get_agent_by_id
-  - `command`: The command to execute
-  - `params`: Optional map of command parameters
-
-  ## Returns
-
-  - `:ok` if command was accepted
-  - `{:error, reason}` if rejected
-
-  ## Examples
-
-      iex> {:ok, agent} = Jido.get_agent_by_id("my-agent")
-      iex> Jido.act_async(agent, :generate_response, %{prompt: "Hello"})
-      :ok
-  """
-  @spec cmd_async(pid() | {:ok, pid()}, atom(), map(), keyword()) :: :ok | {:error, term()}
-  def cmd_async(pid_or_tuple, command \\ :default, params \\ %{}, opts \\ [])
-
-  def cmd_async({:ok, pid}, command, params, opts), do: cmd_async(pid, command, params, opts)
-
-  def cmd_async(pid, command, params, opts) when is_pid(pid) do
-    Jido.Agent.Runtime.cmd_async(pid, command, params, opts)
-  end
-
-  @doc """
-  Sends a management command to an agent.
-
-  ## Parameters
-
-  - `agent`: Agent pid or return value from get_agent_by_id
-  - `command`: The command to execute
-  - `params`: Optional map of command parameters
-
-  ## Returns
-
-  Returns the result of command execution.
-
-  ## Examples
-
-      iex> {:ok, agent} = Jido.get_agent_by_id("my-agent")
-      iex> Jido.manage(agent, :pause)
-      :ok
-  """
-  @spec manage(pid() | {:ok, pid()}, atom(), map()) :: any()
-  def manage({:ok, pid}, command, params), do: manage(pid, command, params)
-
-  def manage(pid, command, params) when is_pid(pid) do
-    Jido.Agent.Runtime.manage(pid, command, params)
+  def cmd(pid, action, args, opts) when is_pid(pid) do
+    Jido.Agent.Runtime.cmd(pid, action, args, opts)
   end
 
   @doc """
@@ -239,7 +180,7 @@ defmodule Jido do
 
   ## Parameters
 
-  - `agent_or_id`: Agent pid, ID, or return value from get_agent_by_id
+  - `agent_or_id`: Agent pid, ID, or return value from get_agent
 
   ## Returns
 
@@ -251,7 +192,7 @@ defmodule Jido do
       iex> {:ok, topic} = Jido.get_agent_topic("my-agent")
       {:ok, "jido.agent.my-agent"}
 
-      iex> {:ok, agent} = Jido.get_agent_by_id("my-agent")
+      iex> {:ok, agent} = Jido.get_agent("my-agent")
       iex> {:ok, topic} = Jido.get_agent_topic(agent)
       {:ok, "jido.agent.my-agent"}
   """
@@ -263,9 +204,144 @@ defmodule Jido do
   end
 
   def get_agent_topic(id) when is_binary(id) or is_atom(id) do
-    case get_agent_by_id(id) do
+    case get_agent(id) do
       {:ok, pid} -> get_agent_topic(pid)
       error -> error
+    end
+  end
+
+  @doc """
+  Gets the status of an agent.
+
+  ## Parameters
+
+  - `agent_or_id`: Agent pid, ID, or return value from get_agent
+
+  ## Returns
+
+  - `{:ok, status}` with the agent's status
+  - `{:error, reason}` if status couldn't be retrieved
+
+  ## Examples
+
+      iex> {:ok, status} = Jido.get_agent_status("my-agent")
+      {:ok, :idle}
+  """
+  @spec get_agent_status(pid() | {:ok, pid()} | String.t()) :: {:ok, atom()} | {:error, term()}
+  def get_agent_status({:ok, pid}), do: get_agent_status(pid)
+
+  def get_agent_status(pid) when is_pid(pid) do
+    Jido.Agent.Runtime.get_status(pid)
+  end
+
+  def get_agent_status(id) when is_binary(id) or is_atom(id) do
+    case get_agent(id) do
+      {:ok, pid} -> get_agent_status(pid)
+      error -> error
+    end
+  end
+
+  @doc """
+  Gets the supervisor for an agent.
+
+  ## Parameters
+
+  - `agent_or_id`: Agent pid, ID, or return value from get_agent
+
+  ## Returns
+
+  - `{:ok, supervisor_pid}` with the agent's supervisor pid
+  - `{:error, reason}` if supervisor couldn't be retrieved
+
+  ## Examples
+
+      iex> {:ok, supervisor} = Jido.get_agent_supervisor("my-agent")
+      {:ok, #PID<0.124.0>}
+  """
+  @spec get_agent_supervisor(pid() | {:ok, pid()} | String.t()) :: {:ok, pid()} | {:error, term()}
+  def get_agent_supervisor({:ok, pid}), do: get_agent_supervisor(pid)
+
+  def get_agent_supervisor(pid) when is_pid(pid) do
+    Jido.Agent.Runtime.get_supervisor(pid)
+  end
+
+  def get_agent_supervisor(id) when is_binary(id) or is_atom(id) do
+    case get_agent(id) do
+      {:ok, pid} -> get_agent_supervisor(pid)
+      error -> error
+    end
+  end
+
+  @doc """
+  Gets the current state of an agent.
+
+  ## Parameters
+
+  - `agent_or_id`: Agent pid, ID, or return value from get_agent
+
+  ## Returns
+
+  - `{:ok, state}` with the agent's current state
+  - `{:error, reason}` if state couldn't be retrieved
+
+  ## Examples
+
+      iex> {:ok, state} = Jido.get_agent_state("my-agent")
+      {:ok, %Jido.Agent.Runtime.State{...}}
+  """
+  @spec get_agent_state(pid() | {:ok, pid()} | String.t()) :: {:ok, term()} | {:error, term()}
+  def get_agent_state({:ok, pid}), do: get_agent_state(pid)
+
+  def get_agent_state(pid) when is_pid(pid) do
+    Jido.Agent.Runtime.get_state(pid)
+  end
+
+  def get_agent_state(id) when is_binary(id) or is_atom(id) do
+    case get_agent(id) do
+      {:ok, pid} -> get_agent_state(pid)
+      error -> error
+    end
+  end
+
+  @doc """
+  Clones an existing agent with a new ID.
+
+  ## Parameters
+
+  - `source_id`: ID of the agent to clone
+  - `new_id`: ID for the new cloned agent
+  - `opts`: Optional keyword list of options to override for the new agent
+
+  ## Returns
+
+  - `{:ok, pid}` with the new agent's process ID
+  - `{:error, reason}` if cloning fails
+
+  ## Examples
+
+      iex> {:ok, new_pid} = Jido.clone_agent("source-agent", "cloned-agent")
+      {:ok, #PID<0.125.0>}
+  """
+  @spec clone_agent(String.t() | atom(), String.t() | atom(), keyword()) ::
+          {:ok, pid()} | {:error, term()}
+  def clone_agent(source_id, new_id, opts \\ []) do
+    with {:ok, source_pid} <- get_agent(source_id),
+         {:ok, source_state} <- Jido.Agent.Runtime.get_state(source_pid) do
+      # Create new agent with updated ID but same config
+      agent = %{source_state.agent | id: new_id}
+
+      # Merge original options with any overrides
+      new_opts =
+        opts
+        |> Keyword.merge(
+          agent: agent,
+          pubsub: source_state.pubsub,
+          # Let runtime generate new topic
+          topic: nil,
+          max_queue_size: source_state.max_queue_size
+        )
+
+      Jido.Agent.Runtime.start_link(new_opts)
     end
   end
 

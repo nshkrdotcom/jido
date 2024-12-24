@@ -3,6 +3,8 @@ defmodule JidoTest.SensorTest do
 
   import ExUnit.CaptureLog
 
+  @moduletag :capture_log
+
   defmodule TestSensor do
     @moduledoc false
     use Jido.Sensor,

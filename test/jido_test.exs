@@ -32,7 +32,7 @@ defmodule JidoTest do
     end
   end
 
-  describe "get_agent_by_id" do
+  describe "get_agent/1" do
     setup context do
       test_name = context.test
       pubsub_name = Module.concat(TestJido, "#{test_name}.PubSub")
@@ -54,13 +54,57 @@ defmodule JidoTest do
       {:ok, runtime} = Jido.Agent.Runtime.start_link(agent: agent, pubsub: pubsub)
 
       # Look up the agent by ID
-      assert {:ok, pid} = Jido.get_agent_by_id("test_agent")
+      assert {:ok, pid} = Jido.get_agent("test_agent")
       assert pid == runtime
       assert Process.alive?(pid)
     end
 
     test "returns error for non-existent agent", %{pubsub: _pubsub} do
-      assert {:error, :not_found} = Jido.get_agent_by_id("nonexistent")
+      assert {:error, :not_found} = Jido.get_agent("nonexistent")
+    end
+  end
+
+  describe "clone_agent/3" do
+    setup context do
+      test_name = context.test
+      pubsub_name = Module.concat(TestJido, "#{test_name}.PubSub")
+      registry_name = Module.concat(TestJido, "#{test_name}.Registry")
+
+      {:ok, _} = start_supervised({Phoenix.PubSub, name: pubsub_name})
+      {:ok, _} = start_supervised({Registry, keys: :unique, name: registry_name})
+
+      # Temporarily override the Jido.AgentRegistry name for this test
+      Application.put_env(:jido, :agent_registry, registry_name)
+      on_exit(fn -> Application.delete_env(:jido, :agent_registry) end)
+
+      {:ok, pubsub: pubsub_name, registry: registry_name}
+    end
+
+    test "successfully clones an existing agent", %{pubsub: pubsub} do
+      # Create source agent
+      source_agent = JidoTest.TestAgents.BasicAgent.new("source_agent")
+      {:ok, source_pid} = Jido.Agent.Runtime.start_link(agent: source_agent, pubsub: pubsub)
+
+      # Clone the agent
+      assert {:ok, cloned_pid} = Jido.clone_agent("source_agent", "cloned_agent")
+
+      # Verify both agents exist and are different processes
+      assert Process.alive?(source_pid)
+      assert Process.alive?(cloned_pid)
+      assert source_pid != cloned_pid
+
+      # Verify we can look up the cloned agent and IDs don't match
+      assert {:ok, ^cloned_pid} = Jido.get_agent("cloned_agent")
+      assert {:ok, source_topic} = Jido.get_agent_topic(source_pid)
+      assert {:ok, source_state} = Jido.get_agent_state(source_pid)
+      assert {:ok, cloned_topic} = Jido.get_agent_topic(cloned_pid)
+      assert {:ok, cloned_state} = Jido.get_agent_state(cloned_pid)
+      assert source_topic != cloned_topic
+      assert source_state.agent.id != cloned_state.agent.id
+    end
+
+    test "returns error when cloning non-existent agent", %{pubsub: _pubsub} do
+      assert {:error, :not_found} = Jido.clone_agent("nonexistent", "new_agent")
     end
   end
 end

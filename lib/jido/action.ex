@@ -244,7 +244,7 @@ defmodule Jido.Action do
 
           The `run/2` function must be implemented in the module using Jido.Action.
           """
-          @spec run(map(), map()) :: {:ok, map()} | {:error, any()}
+          @spec run(map(), map()) :: {:ok, map()} | {:ok, {:syscall, any()}} | {:error, any()}
           def run(params, context) do
             "run/2 must be implemented in in your Action"
             |> Error.config_error()
@@ -286,7 +286,8 @@ defmodule Jido.Action do
   - `{:ok, result}` where `result` is a map containing the workflow's output.
   - `{:error, reason}` where `reason` describes why the workflow failed.
   """
-  @callback run(params :: map(), context :: map()) :: {:ok, map()} | {:error, any()}
+  @callback run(params :: map(), context :: map()) ::
+              {:ok, map()} | {:ok, {:syscall, any()}} | {:error, any()}
 
   @doc """
   Called before parameter validation.

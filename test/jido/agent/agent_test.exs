@@ -2,7 +2,8 @@ defmodule JidoTest.AgentTest do
   use ExUnit.Case, async: true
 
   alias JidoTest.TestAgents.{BasicAgent, AdvancedAgent, NoSchemaAgent}
-  alias Jido.Actions.Basic.{Log, Sleep}
+
+  @moduletag :capture_log
 
   describe "agent creation" do
     test "creates basic agent with defaults" do
@@ -13,7 +14,6 @@ defmodule JidoTest.AgentTest do
       assert agent.state.battery_level == 100
       assert agent.dirty_state? == false
       assert agent.pending == :queue.new()
-      assert is_struct(agent.command_manager, Jido.Command.Manager)
     end
 
     test "creates agent with custom id" do
@@ -28,7 +28,6 @@ defmodule JidoTest.AgentTest do
       assert agent.id != nil
       assert agent.dirty_state? == false
       assert agent.pending == :queue.new()
-      assert is_struct(agent.command_manager, Jido.Command.Manager)
 
       # Should not have schema-defined fields
       refute Map.has_key?(agent, :location)
@@ -157,74 +156,89 @@ defmodule JidoTest.AgentTest do
     end
   end
 
-  describe "command management" do
+  describe "action management" do
     setup do
       agent = AdvancedAgent.new()
       {:ok, agent: agent}
     end
 
-    test "registers commands on creation", %{agent: agent} do
-      commands = AdvancedAgent.registered_commands(agent)
-      assert Keyword.has_key?(commands, :greet)
-      assert Keyword.has_key?(commands, :move)
+    test "registers actions on creation", %{agent: agent} do
+      actions = AdvancedAgent.registered_actions(agent)
+      assert JidoTest.TestActions.Add in actions
+      assert JidoTest.TestActions.Multiply in actions
+      assert JidoTest.TestActions.DelayAction in actions
+      assert JidoTest.TestActions.ContextAction in actions
     end
 
-    test "registers additional commands", %{agent: agent} do
-      {:ok, updated} = AdvancedAgent.register_command(agent, JidoTest.Commands.Advanced)
-      commands = AdvancedAgent.registered_commands(updated)
-      assert Keyword.has_key?(commands, :smart_work)
+    test "validates registered actions", %{agent: agent} do
+      assert length(AdvancedAgent.registered_actions(agent)) == 4
+      assert Enum.all?(AdvancedAgent.registered_actions(agent), &is_atom/1)
     end
   end
 
-  describe "planning and execution" do
+  describe "plan/3" do
     setup do
       agent = AdvancedAgent.new()
       {:ok, agent: agent}
     end
 
-    test "plans default command", %{agent: agent} do
-      {:ok, planned} = AdvancedAgent.plan(agent)
-      assert :queue.len(planned.pending) == 0
-      assert planned.dirty_state? == true
+    test "plans basic action", %{agent: agent} do
+      {:ok, planned} = AdvancedAgent.plan(agent, JidoTest.TestActions.Add, %{value: 42})
+      assert :queue.len(planned.pending) == 1
+
+      actions = :queue.to_list(planned.pending)
+      assert [{JidoTest.TestActions.Add, %{value: 42}}] = actions
     end
 
-    test "plans and executes greeting", %{agent: agent} do
-      {:ok, planned} = AdvancedAgent.plan(agent, :greet, %{name: "Alice"})
+    test "plans multiple actions", %{agent: agent} do
+      {:ok, planned} =
+        AdvancedAgent.plan(
+          agent,
+          [
+            {JidoTest.TestActions.Add, %{value: 10}},
+            {JidoTest.TestActions.Multiply, %{value: 2}},
+            {JidoTest.TestActions.DelayAction, %{delay: 100}}
+          ],
+          %{}
+        )
+
       assert :queue.len(planned.pending) == 3
 
       actions = :queue.to_list(planned.pending)
 
       assert [
-               {Log, [message: "Hello, Alice!"]},
-               {Sleep, [duration: 50]},
-               {Log, [message: "Goodbye, Alice!"]}
+               {JidoTest.TestActions.Add, %{value: 10}},
+               {JidoTest.TestActions.Multiply, %{value: 2}},
+               {JidoTest.TestActions.DelayAction, %{delay: 100}}
              ] = actions
+    end
 
+    test "handles unregistered actions", %{agent: agent} do
+      assert {:error, error} = AdvancedAgent.plan(agent, UnknownAction, %{})
+      assert error.message =~ "Action not registered"
+    end
+  end
+
+  describe "run/2" do
+    setup do
+      agent = AdvancedAgent.new()
+      {:ok, agent: agent}
+    end
+
+    test "executes add action", %{agent: agent} do
+      {:ok, planned} = AdvancedAgent.plan(agent, JidoTest.TestActions.Add, %{value: 10})
       {:ok, final} = AdvancedAgent.run(planned)
       assert final.pending == :queue.new()
       assert final.dirty_state? == false
     end
 
-    test "handles unknown commands", %{agent: agent} do
-      assert {:error, error} = AdvancedAgent.plan(agent, :unknown)
-      assert error.type == :execution_error
-      assert error.message =~ "Command not found"
-    end
-
-    test "validates command parameters", %{agent: agent} do
-      assert {:error, error} = AdvancedAgent.plan(agent, :move, %{wrong: "params"})
-      assert error.type == :validation_error
-      assert error.message =~ "Invalid command parameters"
-    end
-
-    test "command transformation via hooks", %{agent: agent} do
-      {:ok, planned} = AdvancedAgent.plan(agent, :special, %{data: "test"})
-      assert :queue.len(planned.pending) == 0
-      assert planned.dirty_state? == true
-    end
-
     test "run with apply_state: true updates agent state", %{agent: agent} do
-      {:ok, planned} = AdvancedAgent.plan(agent, :move, %{destination: :work_area})
+      {:ok, planned} =
+        AdvancedAgent.plan(agent, JidoTest.TestActions.ContextAction, %{
+          input: "test",
+          location: :work_area
+        })
+
       {:ok, final} = AdvancedAgent.run(planned, apply_state: true)
 
       assert final.state.location == :work_area
@@ -233,29 +247,55 @@ defmodule JidoTest.AgentTest do
     end
 
     test "run with apply_state: false preserves original state", %{agent: agent} do
-      {:ok, planned} = AdvancedAgent.plan(agent, :move, %{destination: :work_area})
+      {:ok, planned} =
+        AdvancedAgent.plan(agent, JidoTest.TestActions.ContextAction, %{
+          input: "test",
+          location: :work_area
+        })
+
       {:ok, final} = AdvancedAgent.run(planned, apply_state: false)
 
       # Original location preserved
       assert final.state.location == :home
       # Result contains new state
-      assert final.result.location == :work_area
+      assert Map.get(final.result, :location) == :work_area
+      assert final.pending == :queue.new()
+      assert final.dirty_state? == false
+    end
+
+    test "runs multiple actions in sequence", %{agent: agent} do
+      {:ok, planned} =
+        AdvancedAgent.plan(
+          agent,
+          [
+            {JidoTest.TestActions.Add, %{value: 10}},
+            {JidoTest.TestActions.Multiply, %{value: 2}},
+            {JidoTest.TestActions.DelayAction, %{delay: 100}}
+          ],
+          %{}
+        )
+
+      {:ok, final} = AdvancedAgent.run(planned)
+
       assert final.pending == :queue.new()
       assert final.dirty_state? == false
     end
   end
 
-  describe "combined operations with act/4" do
+  describe "combined operations with plan/3" do
     setup do
       agent = AdvancedAgent.new()
       {:ok, agent: agent}
     end
 
     test "validates, plans and executes", %{agent: agent} do
-      {:ok, final} =
-        AdvancedAgent.cmd(agent, :move, %{
-          destination: :work_area
+      {:ok, planned} =
+        AdvancedAgent.plan(agent, JidoTest.TestActions.ContextAction, %{
+          input: "test",
+          location: :work_area
         })
+
+      {:ok, final} = AdvancedAgent.run(planned)
 
       assert final.state.location == :work_area
       assert final.pending == :queue.new()
@@ -263,13 +303,13 @@ defmodule JidoTest.AgentTest do
     end
 
     test "preserves state with apply_state: false", %{agent: agent} do
-      {:ok, final_agent} =
-        AdvancedAgent.cmd(
-          agent,
-          :move,
-          %{destination: :work_area},
-          apply_state: false
-        )
+      {:ok, planned} =
+        AdvancedAgent.plan(agent, JidoTest.TestActions.ContextAction, %{
+          input: "test",
+          location: :work_area
+        })
+
+      {:ok, final_agent} = AdvancedAgent.run(planned, apply_state: false)
 
       # Original location
       assert final_agent.state.location == :home
@@ -287,7 +327,7 @@ defmodule JidoTest.AgentTest do
     end
 
     test "resets pending queue", %{agent: agent} do
-      {:ok, planned} = BasicAgent.plan(agent)
+      {:ok, planned} = BasicAgent.plan(agent, JidoTest.TestActions.BasicAction, %{value: 1})
       assert BasicAgent.pending?(planned) > 0
 
       {:ok, reset} = BasicAgent.reset(planned)
@@ -297,8 +337,81 @@ defmodule JidoTest.AgentTest do
     test "reports pending count", %{agent: agent} do
       assert BasicAgent.pending?(agent) == 0
 
-      {:ok, planned} = BasicAgent.plan(agent)
+      {:ok, planned} = BasicAgent.plan(agent, JidoTest.TestActions.BasicAction, %{value: 1})
       assert BasicAgent.pending?(planned) > 0
+    end
+  end
+
+  describe "cmd/4" do
+    setup do
+      agent = AdvancedAgent.new()
+      {:ok, agent: agent}
+    end
+
+    test "executes single action with params", %{agent: agent} do
+      {:ok, final} =
+        AdvancedAgent.cmd(agent, JidoTest.TestActions.ContextAction, %{
+          input: "test",
+          location: :work_area
+        })
+
+      assert final.state.location == :work_area
+      assert final.pending == :queue.new()
+      assert final.dirty_state? == false
+    end
+
+    test "executes list of action tuples", %{agent: agent} do
+      actions = [
+        {JidoTest.TestActions.Add, %{value: 10}},
+        {JidoTest.TestActions.Multiply, %{value: 2}},
+        {JidoTest.TestActions.ContextAction, %{input: "test", location: :work_area}}
+      ]
+
+      {:ok, final} = AdvancedAgent.cmd(agent, actions, %{})
+
+      assert final.state.location == :work_area
+      assert final.pending == :queue.new()
+      assert final.dirty_state? == false
+    end
+
+    test "preserves state with apply_state: false", %{agent: agent} do
+      # Ensure agent is in home
+      assert agent.state.location == :home
+
+      {:ok, final} =
+        AdvancedAgent.cmd(
+          agent,
+          JidoTest.TestActions.ContextAction,
+          %{
+            input: "test",
+            location: :work_area
+          },
+          apply_state: false
+        )
+
+      # Agent state is unchanged
+      assert final.state.location == :home
+      assert final.pending == :queue.new()
+      assert final.dirty_state? == false
+      # Result contains new state
+      assert final.result.location == :work_area
+    end
+
+    test "handles invalid actions", %{agent: agent} do
+      assert {:error, error} = AdvancedAgent.cmd(agent, UnknownAction, %{})
+      assert error.message =~ "Action not registered"
+    end
+
+    test "validates params before execution", %{agent: agent} do
+      assert {:error, %Jido.Error{} = error} =
+               AdvancedAgent.cmd(agent, JidoTest.TestActions.ContextAction, %{
+                 # Invalid type
+                 input: 123,
+                 # Invalid type
+                 location: :invalid
+               })
+
+      assert error.message =~ "Invalid agent state or parameters"
     end
   end
 end

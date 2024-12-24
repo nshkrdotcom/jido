@@ -220,7 +220,6 @@ defmodule Jido.Sensor do
           def terminate(_reason, state) do
             case shutdown(state) do
               {:ok, _} -> :ok
-              {:error, reason} -> Logger.warning("Error during shutdown: #{inspect(reason)}")
             end
           end
 

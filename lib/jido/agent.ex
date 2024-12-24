@@ -55,8 +55,7 @@ defmodule Jido.Agent do
     field(:tags, [String.t()])
     field(:vsn, String.t())
     field(:schema, NimbleOptions.schema())
-    field(:commands, [atom()])
-    field(:command_manager, Jido.Command.Manager.t())
+    field(:actions, [module()], default: [])
     field(:runner, module())
     field(:dirty_state?, boolean())
     field(:pending, :queue.queue(action()))
@@ -91,12 +90,13 @@ defmodule Jido.Agent do
                                         required: false,
                                         doc: "The version of the Agent."
                                       ],
-                                      commands: [
-                                        type: {:custom, Jido.Util, :validate_commands, []},
+                                      actions: [
+                                        # type: {:custom, Jido.Util, :validate_actions, []},
+                                        type: {:list, :atom},
                                         required: false,
                                         default: [],
                                         doc:
-                                          "A list of commands that this Agent implements. Commands must implement the Jido.Command behavior."
+                                          "A list of actions that this Agent implements. Actions must implement the Jido.Action behavior."
                                       ],
                                       runner: [
                                         type: :atom,
@@ -137,6 +137,13 @@ defmodule Jido.Agent do
           default: nil,
           doc: "A queue of pending actions for the Agent."
         ],
+        actions: [
+          type: {:list, :atom},
+          required: false,
+          default: [],
+          doc:
+            "A list of actions that this Agent implements. Actions must implement the Jido.Action behavior."
+        ],
         state: [
           type: :any,
           doc: "The current state of the Agent."
@@ -155,14 +162,7 @@ defmodule Jido.Agent do
         {:ok, validated_opts} ->
           @validated_opts validated_opts
 
-          # Set up Command Manager at compile time
-          command_modules = @validated_opts[:commands] || []
-
-          {:ok, initial_manager} = Jido.Command.Manager.setup(command_modules)
-          @initial_command_manager initial_manager
-
-          # Add command_manager to struct keys
-          @struct_keys [:command_manager | Keyword.keys(@agent_runtime_schema)]
+          @struct_keys Keyword.keys(@agent_runtime_schema)
           defstruct @struct_keys
 
           def name, do: @validated_opts[:name]
@@ -170,7 +170,7 @@ defmodule Jido.Agent do
           def category, do: @validated_opts[:category]
           def tags, do: @validated_opts[:tags]
           def vsn, do: @validated_opts[:vsn]
-          def commands, do: @validated_opts[:commands]
+          def actions, do: @validated_opts[:actions]
           def runner, do: @validated_opts[:runner]
           def schema, do: @validated_opts[:schema]
 
@@ -181,7 +181,7 @@ defmodule Jido.Agent do
               category: @validated_opts[:category],
               tags: @validated_opts[:tags],
               vsn: @validated_opts[:vsn],
-              commands: @validated_opts[:commands],
+              actions: @validated_opts[:actions],
               runner: @validated_opts[:runner],
               schema: @validated_opts[:schema]
             }
@@ -214,42 +214,39 @@ defmodule Jido.Agent do
               state: Map.new(state_defaults),
               dirty_state?: false,
               pending: :queue.new(),
-              command_manager: @initial_command_manager
+              actions: @validated_opts[:actions] || []
             })
           end
 
           @doc """
-          Registers a new command module with the agent's command manager.
+          Registers a new action module with the agent.
 
           ## Parameters
-            - agent: The agent struct to register the command with
-            - command_module: The command module to register
+            - agent: The agent struct to register the action with
+            - action_module: The action module to register
 
           ## Returns
-            - `{:ok, updated_agent}` - Command registered successfully
+            - `{:ok, updated_agent}` - Action registered successfully
             - `{:error, reason}` - Registration failed
           """
-          @spec register_command(Agent.t(), module()) :: {:ok, Agent.t()} | {:error, String.t()}
-          def register_command(agent, command_module) do
-            with {:ok, updated_manager} <-
-                   Jido.Command.Manager.register(agent.command_manager, command_module) do
-              %{agent | command_manager: updated_manager}
-              |> OK.success()
-            end
+          @spec register_action(t(), module()) :: {:ok, t()} | {:error, String.t()}
+          def register_action(%__MODULE__{} = agent, action_module) do
+            updated_actions = [action_module | agent.actions]
+            {:ok, %{agent | actions: updated_actions}}
           end
 
           @doc """
-          Returns a list of commands registered with this agent's command manager.
+          Returns a list of actions registered with this agent.
 
           ## Parameters
-            - agent: The agent struct to get commands from
+            - agent: The agent struct to get actions from
 
           ## Returns
-            - List of registered command specifications
+            - List of registered action modules
           """
-          @spec registered_commands(Agent.t()) :: [{atom(), Jido.Command.command_spec()}]
-          def registered_commands(agent) do
-            Jido.Command.Manager.registered_commands(agent.command_manager)
+          @spec registered_actions(t()) :: [module()]
+          def registered_actions(%__MODULE__{} = agent) do
+            agent.actions || []
           end
 
           @doc """
@@ -326,46 +323,75 @@ defmodule Jido.Agent do
           end
 
           @doc """
-          Plans a sequence of actions for the agent based on a command.
+          Plans one or more actions by adding them to the agent's pending queue.
 
           ## Parameters
             - agent: The agent struct to plan actions for
-            - command: The command to execute (defaults to :default)
-            - params: Optional parameters for the command (defaults to empty map)
+            - actions: Either:
+              - A single action module
+              - A tuple of {action_module, params}
+              - A list of action modules
+              - A list of {action_module, params} tuples
+            - params: Optional parameters for single action case (defaults to empty map)
 
           ## Returns
-            - `{:ok, updated_agent}` - Actions were successfully planned
+            - `{:ok, updated_agent}` - Actions were successfully queued
             - `{:error, error}` - Planning failed
           """
-          @spec plan(t(), atom(), map()) :: {:ok, t()} | {:error, Jido.Error.t()}
-          def plan(%__MODULE__{} = agent, command \\ :default, params \\ %{}) do
-            with {:ok, {cmd, params}} <- on_before_plan(agent, command, params),
-                 {:ok, actions} <-
-                   Jido.Command.Manager.dispatch(agent.command_manager, cmd, agent, params) do
-              new_queue = Enum.reduce(actions, agent.pending, &:queue.in(&1, &2))
-              OK.success(%{agent | pending: new_queue, dirty_state?: true})
+          # def plan(%__MODULE__{} = agent, actions, params \\ %{})
+
+          # Single action module
+          def plan(%__MODULE__{} = agent, action, params) when is_atom(action) do
+            do_plan_action(agent, action, params)
+          end
+
+          # Single action tuple
+          def plan(%__MODULE__{} = agent, {action, action_params}, _params)
+              when is_atom(action) and is_map(action_params) do
+            do_plan_action(agent, action, action_params)
+          end
+
+          # List of actions or action tuples
+          def plan(%__MODULE__{} = agent, actions, _params) when is_list(actions) do
+            Enum.reduce_while(actions, {:ok, agent}, fn
+              action, {:ok, updated_agent} when is_atom(action) ->
+                case do_plan_action(updated_agent, action, %{}) do
+                  {:ok, agent} -> {:cont, {:ok, agent}}
+                  error -> {:halt, error}
+                end
+
+              {action, params}, {:ok, updated_agent} when is_atom(action) and is_map(params) ->
+                case do_plan_action(updated_agent, action, params) do
+                  {:ok, agent} -> {:cont, {:ok, agent}}
+                  error -> {:halt, error}
+                end
+
+              _, {:ok, _} ->
+                {:halt, {:error, "Invalid action format"}}
+            end)
+          end
+
+          defp do_plan_action(%__MODULE__{} = agent, action, params) do
+            if action not in registered_actions(agent) do
+              Error.execution_error("Action not registered", %{
+                action: action,
+                agent_id: agent.id,
+                params: params
+              })
+              |> OK.failure()
             else
-              {:error, :command_not_found, reason} ->
-                Error.execution_error("Command not found: #{reason}", %{
-                  command: command,
-                  agent_id: agent.id
-                })
-                |> OK.failure()
-
-              {:error, :invalid_params, reason} ->
-                Error.validation_error("Invalid command parameters: #{reason}", %{
-                  command: command,
-                  agent_id: agent.id,
-                  params: params
-                })
-                |> OK.failure()
-
-              {:error, :execution_failed, reason} ->
-                Error.execution_error("Command execution failed: #{reason}", %{
-                  command: command,
-                  agent_id: agent.id
-                })
-                |> OK.failure()
+              with {:ok, {action, params}} <- on_before_plan(agent, action, params) do
+                new_queue = :queue.in({action, params}, agent.pending)
+                OK.success(%{agent | pending: new_queue, dirty_state?: true})
+              else
+                {:error, reason} ->
+                  Error.execution_error("Failed to plan action: #{reason}", %{
+                    action: action,
+                    agent_id: agent.id,
+                    params: params
+                  })
+                  |> OK.failure()
+              end
             end
           end
 
@@ -397,31 +423,6 @@ defmodule Jido.Agent do
               else
                 OK.success(%{reset_agent | result: final_result.state})
               end
-            end
-          end
-
-          @doc """
-          Validates, plans and executes a command for the agent.
-
-          ## Parameters
-            - agent: The agent struct to act on
-            - command: The command to execute (defaults to :default)
-            - params: Optional parameters for the command
-            - opts: Optional keyword list of execution options
-              - :apply_state - Whether to apply results to agent state (default: true)
-
-          ## Returns
-            - If apply_state is true: `{:ok, updated_agent}`
-            - If apply_state is false: `{:ok, {agent, result}}`
-            - On error: `{:error, error}`
-          """
-          @spec cmd(t(), atom(), map(), keyword()) ::
-                  {:ok, t()} | {:ok, {t(), map()}} | {:error, Jido.Error.t()}
-          def cmd(%__MODULE__{} = agent, command \\ :default, params \\ %{}, opts \\ []) do
-            with {:ok, updated_agent} <- set(agent, params),
-                 {:ok, planned_agent} <- plan(updated_agent, command, params),
-                 {:ok, final_agent} <- run(planned_agent, opts) do
-              OK.success(final_agent)
             else
               {:error, %Error{type: :validation_error} = error} ->
                 Error.validation_error("Invalid agent state or parameters", %{error: error})
@@ -438,6 +439,34 @@ defmodule Jido.Agent do
               {:error, error} ->
                 Error.execution_error("Agent execution failed", %{error: error})
                 |> OK.failure()
+            end
+          end
+
+          @doc """
+          Validates, plans and executes a command for the agent.
+
+          ## Parameters
+            - agent: The agent struct to act on
+            - action: The action to execute
+            - params: Optional parameters for the action
+            - opts: Optional keyword list of execution options
+              - :apply_state - Whether to apply results to agent state (default: true)
+
+          ## Returns
+            - If apply_state is true: `{:ok, updated_agent}`
+            - If apply_state is false: `{:ok, {agent, result}}`
+            - On error: `{:error, error}`
+          """
+          @spec cmd(t(), atom(), map(), keyword()) ::
+                  {:ok, t()} | {:ok, {t(), map()}} | {:error, Jido.Error.t()}
+          def cmd(%__MODULE__{} = agent, action, params \\ %{}, opts \\ []) do
+            with {:ok, _} <- do_validate(agent, Map.merge(agent.state, params)),
+                 {:ok, planned_agent} <- plan(agent, action, params),
+                 {:ok, final_agent} <- run(planned_agent, opts) do
+              OK.success(final_agent)
+            else
+              {:error, error} ->
+                OK.failure(error)
             end
           end
 
@@ -471,7 +500,7 @@ defmodule Jido.Agent do
 
           def on_before_validate_state(state), do: OK.success(state)
           def on_after_validate_state(state), do: OK.success(state)
-          def on_before_plan(agent, command, params), do: OK.success({command, params})
+          def on_before_plan(agent, action, params), do: OK.success({action, params})
           def on_before_run(agent, actions), do: OK.success(actions)
           def on_after_run(agent, result), do: OK.success(result)
           def on_error(agent, error, context), do: OK.failure(error)
@@ -509,21 +538,21 @@ defmodule Jido.Agent do
   @callback on_after_validate_state(state :: map()) :: {:ok, map()} | {:error, any()}
 
   @doc """
-  Called before planning commands, allows preprocessing of command parameters
-  and potential command routing/transformation.
+  Called before planning actions, allows preprocessing of action parameters
+  and potential action routing/transformation.
   """
-  @callback on_before_plan(agent :: t(), command :: atom(), params :: map()) ::
-              {:ok, {atom(), map()}} | {:error, any()}
+  @callback on_before_plan(agent :: t(), action :: module(), params :: map()) ::
+              {:ok, {module(), map()}} | {:error, any()}
 
   @doc """
-  Called after command planning but before execution.
+  Called after action planning but before execution.
   Allows inspection/modification of planned actions.
   """
   @callback on_before_run(agent :: t(), actions :: [{module(), map()}]) ::
               {:ok, [{module(), map()}]} | {:error, any()}
 
   @doc """
-  Called after successful command execution.
+  Called after successful action execution.
   Allows post-processing of execution results.
   """
   @callback on_after_run(agent :: t(), result :: map()) ::

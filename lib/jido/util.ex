@@ -208,9 +208,16 @@ defmodule Jido.Util do
   defp format_metadata(metadata, opts) do
     max_length = opts[:max_length] || 500
     truncate_threshold = opts[:truncate_threshold] || 100
+    no_truncate = opts[:no_truncate] || false
 
     Enum.map_join(metadata, ", ", fn {key, value} ->
-      formatted_value = format_value(value, max_length, truncate_threshold)
+      formatted_value =
+        if no_truncate do
+          inspect(value, limit: :infinity, pretty: false)
+        else
+          format_value(value, max_length, truncate_threshold)
+        end
+
       "#{key}: #{formatted_value}"
     end)
   end

@@ -151,9 +151,17 @@ defmodule Jido.Workflow.Chain do
     })
 
     case Workflow.run(workflow, params, context, opts) do
-      {:ok, result} ->
+      {:ok, result} when is_map(result) ->
         debug("Workflow completed successfully", %{workflow: workflow, result: result})
         {:cont, OK.success(Map.merge(params, result))}
+
+      {:ok, result} ->
+        debug("Workflow completed successfully with non-map result", %{
+          workflow: workflow,
+          result: result
+        })
+
+        {:cont, OK.success(Map.put(params, :result, result))}
 
       {:error, %Error{} = error} ->
         debug("Workflow failed", %{workflow: workflow, error: error})

@@ -1,7 +1,7 @@
 defmodule Jido.MixProject do
   use Mix.Project
 
-  @version "1.0.0-rc.3"
+  @version "1.0.0-rc.4"
 
   def project do
     [
@@ -46,9 +46,9 @@ defmodule Jido.MixProject do
         {"README.md", title: "Home"},
         {"guides/getting-started.md", title: "Getting Started"},
         {"guides/actions.md", title: "Actions"},
-        {"guides/commands.md", title: "Commands"},
-        {"guides/agents.md", title: "Agents"},
-        {"guides/sensors.md", title: "Sensors"}
+        # {"guides/commands.md", title: "Commands"},
+        {"guides/agents.md", title: "Agents"}
+        # {"guides/sensors.md", title: "Sensors"}
       ],
       groups_for_modules: [
         Core: [

@@ -19,6 +19,8 @@ defmodule JidoTest.Workflow.ActionTest do
 
   require OK
 
+  @moduletag :capture_log
+
   describe "error formatting" do
     test "format_config_error formats NimbleOptions.ValidationError" do
       error = %NimbleOptions.ValidationError{keys_path: [:name], message: "is invalid"}

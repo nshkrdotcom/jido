@@ -6,6 +6,8 @@ defmodule JidoTest.WorkflowCompensateTest do
   alias Jido.Workflow
   alias JidoTest.TestActions.CompensateAction
 
+  @moduletag :capture_log
+
   setup do
     # Ensure debug logs are captured
     :ok = Logger.configure(level: :debug)

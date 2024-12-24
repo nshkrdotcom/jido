@@ -1,275 +1,233 @@
-defmodule Jido.Agent.RuntimeProcessTest do
+defmodule Jido.Agent.Runtime.ProcessTest do
   use ExUnit.Case, async: true
   require Logger
   import ExUnit.CaptureLog
 
-  alias Jido.Signal
-  alias Jido.Agent.Runtime
-  alias Jido.Agent.Runtime.State
+  alias Jido.Agent.Runtime.Process, as: RuntimeProcess
+  alias Jido.Agent.Runtime.State, as: RuntimeState
+  alias Jido.Agent.Runtime.Signal, as: RuntimeSignal
   alias JidoTest.TestAgents.SimpleAgent
+  alias Jido.Signal
 
   setup do
     {:ok, _} = start_supervised({Phoenix.PubSub, name: TestPubSub})
 
+    {:ok, supervisor} = start_supervised(DynamicSupervisor)
     agent = SimpleAgent.new("test")
 
-    base_state = %State{
+    state = %RuntimeState{
       agent: agent,
+      child_supervisor: supervisor,
       pubsub: TestPubSub,
       topic: "test_topic",
       status: :idle,
       pending: :queue.new()
     }
 
-    {:ok, base_state: base_state}
+    {:ok, state: state}
   end
 
-  describe "via_tuple/1" do
-    test "returns registry tuple" do
-      assert {:via, Registry, {Jido.AgentRegistry, "test"}} == Runtime.via_tuple("test")
-    end
-  end
+  describe "start/2" do
+    test "starts a child process and emits signal", %{state: state} do
+      child_spec = %{
+        id: :test_child,
+        start: {Task, :start_link, [fn -> Process.sleep(:infinity) end]}
+      }
 
-  describe "emit/3" do
-    test "creates and broadcasts signal", %{base_state: state} do
-      Phoenix.PubSub.subscribe(TestPubSub, state.topic)
-      payload = %{foo: "bar"}
+      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
 
-      assert :ok = Runtime.emit(state, "test_event", payload)
+      assert {:ok, pid} = RuntimeProcess.start(state, child_spec)
+      assert Process.alive?(pid)
 
-      # Verify signal was broadcast with correct format
+      process_started = RuntimeSignal.process_started()
+
       assert_receive %Signal{
-        type: "jido.agent.test_event",
-        source: "/agent/test",
-        data: ^payload
+        type: ^process_started,
+        data: %{child_pid: ^pid, child_spec: ^child_spec}
+      }
+    end
+
+    test "emits failure signal when start fails", %{state: state} do
+      invalid_spec = %{
+        id: :invalid_child,
+        start: {:not_a_module, :not_a_function, []}
+      }
+
+      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+
+      capture_log(fn ->
+        assert {:error, _reason} = RuntimeProcess.start(state, invalid_spec)
+      end)
+
+      process_start_failed = RuntimeSignal.process_start_failed()
+
+      assert_receive %Signal{
+        type: ^process_start_failed,
+        data: %{child_spec: ^invalid_spec, reason: _reason}
       }
     end
   end
 
-  describe "subscribe_to_topic/1" do
-    test "subscribes to pubsub topic", %{base_state: state} do
-      assert :ok = Runtime.subscribe_to_topic(state)
-    end
-  end
-
-  describe "queue_command/2" do
-    test "adds command to pending queue", %{base_state: state} do
-      command = {:act, %{command: :custom, message: "test"}}
-
-      assert {:ok, new_state} = Runtime.queue_command(state, command)
-      assert :queue.len(new_state.pending) == 1
-
-      {{:value, queued_command}, _} = :queue.out(new_state.pending)
-      assert queued_command == command
-    end
-  end
-
-  describe "validate_state/1" do
-    test "validates state with valid inputs", %{base_state: state} do
-      assert :ok = Runtime.validate_state(state)
-    end
-
-    test "fails validation with nil pubsub", %{base_state: state} do
-      state = %{state | pubsub: nil}
-      assert {:error, "PubSub module is required"} = Runtime.validate_state(state)
-    end
-
-    test "fails validation with nil agent", %{base_state: state} do
-      state = %{state | agent: nil}
-      assert {:error, "Agent is required"} = Runtime.validate_state(state)
-    end
-  end
-
-  describe "process_signal/2" do
-    test "processes act signal", %{base_state: state} do
-      # Verify we start at home
-      assert state.agent.state.location == :home
-
-      {:ok, signal} =
-        Signal.new(%{
-          type: "jido.agent.cmd",
-          source: "/test",
-          data: %{command: :move, destination: :kitchen}
-        })
-
-      assert {:ok, new_state} = Runtime.process_signal(signal, state)
-      assert new_state.status == :idle
-      assert new_state.agent.state.location == :kitchen
-    end
-
-    test "processes manage signal", %{base_state: state} do
-      state = %{state | status: :running}
-
-      {:ok, signal} =
-        Signal.new(%{
-          type: "jido.agent.manage",
-          source: "/test",
-          data: %{command: :pause, args: nil}
-        })
-
-      assert {:ok, new_state} = Runtime.process_signal(signal, state)
-      assert new_state.status == :paused
-    end
-
-    test "ignores unknown signal type", %{base_state: state} do
-      {:ok, signal} = Signal.new(%{type: "unknown", source: "/test", data: %{}})
-      assert :ignore = Runtime.process_signal(signal, state)
-    end
-  end
-
-  describe "process_cmd/2" do
-    test "executes action and updates agent state", %{base_state: state} do
-      # Verify we start at home
-      assert state.agent.state.location == :home
-
-      attrs = %{command: :move, destination: :kitchen}
-      assert {:ok, new_state} = Runtime.process_cmd(attrs, state)
-      assert new_state.status == :idle
-      assert new_state.agent.state.location == :kitchen
-    end
-
-    test "queues action when paused", %{base_state: state} do
-      state = %{state | status: :paused}
-      attrs = %{command: :move, destination: :kitchen}
-
-      assert {:ok, new_state} = Runtime.process_cmd(attrs, state)
-      assert :queue.len(new_state.pending) == 1
-      assert new_state.status == :paused
-
-      {{:value, {:act, queued_attrs}}, _} = :queue.out(new_state.pending)
-      assert queued_attrs == attrs
-    end
-
-    test "fails for invalid state", %{base_state: state} do
-      state = %{state | status: :planning}
-      attrs = %{command: :move, destination: :kitchen}
-
-      capture_log(fn ->
-        assert {:error, {:invalid_state, :planning}} = Runtime.process_cmd(attrs, state)
-      end)
-    end
-  end
-
-  describe "process_manage/4" do
-    test "pauses agent", %{base_state: state} do
-      state = %{state | status: :running}
-      assert {:ok, new_state} = Runtime.process_manage(:pause, nil, nil, state)
-      assert new_state.status == :paused
-    end
-
-    test "resumes paused agent", %{base_state: state} do
-      state = %{state | status: :paused}
-      assert {:ok, new_state} = Runtime.process_manage(:resume, nil, nil, state)
-      assert new_state.status == :running
-    end
-
-    test "resets agent state", %{base_state: state} do
-      state = %{
-        state
-        | status: :paused,
-          pending: :queue.from_list([{:act, %{command: :custom, message: "test"}}])
+  describe "list/1" do
+    test "lists running child processes", %{state: state} do
+      # Start a few test processes
+      child_spec1 = %{
+        id: :test_child1,
+        start: {Task, :start_link, [fn -> Process.sleep(:infinity) end]}
       }
 
-      assert {:ok, new_state} = Runtime.process_manage(:reset, nil, nil, state)
-      assert new_state.status == :idle
-      assert :queue.len(new_state.pending) == 0
-    end
-
-    test "returns error for invalid command", %{base_state: state} do
-      capture_log(fn ->
-        assert {:error, :invalid_command} = Runtime.process_manage(:invalid, nil, nil, state)
-      end)
-    end
-  end
-
-  describe "process_pending_commands/1" do
-    test "processes all pending commands in order", %{base_state: state} do
-      # Verify we start at home
-      assert state.agent.state.location == :home
-
-      commands = [
-        {:act, %{command: :move, destination: :kitchen}},
-        {:act, %{command: :move, destination: :living_room}}
-      ]
-
-      state = %{state | pending: :queue.from_list(commands)}
-      processed_state = Runtime.process_pending_commands(state)
-
-      assert processed_state.status == :idle
-      assert :queue.len(processed_state.pending) == 0
-      assert processed_state.agent.state.location == :living_room
-    end
-
-    test "stops processing on error", %{base_state: state} do
-      # Verify we start at home
-      assert state.agent.state.location == :home
-
-      # First command is valid, second will fail
-      commands = [
-        {:act, %{command: :move, destination: :kitchen}},
-        {:act, %{invalid: "command"}}
-      ]
-
-      state = %{state | pending: :queue.from_list(commands)}
-
-      capture_log(fn ->
-        processed_state = Runtime.process_pending_commands(state)
-
-        assert processed_state.status == :idle
-        assert :queue.len(processed_state.pending) == 0
-        assert processed_state.agent.state.location == :kitchen
-      end)
-    end
-
-    test "skips processing when not idle", %{base_state: state} do
-      state = %{
-        state
-        | status: :running,
-          pending: :queue.from_list([{:act, %{command: :move, destination: :kitchen}}])
+      child_spec2 = %{
+        id: :test_child2,
+        start: {Task, :start_link, [fn -> Process.sleep(:infinity) end]}
       }
 
-      assert ^state = Runtime.process_pending_commands(state)
+      {:ok, pid1} = RuntimeProcess.start(state, child_spec1)
+      {:ok, pid2} = RuntimeProcess.start(state, child_spec2)
+
+      children = RuntimeProcess.list(state)
+      assert length(children) == 2
+
+      pids = Enum.map(children, fn {:undefined, pid, :worker, _} -> pid end)
+      assert pid1 in pids
+      assert pid2 in pids
+    end
+
+    test "returns empty list when no children", %{state: state} do
+      assert [] = RuntimeProcess.list(state)
     end
   end
 
-  describe "execute_command/2" do
-    test "updates agent state when executing move command", %{base_state: state} do
-      # Verify we start at home
-      assert state.agent.state.location == :home
+  describe "terminate/2" do
+    test "terminates a specific child process and emits signal", %{state: state} do
+      child_spec = %{
+        id: :test_child,
+        start: {Task, :start_link, [fn -> Process.sleep(:infinity) end]}
+      }
 
-      state = %{state | status: :running}
-      attrs = %{command: :move, destination: :kitchen}
+      {:ok, pid} = RuntimeProcess.start(state, child_spec)
+      assert Process.alive?(pid)
 
-      assert {:ok, updated_agent} = Runtime.execute_command(state, attrs)
-      assert updated_agent.state.location == :kitchen
+      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+
+      assert :ok = RuntimeProcess.terminate(state, pid)
+      refute Process.alive?(pid)
+
+      process_terminated = RuntimeSignal.process_terminated()
+
+      assert_receive %Signal{
+        type: ^process_terminated,
+        data: %{child_pid: ^pid}
+      }
     end
 
-    test "updates agent state when executing recharge command", %{base_state: state} do
-      state = %{state | status: :running}
-      state = put_in(state.agent.state.battery_level, 50)
-      attrs = %{command: :recharge, target_level: 100}
+    test "returns error when terminating non-existent process", %{state: state} do
+      non_existent_pid = spawn(fn -> :ok end)
+      Process.exit(non_existent_pid, :kill)
 
-      assert {:ok, updated_agent} = Runtime.execute_command(state, attrs)
-      assert updated_agent.state.battery_level == 100
+      assert {:error, :not_found} = RuntimeProcess.terminate(state, non_existent_pid)
+    end
+  end
+
+  describe "restart/3" do
+    test "restarts a child process and emits signals", %{state: state} do
+      child_spec = %{
+        id: :test_child,
+        start: {Task, :start_link, [fn -> Process.sleep(:infinity) end]}
+      }
+
+      {:ok, old_pid} = RuntimeProcess.start(state, child_spec)
+      assert Process.alive?(old_pid)
+
+      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+
+      {:ok, new_pid} = RuntimeProcess.restart(state, old_pid, child_spec)
+      assert Process.alive?(new_pid)
+      refute Process.alive?(old_pid)
+      assert old_pid != new_pid
+
+      # Should receive terminated, started, and restart_succeeded signals
+      process_terminated = RuntimeSignal.process_terminated()
+      process_started = RuntimeSignal.process_started()
+      process_restart_succeeded = RuntimeSignal.process_restart_succeeded()
+
+      assert_receive %Signal{
+        type: ^process_terminated,
+        data: %{child_pid: ^old_pid}
+      }
+
+      assert_receive %Signal{
+        type: ^process_started,
+        data: %{child_pid: ^new_pid}
+      }
+
+      assert_receive %Signal{
+        type: ^process_restart_succeeded,
+        data: %{old_pid: ^old_pid, new_pid: ^new_pid, child_spec: ^child_spec}
+      }
     end
 
-    test "executes default action without changing state", %{base_state: state} do
-      state = %{state | status: :running}
-      initial_state = state.agent
-      attrs = %{}
+    test "emits failure signal when restart fails", %{state: state} do
+      child_spec = %{
+        id: :test_child,
+        start: {Task, :start_link, [fn -> Process.sleep(:infinity) end]}
+      }
 
-      assert {:ok, updated_agent} = Runtime.execute_command(state, attrs)
-      # Default action only logs messages and sleeps, no state changes
-      assert updated_agent.state == initial_state.state
-      assert updated_agent.result == initial_state.state
-    end
+      {:ok, old_pid} = RuntimeProcess.start(state, child_spec)
 
-    test "fails if not in running state", %{base_state: state} do
-      attrs = %{command: :move, destination: :kitchen}
+      invalid_spec = %{
+        id: :invalid_child,
+        start: {:not_a_module, :not_a_function, []}
+      }
+
+      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
 
       capture_log(fn ->
-        assert {:error, {:invalid_state, :idle}} = Runtime.execute_command(state, attrs)
+        assert {:error, _reason} = RuntimeProcess.restart(state, old_pid, invalid_spec)
       end)
+
+      process_terminated = RuntimeSignal.process_terminated()
+      process_start_failed = RuntimeSignal.process_start_failed()
+      process_restart_failed = RuntimeSignal.process_restart_failed()
+
+      assert_receive %Signal{
+        type: ^process_terminated,
+        data: %{child_pid: ^old_pid}
+      }
+
+      assert_receive %Signal{
+        type: ^process_start_failed,
+        data: %{child_spec: ^invalid_spec}
+      }
+
+      assert_receive %Signal{
+        type: ^process_restart_failed,
+        data: %{child_pid: ^old_pid, child_spec: ^invalid_spec, error: _error}
+      }
+    end
+
+    test "fails to restart non-existent process", %{state: state} do
+      non_existent_pid = spawn(fn -> :ok end)
+      Process.exit(non_existent_pid, :kill)
+
+      child_spec = %{
+        id: :test_child,
+        start: {Task, :start_link, [fn -> Process.sleep(:infinity) end]}
+      }
+
+      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+
+      assert {:error, :not_found} = RuntimeProcess.restart(state, non_existent_pid, child_spec)
+
+      process_restart_failed = RuntimeSignal.process_restart_failed()
+
+      assert_receive %Signal{
+        type: ^process_restart_failed,
+        data: %{
+          child_pid: ^non_existent_pid,
+          child_spec: ^child_spec,
+          error: {:error, :not_found}
+        }
+      }
     end
   end
 end

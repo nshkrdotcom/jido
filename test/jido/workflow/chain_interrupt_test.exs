@@ -7,6 +7,8 @@ defmodule JidoTest.Workflow.ChainInterruptTest do
   alias JidoTest.TestActions.Multiply
   alias JidoTest.TestActions.SlowWorkflow
 
+  @moduletag :capture_log
+
   setup do
     # Ensure debug logs are captured
     :ok = Logger.configure(level: :debug)

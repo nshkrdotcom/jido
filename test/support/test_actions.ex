@@ -39,6 +39,9 @@ defmodule JidoTest.TestActions do
       description: "Adds 2 to the input value"
 
     def run(%{value: value}, _context), do: {:ok, %{result: value + 2}}
+
+    # Allow no params
+    def run(_params, _context), do: {:ok, %{result: "No params"}}
   end
 
   defmodule NoParamsAction do

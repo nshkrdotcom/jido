@@ -44,10 +44,10 @@ defmodule JidoTest.SensorCounterTest do
           schedule_emit(new_state)
           {:noreply, new_state}
 
-        {:error, reason} ->
-          Logger.warning("Error generating signal: #{inspect(reason)}")
-          schedule_emit(state)
-          {:noreply, state}
+          # {:error, reason} ->
+          #   Logger.warning("Error generating signal: #{inspect(reason)}")
+          #   schedule_emit(state)
+          #   {:noreply, state}
       end
     end
 

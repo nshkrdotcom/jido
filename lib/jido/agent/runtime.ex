@@ -1,7 +1,7 @@
 defmodule Jido.Agent.Runtime do
   use GenServer
   use Private
-  use Jido.Util, debug_enabled: true
+  use Jido.Util, debug_enabled: false
 
   alias Jido.Agent.Runtime.Execute
   alias Jido.Agent.Runtime.PubSub
@@ -102,7 +102,7 @@ defmodule Jido.Agent.Runtime do
   end
 
   @impl true
-  def handle_call(:get_state, _from, %RuntimeState{} = state) do
+  def handle_call(:get_state, from, state) do
     {:reply, {:ok, state}, state}
   end
 
@@ -141,11 +141,13 @@ defmodule Jido.Agent.Runtime do
 
   @impl true
   def handle_info(%Signal{} = signal, %RuntimeState{} = state) do
-    debug("Handling info signal", signal: signal)
-
-    case Execute.process_signal(state, signal) do
-      {:ok, new_state} -> {:noreply, new_state}
-      {:error, reason} -> {:stop, reason, state}
+    if RuntimeSignal.is_event_signal?(signal) do
+      {:noreply, state}
+    else
+      case Execute.process_signal(state, signal) do
+        {:ok, new_state} -> {:noreply, new_state}
+        {:error, reason} -> {:stop, reason, state}
+      end
     end
   end
 
@@ -227,7 +229,7 @@ defmodule Jido.Agent.Runtime do
        %{
          name: opts[:name] || agent.id,
          pubsub: Keyword.fetch!(opts, :pubsub),
-         topic: Keyword.get(opts, :topic),
+         topic: Keyword.get(opts, :topic, PubSub.generate_topic(agent.id)),
          max_queue_size: Keyword.get(opts, :max_queue_size, @default_max_queue_size),
          registry: Keyword.get(opts, :registry, Jido.AgentRegistry)
        }}

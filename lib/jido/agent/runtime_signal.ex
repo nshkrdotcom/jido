@@ -83,6 +83,9 @@ defmodule Jido.Agent.Runtime.Signal do
   def is_syscall_signal?(%Signal{type: @syscall_prefix <> _}), do: true
   def is_syscall_signal?(_), do: false
 
+  def is_event_signal?(%Signal{type: @event_prefix <> _}), do: true
+  def is_event_signal?(_), do: false
+
   def is_process_start?(%Signal{type: @process_start}), do: true
   def is_process_start?(_), do: false
 

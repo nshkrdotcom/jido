@@ -19,7 +19,7 @@ defmodule Jido.Agent.Runtime.Syscall do
   alias Jido.Agent.Runtime.State, as: RuntimeState
   alias Jido.Agent.Runtime.PubSub
   alias Jido.Signal
-  use Jido.Util, debug_enabled: true
+  use Jido.Util, debug_enabled: false
 
   @type child_spec ::
           {:task, function()}

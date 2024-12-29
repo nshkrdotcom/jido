@@ -67,7 +67,7 @@ defmodule JidoTest.AgentStateTest do
       assert updated2.dirty_state? == false
     end
 
-    test "merges unknown fields into state", %{agent: agent} do
+    test "merges unknown fields into state with non-strict validation", %{agent: agent} do
       {:ok, updated} =
         BasicAgent.set(agent, %{
           unknown_field: true,
@@ -81,6 +81,22 @@ defmodule JidoTest.AgentStateTest do
       assert updated.state.another_unknown == "test"
       assert updated.state.nested.field == 123
       assert updated.dirty_state? == true
+    end
+
+    test "rejects unknown fields with strict validation", %{agent: agent} do
+      assert {:error, error} =
+               BasicAgent.set(
+                 agent,
+                 %{
+                   unknown_field: true,
+                   another_unknown: "test"
+                 },
+                 strict_validation: true
+               )
+
+      assert error.message =~ "Agent state validation failed"
+      assert error.message =~ "Unknown fields: [:unknown_field, :another_unknown]"
+      assert agent.dirty_state? == false
     end
 
     test "deep merges state updates", %{agent: agent} do
@@ -137,6 +153,14 @@ defmodule JidoTest.AgentStateTest do
 
       assert error.message =~
                "Invalid agent type. Expected #{BasicAgent}, got #{FullFeaturedAgent}"
+    end
+
+    test "strict validation in callbacks", %{agent: agent} do
+      assert {:error, error} =
+               FullFeaturedAgent.validate(agent, strict_validation: true)
+
+      assert error.message =~ "Agent state validation failed"
+      assert error.message =~ "unknown fields were provided"
     end
   end
 

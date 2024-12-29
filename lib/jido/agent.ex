@@ -476,6 +476,8 @@ defmodule Jido.Agent do
           ## Parameters
           * `agent` - The agent struct to update
           * `attrs` - Map or keyword list of attributes to merge into state
+          * `opts` - Optional keyword list of options:
+            * `strict_validation` - Boolean, whether to perform strict validation (default: false)
 
           ## Returns
           * `{:ok, updated_agent}` - Agent with merged state and dirty_state? = true
@@ -506,23 +508,26 @@ defmodule Jido.Agent do
 
           See `validate/1` for validation details and `Jido.Agent` callbacks for lifecycle hooks.
           """
-          @spec set(t(), keyword()) :: agent_result()
-          def set(%__MODULE__{} = agent, attrs) when is_list(attrs) do
+          @spec set(t(), keyword(), keyword()) :: agent_result()
+          def set(agent, attrs, opts \\ [])
+
+          def set(%__MODULE__{} = agent, attrs, opts) when is_list(attrs) do
             dbug("Setting agent state from keyword list", agent_id: agent.id, attrs: attrs)
             mapped_attrs = Map.new(attrs)
-            set(agent, mapped_attrs)
+            set(agent, mapped_attrs, opts)
           end
 
-          @spec set(t(), map()) :: agent_result()
-          def set(%__MODULE__{} = agent, attrs) when is_map(attrs) do
+          def set(%__MODULE__{} = agent, attrs, opts) when is_map(attrs) do
             dbug("Setting agent state from map", agent_id: agent.id, attrs: attrs)
+            strict_validation = Keyword.get(opts, :strict_validation, false)
 
             if Enum.empty?(attrs) do
               OK.success(agent)
             else
               with {:ok, updated_state} <- do_set(agent.state, attrs),
                    agent_to_validate = %{agent | state: updated_state},
-                   {:ok, validated_agent} <- validate(agent_to_validate) do
+                   {:ok, validated_agent} <-
+                     validate(agent_to_validate, strict_validation: strict_validation) do
                 OK.success(%{validated_agent | dirty_state?: true})
               else
                 {:error, error} ->
@@ -531,14 +536,14 @@ defmodule Jido.Agent do
             end
           end
 
-          def set(%__MODULE__{} = agent, attrs) do
+          def set(%__MODULE__{} = agent, attrs, _opts) do
             {:error,
              Error.validation_error(
                "Invalid state update. Expected a map or keyword list, got #{inspect(attrs)}"
              )}
           end
 
-          def set(%_{} = agent, _attrs) do
+          def set(%_{} = agent, _attrs, _opts) do
             {:error,
              Error.validation_error(
                "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
@@ -566,6 +571,8 @@ defmodule Jido.Agent do
 
           ## Parameters
           * `agent` - The agent struct to validate
+          * `opts` - Optional keyword list of options:
+            * `strict_validation` - Boolean, whether to perform strict validation (default: false)
 
           ## Returns
           * `{:ok, validated_agent}` - Agent with validated state
@@ -608,29 +615,37 @@ defmodule Jido.Agent do
 
           See `NimbleOptions` documentation for supported validation rules.
           """
-          @spec validate(t()) :: agent_result()
-          def validate(%__MODULE__{} = agent) do
+          @spec validate(t(), keyword()) :: agent_result()
+
+          def validate(agent, opts \\ [])
+
+          def validate(%__MODULE__{} = agent, opts) do
             dbug("Validating agent state", agent_id: agent.id)
+            strict_validation = Keyword.get(opts, :strict_validation, false)
 
             with {:ok, before_agent} <- on_before_validate_state(agent),
-                 {:ok, validated_state} <- do_validate(before_agent, before_agent.state),
+                 {:ok, validated_state} <-
+                   do_validate(before_agent, before_agent.state,
+                     strict_validation: strict_validation
+                   ),
                  agent_with_valid_state = %{before_agent | state: validated_state},
                  {:ok, final_agent} <- on_after_validate_state(agent_with_valid_state) do
               {:ok, final_agent}
             end
           end
 
-          def validate(%_{} = agent) do
+          def validate(%_{} = agent, _opts) do
             {:error,
              Error.validation_error(
                "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
              )}
           end
 
-          @spec do_validate(t(), map()) :: map_result()
-          defp do_validate(%__MODULE__{} = agent, state) do
+          @spec do_validate(t(), map(), keyword()) :: map_result()
+          defp do_validate(%__MODULE__{} = agent, state, opts) do
             dbug("Running schema validation", agent_id: agent.id, state: state)
             schema = schema()
+            strict_validation = Keyword.get(opts, :strict_validation, false)
 
             if Enum.empty?(schema) do
               {:ok, state}
@@ -638,28 +653,49 @@ defmodule Jido.Agent do
               known_keys = Keyword.keys(schema)
               {known_state, unknown_state} = Map.split(state, known_keys)
 
-              case NimbleOptions.validate(Enum.to_list(known_state), schema) do
-                {:ok, validated} ->
-                  {:ok, Map.merge(unknown_state, Map.new(validated))}
+              # Return error if strict validation is enabled and unknown fields exist
+              if strict_validation && map_size(unknown_state) > 0 do
+                dbug("Strict validation failed - unknown fields present",
+                  agent_id: agent.id,
+                  unknown_fields: Map.keys(unknown_state)
+                )
 
-                {:error, error} ->
-                  dbug("Validation failed", agent_id: agent.id, error: error)
+                {:error,
+                 Error.validation_error(
+                   "Agent state validation failed: Strict validation is enabled but unknown fields were provided. " <>
+                     "When strict validation is enabled, only fields defined in the schema are allowed. " <>
+                     "Unknown fields: #{inspect(Map.keys(unknown_state))}",
+                   %{
+                     agent_id: agent.id,
+                     schema: schema,
+                     provided_state: known_state,
+                     unknown_fields: Map.keys(unknown_state)
+                   }
+                 )}
+              else
+                case NimbleOptions.validate(Enum.to_list(known_state), schema) do
+                  {:ok, validated} ->
+                    {:ok, Map.merge(unknown_state, Map.new(validated))}
 
-                  {:error,
-                   Error.validation_error(
-                     "Agent state validation failed: The provided state does not match the schema requirements. " <>
-                       "This could be due to missing required fields, invalid field types, or values outside allowed ranges. " <>
-                       "Only fields defined in the schema are validated. " <>
-                       "Please check the schema definition and ensure all required fields are present with valid values. " <>
-                       "Error: #{error.message}",
-                     %{
-                       agent_id: agent.id,
-                       schema: schema,
-                       provided_state: known_state,
-                       unknown_fields: Map.keys(unknown_state),
-                       validation_error: error
-                     }
-                   )}
+                  {:error, error} ->
+                    dbug("Validation failed", agent_id: agent.id, error: error)
+
+                    {:error,
+                     Error.validation_error(
+                       "Agent state validation failed: The provided state does not match the schema requirements. " <>
+                         "This could be due to missing required fields, invalid field types, or values outside allowed ranges. " <>
+                         "Only fields defined in the schema are validated. " <>
+                         "Please check the schema definition and ensure all required fields are present with valid values. " <>
+                         "Error: #{error.message}",
+                       %{
+                         agent_id: agent.id,
+                         schema: schema,
+                         provided_state: known_state,
+                         unknown_fields: Map.keys(unknown_state),
+                         validation_error: error
+                       }
+                     )}
+                end
               end
             end
           end
@@ -1107,10 +1143,11 @@ defmodule Jido.Agent do
 
           def cmd(%__MODULE__{} = agent, instructions, attrs, opts) do
             apply_state? = Keyword.get(opts, :apply_state, true)
+            strict_validation = Keyword.get(opts, :strict_validation, false)
             runner = Keyword.get(opts, :runner, runner())
             context = Keyword.get(opts, :context, %{})
 
-            with {:ok, agent} <- set(agent, attrs),
+            with {:ok, agent} <- set(agent, attrs, strict_validation: strict_validation),
                  {:ok, agent} <- plan(agent, instructions, context),
                  {:ok, agent} <- run(agent, opts) do
               {:ok, agent}

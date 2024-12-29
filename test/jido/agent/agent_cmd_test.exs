@@ -76,6 +76,35 @@ defmodule JidoTest.AgentCmdTest do
       assert final.result.result_state.value == 43
     end
 
+    test "enforces schema validation with strict_validation: true", %{agent: agent} do
+      # Try to set an unknown field with strict validation
+      assert {:error, error} =
+               FullFeaturedAgent.cmd(
+                 agent,
+                 {TestActions.Add, %{value: 10}},
+                 %{unknown_field: "test"},
+                 strict_validation: true,
+                 runner: Chain
+               )
+
+      assert error.type == :validation_error
+      assert error.message =~ "Strict validation is enabled"
+      assert error.message =~ "unknown_field"
+
+      # Verify same command works without strict validation
+      {:ok, final} =
+        FullFeaturedAgent.cmd(
+          agent,
+          {TestActions.Add, %{value: 10}},
+          %{unknown_field: "test"},
+          strict_validation: false,
+          runner: Chain
+        )
+
+      assert final.state.value == 11
+      assert final.state.unknown_field == "test"
+    end
+
     test "handles unregistered actions", %{agent: agent} do
       assert {:error, error} =
                FullFeaturedAgent.cmd(agent, UnregisteredAction, %{}, runner: Chain)

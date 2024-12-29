@@ -1,4 +1,4 @@
-defmodule JidoTest.Workflow.Examples.UserRegistrationTest do
+defmodule JidoTest.Workflow.Examples.UserRegistrationWorkflowTest do
   use ExUnit.Case, async: true
 
   alias Jido.Workflow

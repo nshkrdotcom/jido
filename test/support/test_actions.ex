@@ -664,4 +664,105 @@ defmodule JidoTest.TestActions do
       {:ok, directive}
     end
   end
+
+  defmodule FormatUser do
+    @moduledoc false
+    use Action,
+      name: "format_user",
+      description: "Formats user data",
+      schema: [
+        name: [type: :string, required: true, doc: "User's full name"],
+        email: [type: :string, required: true, doc: "User's email address"],
+        age: [type: :integer, required: true, doc: "User's age"]
+      ]
+
+    def run(params, _context) do
+      %{name: name, email: email, age: age} = params
+
+      {:ok,
+       %{
+         formatted_name: String.trim(name),
+         email: String.downcase(email),
+         age: age,
+         is_adult: age >= 18
+       }}
+    end
+  end
+
+  defmodule EnrichUserData do
+    @moduledoc false
+    use Action,
+      name: "enrich_user_data",
+      description: "Adds additional user information",
+      schema: [
+        formatted_name: [type: :string, required: true],
+        email: [type: :string, required: true]
+      ]
+
+    def run(%{formatted_name: name, email: email}, _context) do
+      {:ok,
+       %{
+         username: generate_username(name),
+         avatar_url: get_gravatar_url(email)
+       }}
+    end
+
+    defp generate_username(name) do
+      name
+      |> String.downcase()
+      |> String.replace(" ", ".")
+    end
+
+    defp get_gravatar_url(email) do
+      hash = :crypto.hash(:md5, email) |> Base.encode16(case: :lower)
+      "https://www.gravatar.com/avatar/#{hash}"
+    end
+  end
+
+  defmodule NotifyUser do
+    @moduledoc false
+    use Action,
+      name: "notify_user",
+      description: "Sends welcome notification to user",
+      schema: [
+        email: [type: :string, required: true],
+        username: [type: :string, required: true]
+      ]
+
+    def run(%{email: email, username: username}, _context) do
+      # In a real app, you'd send an actual email
+      {:ok,
+       %{
+         notification_sent: true,
+         notification_type: "welcome_email",
+         recipient: %{
+           email: email,
+           username: username
+         }
+       }}
+    end
+  end
+
+  defmodule FormatEnrichNotifyUserChain do
+    @moduledoc false
+    use Action,
+      name: "format_enrich_notify_user_chain",
+      description: "Demonstrate how an action can package a chain of actions",
+      schema: [
+        name: [type: :string, required: true],
+        email: [type: :string, required: true],
+        age: [type: :integer, required: true]
+      ]
+
+    def run(params, _context) do
+      Jido.Workflow.Chain.chain(
+        [
+          JidoTest.TestActions.FormatUser,
+          JidoTest.TestActions.EnrichUserData,
+          JidoTest.TestActions.NotifyUser
+        ],
+        params
+      )
+    end
+  end
 end

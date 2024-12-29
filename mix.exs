@@ -55,9 +55,10 @@ defmodule Jido.MixProject do
       extras: [
         {"README.md", title: "Home"},
         {"guides/getting-started.md", title: "Getting Started"},
-        {"guides/actions.md", title: "Actions"},
+        {"guides/getting-started-actions.md", title: "Actions & Workflows"}
+        # {"guides/actions.md", title: "Actions"},
         # {"guides/commands.md", title: "Commands"},
-        {"guides/agents.md", title: "Agents"}
+        # {"guides/agents.md", title: "Agents"}
         # {"guides/sensors.md", title: "Sensors"}
       ],
       groups_for_modules: [

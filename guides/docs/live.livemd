@@ -1,0 +1,274 @@
+# Jido: Getting Started
+
+```elixir
+Mix.install([
+  {:jido, "~> 1.0.0-rc.5"}
+])
+
+
+```
+
+## Introduction
+
+### Actions
+
+An **Action** is a small, discrete piece of logic you can execute.
+
+Each Action:
+
+- Implements the `Jido.Action` behavior.
+- Defines a **schema** describing its parameters (which NimbleOptions validates).
+- Has a `run/2` callback that does the work.
+
+### Agents
+
+An **Agent** in Jido is a data-driven entity that can hold state and run workflows composed of _Actions_.
+
+Agents:
+
+- Have a **state schema** (defined via NimbleOptions) that validates state changes.
+- Contain hooks (callbacks) for customizing behavior before/after validation, planning, execution, and error handling.
+- Can be extended by registering more **Commands**.
+
+The lifecycle looks something like this:
+
+1. **Plan** a command with an Agent → validated and turned into pending Actions.
+2. **Run** those pending Actions → applying changes to the Agent’s state.
+
+There is a convenience function `act/4` that validates state, plans the command, and runs all pending Actions all in a single step.
+
+## Building Basic Arithmetic Actions
+
+Actions in Jido are discrete units of computation. They define:
+
+- A schema specifying required inputs (via NimbleOptions).
+- A run/2 function executing the logic.
+
+Here, we’ll create a few basic Actions—Add, Subtract, Multiply, Divide, Square.
+
+```elixir
+defmodule MyArithmeticActions do
+  alias Jido.Action
+  require Logger
+
+  #
+  # 1) ADD
+  #
+  defmodule Add do
+    use Action,
+      name: "add",
+      description: "Adds two numbers",
+      schema: [
+        value: [type: :integer, required: true],
+        amount: [type: :integer, required: true]
+      ]
+
+    def run(%{value: value, amount: amount}, _ctx) do
+      Logger.warning("Performing add operation", amount: amount)
+      {:ok, %{result: value + amount}}
+    end
+  end
+
+  #
+  # 2) SUBTRACT
+  #
+  defmodule Subtract do
+    use Action,
+      name: "subtract",
+      description: "Subtracts one number from another",
+      schema: [
+        value: [type: :integer, required: true],
+        amount: [type: :integer, required: true]
+      ]
+
+    def run(%{value: value, amount: amount}, _ctx) do
+      {:ok, %{result: value - amount}}
+    end
+  end
+
+  #
+  # 3) MULTIPLY
+  #
+  defmodule Multiply do
+    use Action,
+      name: "multiply",
+      description: "Multiplies two numbers",
+      schema: [
+        value: [type: :integer, required: true],
+        amount: [type: :integer, required: true]
+      ]
+
+    def run(%{value: value, amount: amount}, _ctx) do
+      {:ok, %{result: value * amount}}
+    end
+  end
+
+  #
+  # 4) DIVIDE
+  #
+  defmodule Divide do
+    use Action,
+      name: "divide",
+      description: "Divides one number by another, returning an error if divisor is 0",
+      schema: [
+        value: [type: :integer, required: true],
+        amount: [type: :integer, required: true]
+      ]
+
+    def run(%{value: value, amount: 0}, _ctx) do
+      {:error, "Cannot divide by zero"}
+    end
+
+    def run(%{value: value, amount: amount}, _ctx) do
+      {:ok, %{result: value / amount}}
+    end
+  end
+
+  #
+  # 5) SQUARE
+  #
+  defmodule Square do
+    use Action,
+      name: "square",
+      description: "Squares a number",
+      schema: [
+        value: [type: :integer, required: true]
+      ]
+
+    def run(%{value: value}, _ctx) do
+      {:ok, %{result: value * value}}
+    end
+  end
+end
+
+```
+
+### How These Actions Work
+
+Each Action uses `use Jido.Action, ...` to define:
+
+- Name and description for discovery.
+- A schema dictating required parameters.
+- A run(params, context) callback that processes the given params.
+
+In the examples above, these arithmetic Actions each produce a map with a key :result. You could use that result for further computation or store it in an agent’s state.
+
+## Executing Actions with `Jido.Workflow`
+
+Jido’s Workflow module lets you run a single Action directly. It handles:
+
+- Parameter validation
+- Execution with optional timeouts and retries
+- Return of `{:ok, result}` or `{:error, reason}`
+
+```elixir
+# Let's alias our newly created modules for shorter usage
+alias MyArithmeticActions.{Add, Subtract, Multiply, Divide, Square}
+alias Jido.Workflow
+
+# 1) Execute the Add action with parameters
+result_add = Workflow.run(Add, %{value: 5, amount: 3})
+IO.inspect(result_add, label: "Add Action result")
+
+# 2) Try dividing by zero
+result_div_zero = Workflow.run(Divide, %{value: 10, amount: 0})
+IO.inspect(result_div_zero, label: "Divide by Zero result")
+
+# 3) Multiply some numbers
+result_multiply = Workflow.run(Multiply, %{value: 4, amount: 5})
+IO.inspect(result_multiply, label: "Multiply Action result")
+
+```
+
+### Explanation
+
+- `Workflow.run(YourAction, %{params}, %{context})`: The third argument, context, is an optional map you can pass along.
+- The result is an `{:ok, map()}` or `{:error, reason}` tuple.
+
+Here, we’re ignoring context. But you might pass user data or environment info in real applications.
+
+## Building a MathWhiz Agent
+
+Agents in Jido are defined with use Jido.Agent. They hold state, define a schema for that state, and reference one or more Actions. In this example, our MathWhiz agent is specialized in performing arithmetic.
+
+```elixir
+defmodule MathWhiz do
+  use Jido.Agent,
+    name: "math_whiz",
+    description: "Performs various arithmetic calculations",
+    tags: ["arithmetic", "calculator"],
+    vsn: "1.0.0",
+    actions: [
+      MyArithmeticActions.Add,
+      MyArithmeticActions.Subtract,
+      MyArithmeticActions.Multiply,
+      MyArithmeticActions.Divide,
+      MyArithmeticActions.Square
+    ],
+    # Our agent can store intermediate calculations in its state
+    schema: [
+      current_value: [type: :number, default: 0, doc: "The current running total"]
+    ]
+
+  # Optional callbacks:
+  def on_before_plan(_agent, action_module, params) do
+    # Possibly transform or log parameters
+    Logger.warning("Planning an action", action_module: action_module, params: params)
+    {:ok, {action_module, params}}
+  end
+end
+
+```
+
+### Explanation
+
+- `actions`: references the modules we want this agent to be able to run.
+- `schema`: configures the agent’s internal state. For instance, current_value: 0.
+- The callbacks (`on_before_plan`, etc.) let you customize how the agent processes requests—logging, transformations, etc.
+
+When you do `MathWhiz.new/0`, it creates an agent struct with an auto-generated ID and an initial state. Then you can queue up actions via `MathWhiz.plan(...)` or call `MathWhiz.cmd(...)` to validate & plan in one go.
+
+## Starting and Interacting with the MathWhiz Agent
+
+In Jido, an agent is typically run inside a GenServer-based runtime. That process is started by calling `Jido.Agent.Runtime.start_link/1` with the agent config. Once started, you can send commands that get executed in that process.
+
+```elixir
+alias Jido.Agent.Runtime
+
+{:ok, _} = Phoenix.PubSub.start_link(name: MyPubSub)
+
+# 1) Construct a MathWhiz agent struct
+agent = MathWhiz.new("my-math-agent")
+
+# 2) Start the Agent Runtime process, passing :pubsub => MyPubsub
+{:ok, _pid} = Runtime.start_link(
+  agent: agent,
+  pubsub: MyPubSub,
+  topic: "jido.agent.math_whiz"
+)
+
+# 3) Interact with the agent process using cmd/4
+#    Example: Add 10 to the agent's current_value
+{:ok, state_after_add} = Runtime.cmd("my-math-agent", MyArithmeticActions.Add, %{value: 42, amount: 10})
+
+IO.inspect(state_after_add, label: "State after add")
+
+# 4) Another example: Square the result
+{:ok, state_after_square} = Runtime.cmd("my-math-agent", MyArithmeticActions.Square, %{value: 52})
+IO.inspect(state_after_square, label: "State after square")
+
+```
+
+### Explanation
+
+1. Create an agent struct with `MathWhiz.new("my-math-agent")`.
+2. Start it with `Runtime.start_link(agent: agent, ...)`. The agent is now running in a process supervised by Jido.
+3. Send commands (Actions) via `Runtime.cmd(<agent_id_or_pid>, <action_module>, params)`.
+
+You can keep track of the current_value in the agent’s internal state if you want. In the simple example above, we pass value: 42, ignoring the default `:current_value` in the schema. But if you want, you can unify those by passing or updating the agent state more explicitly.
+
+## That’s it!
+
+You now have a **MathWhiz** agent running in a Jido runtime, capable of executing any of the arithmetic Actions we registered. Extend this approach for more complex domains—planning sequences of multiple Actions, chaining them with Jido.Workflow.Chain, or letting the agent handle asynchronous tasks.
+
+For a more in-depth multi-node scenario, you’d place this agent under a supervisor in an OTP application, register it with Phoenix PubSub for event broadcasting, and so forth. But even at this stage, you have a solid “getting started” example to explore the Jido framework’s approach to composable Actions and stateful Agents.

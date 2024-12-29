@@ -1,73 +1,30 @@
-# defmodule Jido.Runner.Result do
-#   @moduledoc """
-#   Represents the result of executing a sequence of workflow actions.
-#   Tracks the state transitions and any errors that occurred during execution.
-#   """
+defmodule Jido.Runner.Result do
+  @moduledoc """
+  Represents the result of executing one or more instructions.
+  Contains the final state and any directives for the agent.
 
-#   use TypedStruct
+  The Result struct tracks:
+  - Initial and final state of the execution
+  - Status and any errors that occurred
+  - Instructions that were executed
+  - Any directives generated during execution
+  - Remaining pending instructions
 
-#   typedstruct do
-#     @typedoc "Result of executing a workflow"
-#     field(:initial_state, map(), enforce: true)
-#     field(:final_state, map())
-#     field(:steps, [{atom(), map()}], default: [])
-#     field(:errors, [Jido.Error.t()], default: [])
-#     field(:status, :pending | :running | :completed | :failed, default: :pending)
-#     field(:started_at, DateTime.t())
-#     field(:completed_at, DateTime.t())
-#   end
+  This is used by both the Simple and Chain runners to maintain execution state
+  and return results in a consistent format.
+  """
+  use TypedStruct
+  alias Jido.Error
 
-#   @doc """
-#   Creates a new Result struct with the given initial state.
-#   """
-#   @spec new(map()) :: t()
-#   def new(initial_state) do
-#     %__MODULE__{
-#       initial_state: initial_state,
-#       started_at: DateTime.utc_now()
-#     }
-#   end
-
-#   @doc """
-#   Records a successful step execution, updating the final state.
-#   """
-#   @spec record_step(t(), atom(), map()) :: t()
-#   def record_step(%__MODULE__{} = result, action, state) do
-#     %{result | steps: result.steps ++ [{action, state}], final_state: state, status: :running}
-#   end
-
-#   @doc """
-#   Records an error that occurred during execution.
-#   """
-#   @spec record_error(t(), Jido.Error.t()) :: t()
-#   def record_error(%__MODULE__{} = result, error) do
-#     %{
-#       result
-#       | errors: result.errors ++ [error],
-#         status: :failed,
-#         completed_at: DateTime.utc_now()
-#     }
-#   end
-
-#   @doc """
-#   Marks the result as completed successfully.
-#   """
-#   @spec complete(t()) :: t()
-#   def complete(%__MODULE__{} = result) do
-#     %{result | status: :completed, completed_at: DateTime.utc_now()}
-#   end
-
-#   @doc """
-#   Returns whether the execution completed successfully.
-#   """
-#   @spec successful?(t()) :: boolean()
-#   def successful?(%__MODULE__{status: :completed}), do: true
-#   def successful?(_), do: false
-
-#   @doc """
-#   Returns whether the execution failed.
-#   """
-#   @spec failed?(t()) :: boolean()
-#   def failed?(%__MODULE__{status: :failed}), do: true
-#   def failed?(_), do: false
-# end
+  typedstruct enforce: true do
+    field(:id, String.t(), default: Jido.Util.generate_id())
+    field(:initial_state, map(), default: %{})
+    field(:result_state, map(), default: %{})
+    field(:status, atom(), default: :ok)
+    field(:error, Error.t(), default: nil)
+    field(:instructions, list(), default: [])
+    field(:directives, list(), default: [])
+    field(:syscalls, list(), default: [])
+    field(:pending_instructions, :queue.queue(), default: :queue.new())
+  end
+end

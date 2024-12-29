@@ -1,7 +1,7 @@
 defmodule Jido.MixProject do
   use Mix.Project
 
-  @version "1.0.0-rc.4"
+  @version "1.0.0-rc.5"
 
   def project do
     [
@@ -20,7 +20,17 @@ defmodule Jido.MixProject do
       source_url: "https://github.com/agentjido/jido",
       homepage_url: "https://github.com/agentjido/jido",
       package: package(),
-      docs: docs()
+      docs: docs(),
+
+      # Coverage
+      test_coverage: [tool: ExCoveralls],
+      preferred_cli_env: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test,
+        "coveralls.cobertura": :test
+      ]
     ]
   end
 
@@ -64,12 +74,12 @@ defmodule Jido.MixProject do
           Jido.Workflow.Closure,
           Jido.Workflow.Tool
         ],
-        Agent_Runtime: [
-          Jido.Agent.Runtime,
+        Agent_Server: [
+          Jido.Agent.Server,
           Jido.Agent.Supervisor
         ],
         Example_Actions: [
-          Jido.Actions.Arithmetic,
+          Jido.Actions.Calculator,
           Jido.Actions.Basic,
           Jido.Actions.Files,
           Jido.Actions.Simplebot
@@ -77,7 +87,7 @@ defmodule Jido.MixProject do
         Utilities: [
           Jido.Util,
           Jido.Error,
-          Jido.Agent.Runtime.State
+          Jido.Agent.Server.State
         ]
       ]
     ]
@@ -94,7 +104,6 @@ defmodule Jido.MixProject do
     ]
   end
 
-  # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
       {:deep_merge, "~> 1.0"},
@@ -110,9 +119,12 @@ defmodule Jido.MixProject do
 
       # Testing
       {:credo, "~> 1.7"},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
-      {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:doctor, "~> 0.22.0", only: [:dev, :test]},
+      {:dialyxir, "~> 1.4", only: [:dev], server: false},
+      {:ex_doc, "~> 0.34", only: :dev, server: false},
+      {:excoveralls, "~> 0.18.3", only: [:dev, :test]},
+      {:ex_dbug, "~> 1.1"},
+      {:mix_test_watch, "~> 1.0", only: [:dev, :test], server: false},
       {:mimic, "~> 1.7", only: [:dev, :test]},
       {:mock, "~> 0.3.8", only: [:dev, :test]},
       {:stream_data, "~> 1.1", only: [:dev, :test]}

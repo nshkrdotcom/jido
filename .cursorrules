@@ -275,7 +275,7 @@ defmodule YourLibrary.Application do
 
   def start(_type, _args) do
     children = [
-      {YourLibrary.Runtime, []},
+      {YourLibrary.Server, []},
       {YourLibrary.Cache, []}
     ]
 
@@ -376,7 +376,7 @@ end
 
 ## Configuration
 
-### Runtime Configuration
+### Server Configuration
 
 ```elixir
 # In config/config.exs of consuming application
@@ -386,7 +386,7 @@ config :your_library,
 ```
 
 - Use application configuration
-- Allow runtime configuration
+- Allow server configuration
 - Provide sensible defaults
 - Document all configuration options
 

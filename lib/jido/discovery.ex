@@ -5,13 +5,13 @@ defmodule Jido.Discovery do
   This module caches discovered components using :persistent_term for efficient lookups.
   The cache is initialized at application startup and can be manually refreshed if needed.
   """
-  use Jido.Util, debug_enabled: false
+  use ExDbug, enabled: false
   require Logger
 
   @cache_key :__jido_discovery_cache__
   @cache_version "1.0"
 
-  @type component_type :: :action | :sensor | :command | :agent
+  @type component_type :: :action | :sensor | :agent
   @type component_metadata :: %{
           module: module(),
           name: String.t(),
@@ -26,7 +26,6 @@ defmodule Jido.Discovery do
           last_updated: DateTime.t(),
           actions: [component_metadata()],
           sensors: [component_metadata()],
-          # commands: [component_metadata()],
           agents: [component_metadata()]
         }
 
@@ -40,7 +39,7 @@ defmodule Jido.Discovery do
   """
   @spec init() :: :ok | {:error, term()}
   def init do
-    debug("Initializing discovery cache")
+    dbug("Initializing discovery cache")
 
     try do
       cache = build_cache()
@@ -64,7 +63,7 @@ defmodule Jido.Discovery do
   """
   @spec refresh() :: :ok | {:error, term()}
   def refresh do
-    debug("Refreshing discovery cache")
+    dbug("Refreshing discovery cache")
 
     try do
       cache = build_cache()
@@ -93,9 +92,6 @@ defmodule Jido.Discovery do
       error -> error
     end
   end
-
-  @doc false
-  def __get_cache__, do: get_cache()
 
   @doc """
   Retrieves an Action by its slug.
@@ -184,35 +180,6 @@ defmodule Jido.Discovery do
   end
 
   @doc """
-  Retrieves a Command by its slug.
-
-  ## Parameters
-
-  - `slug`: A string representing the unique identifier of the Command.
-
-  ## Returns
-
-  The Command metadata if found, otherwise `nil`.
-
-  ## Examples
-
-      iex> Jido.get_command_by_slug("jkl012mn")
-      %{module: MyApp.SomeCommand, name: "some_command", description: "Executes something", slug: "jkl012mn"}
-
-      iex> Jido.get_command_by_slug("nonexistent")
-      nil
-
-  """
-  @spec get_command_by_slug(String.t()) :: component_metadata() | nil
-  def get_command_by_slug(slug) do
-    with {:ok, cache} <- get_cache() do
-      Enum.find(cache.commands, fn command -> command.slug == slug end)
-    else
-      _ -> nil
-    end
-  end
-
-  @doc """
   Lists all Actions with optional filtering and pagination.
 
   ## Parameters
@@ -237,7 +204,7 @@ defmodule Jido.Discovery do
   """
   @spec list_actions(keyword()) :: [component_metadata()]
   def list_actions(opts \\ []) do
-    debug("Listing actions with options", opts: opts)
+    dbug("Listing actions with options", opts: opts)
 
     with {:ok, cache} <- get_cache() do
       filter_and_paginate(cache.actions, opts)
@@ -271,40 +238,10 @@ defmodule Jido.Discovery do
   """
   @spec list_sensors(keyword()) :: [component_metadata()]
   def list_sensors(opts \\ []) do
-    debug("Listing sensors with options", opts: opts)
+    dbug("Listing sensors with options", opts: opts)
 
     with {:ok, cache} <- get_cache() do
       filter_and_paginate(cache.sensors, opts)
-    else
-      _ -> []
-    end
-  end
-
-  @doc """
-  Lists all Commands with optional filtering and pagination.
-
-  ## Parameters
-
-  - `opts`: A keyword list of options for filtering and pagination. Available options:
-    - `:limit`: Maximum number of results to return.
-    - `:offset`: Number of results to skip before starting to return.
-
-  ## Returns
-
-  A list of Command metadata.
-
-  ## Examples
-
-      iex> Jido.list_commands(limit: 10, offset: 5, category: :business)
-      [%{module: MyApp.SomeCommand, name: "some_command", description: "Represents a command", slug: "ghi789jk", category: :business}]
-
-  """
-  @spec list_commands(keyword()) :: [component_metadata()]
-  def list_commands(opts \\ []) do
-    debug("Listing commands with options", opts: opts)
-
-    with {:ok, cache} <- get_cache() do
-      filter_and_paginate(cache.commands, opts)
     else
       _ -> []
     end
@@ -335,7 +272,7 @@ defmodule Jido.Discovery do
   """
   @spec list_agents(keyword()) :: [component_metadata()]
   def list_agents(opts \\ []) do
-    debug("Listing agents with options", opts: opts)
+    dbug("Listing agents with options", opts: opts)
 
     with {:ok, cache} <- get_cache() do
       filter_and_paginate(cache.agents, opts)
@@ -344,8 +281,12 @@ defmodule Jido.Discovery do
     end
   end
 
-  # Private functions
+  @doc false
+  # Helper for testing use
 
+  def __get_cache__, do: get_cache()
+
+  # Private functions
   defp get_cache do
     try do
       case :persistent_term.get(@cache_key) do
@@ -369,7 +310,7 @@ defmodule Jido.Discovery do
   end
 
   defp discover_components(metadata_function) do
-    debug("Discovering components", metadata_function: metadata_function)
+    dbug("Discovering components", metadata_function: metadata_function)
 
     all_applications()
     |> Enum.flat_map(&all_modules/1)
@@ -388,7 +329,7 @@ defmodule Jido.Discovery do
       metadata =
         case metadata_function do
           :__command_metadata__ ->
-            debug("Processing command metadata", metadata: metadata)
+            dbug("Processing command metadata", metadata: metadata)
             # Extract command names, handling both keyword lists and lists with bare atoms
             command_names =
               metadata
@@ -398,7 +339,7 @@ defmodule Jido.Discovery do
                 {name, _opts} when is_tuple(name) -> elem(name, 0)
               end)
 
-            debug("Extracted command names", names: command_names)
+            dbug("Extracted command names", names: command_names)
 
             # Convert to map, handling both keyword lists and lists with bare atoms
             commands_map =

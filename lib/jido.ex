@@ -27,8 +27,6 @@ defmodule Jido do
       {:ok, topic} = Jido.get_agent_topic("agent-id")
       Phoenix.PubSub.subscribe(MyApp.PubSub, topic)
   """
-  use Jido.Util, debug_enabled: false
-
   @type component_metadata :: %{
           module: module(),
           name: String.t(),
@@ -172,7 +170,7 @@ defmodule Jido do
   def cmd({:ok, pid}, action, args, opts), do: cmd(pid, action, args, opts)
 
   def cmd(pid, action, args, opts) when is_pid(pid) do
-    Jido.Agent.Runtime.cmd(pid, action, args, opts)
+    Jido.Agent.Server.cmd(pid, action, args, opts)
   end
 
   @doc """
@@ -200,7 +198,7 @@ defmodule Jido do
   def get_agent_topic({:ok, pid}), do: get_agent_topic(pid)
 
   def get_agent_topic(pid) when is_pid(pid) do
-    Jido.Agent.Runtime.get_topic(pid)
+    Jido.Agent.Server.get_topic(pid)
   end
 
   def get_agent_topic(id) when is_binary(id) or is_atom(id) do
@@ -231,7 +229,7 @@ defmodule Jido do
   def get_agent_status({:ok, pid}), do: get_agent_status(pid)
 
   def get_agent_status(pid) when is_pid(pid) do
-    Jido.Agent.Runtime.get_status(pid)
+    Jido.Agent.Server.get_status(pid)
   end
 
   def get_agent_status(id) when is_binary(id) or is_atom(id) do
@@ -262,7 +260,7 @@ defmodule Jido do
   def get_agent_supervisor({:ok, pid}), do: get_agent_supervisor(pid)
 
   def get_agent_supervisor(pid) when is_pid(pid) do
-    Jido.Agent.Runtime.get_supervisor(pid)
+    Jido.Agent.Server.get_supervisor(pid)
   end
 
   def get_agent_supervisor(id) when is_binary(id) or is_atom(id) do
@@ -287,13 +285,13 @@ defmodule Jido do
   ## Examples
 
       iex> {:ok, state} = Jido.get_agent_state("my-agent")
-      {:ok, %Jido.Agent.Runtime.State{...}}
+      {:ok, %Jido.Agent.Server.State{...}}
   """
   @spec get_agent_state(pid() | {:ok, pid()} | String.t()) :: {:ok, term()} | {:error, term()}
   def get_agent_state({:ok, pid}), do: get_agent_state(pid)
 
   def get_agent_state(pid) when is_pid(pid) do
-    Jido.Agent.Runtime.get_state(pid)
+    Jido.Agent.Server.get_state(pid)
   end
 
   def get_agent_state(id) when is_binary(id) or is_atom(id) do
@@ -326,7 +324,7 @@ defmodule Jido do
           {:ok, pid()} | {:error, term()}
   def clone_agent(source_id, new_id, opts \\ []) do
     with {:ok, source_pid} <- get_agent(source_id),
-         {:ok, source_state} <- Jido.Agent.Runtime.get_state(source_pid) do
+         {:ok, source_state} <- Jido.Agent.Server.get_state(source_pid) do
       # Create new agent with updated ID but same config
       agent = %{source_state.agent | id: new_id}
 
@@ -336,12 +334,12 @@ defmodule Jido do
         |> Keyword.merge(
           agent: agent,
           pubsub: source_state.pubsub,
-          # Let runtime generate new topic
+          # Let server generate new topic
           topic: nil,
           max_queue_size: source_state.max_queue_size
         )
 
-      Jido.Agent.Runtime.start_link(new_opts)
+      Jido.Agent.Server.start_link(new_opts)
     end
   end
 
@@ -387,10 +385,8 @@ defmodule Jido do
   defdelegate list_actions(opts \\ []), to: Jido.Discovery
   defdelegate list_sensors(opts \\ []), to: Jido.Discovery
   defdelegate list_agents(opts \\ []), to: Jido.Discovery
-  defdelegate list_commands(opts \\ []), to: Jido.Discovery
 
   defdelegate get_action_by_slug(slug), to: Jido.Discovery
   defdelegate get_sensor_by_slug(slug), to: Jido.Discovery
   defdelegate get_agent_by_slug(slug), to: Jido.Discovery
-  defdelegate get_command_by_slug(slug), to: Jido.Discovery
 end

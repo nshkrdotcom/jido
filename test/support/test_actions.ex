@@ -27,6 +27,7 @@ defmodule JidoTest.TestActions do
         value: [type: :integer, required: true]
       ]
 
+    @dialyzer {:nowarn_function, run: 2}
     def run(%{value: value}, _context) do
       %{value: value}
     end
@@ -212,6 +213,7 @@ defmodule JidoTest.TestActions do
       schema: []
 
     @impl true
+    @dialyzer {:nowarn_function, run: 2}
     def run(_params, _context) do
       receive do
         :never -> :ok
@@ -229,6 +231,60 @@ defmodule JidoTest.TestActions do
       for _ <- 1..count do
         spawn(fn -> Process.sleep(10_000) end)
       end
+
+      {:ok, %{result: "Multi-process workflow completed"}}
+    end
+  end
+
+  defmodule TaskAction do
+    @moduledoc false
+    use Action,
+      name: "task_action",
+      description: "Runs multiple concurrent tasks"
+
+    def run(_, context), do: run(%{count: 1, delay: 250}, context)
+
+    def run(%{count: count, delay: delay, link_to_group?: link_to_group?}, context) do
+      task_group = Map.get(context, :__task_group__)
+
+      tasks =
+        for _ <- 1..count do
+          Task.Supervisor.async_nolink(Jido.Workflow.TaskSupervisor, fn ->
+            # Link to task group for cleanup
+            if link_to_group? do
+              Process.group_leader(self(), task_group)
+            end
+
+            Process.sleep(delay)
+            {:ok, %{result: "Task completed"}}
+          end)
+        end
+
+      try do
+        results = Task.await_many(tasks, delay * 2)
+        {:ok, %{results: results}}
+      catch
+        :exit, _ ->
+          {:error, "Tasks failed to complete"}
+      end
+    end
+  end
+
+  defmodule NakedTaskAction do
+    @moduledoc false
+    use Action,
+      name: "naked_task_action",
+      description: "Spawns tasks without linking into OTP"
+
+    def run(_, context), do: run(%{count: 1}, context)
+
+    def run(%{count: count}, _context) do
+      _pids =
+        for _ <- 1..count do
+          spawn(fn ->
+            Process.sleep(:infinity)
+          end)
+        end
 
       {:ok, %{result: "Multi-process workflow completed"}}
     end
@@ -549,6 +605,63 @@ defmodule JidoTest.TestActions do
         |> Enum.map(fn {:ok, result} -> result end)
 
       {:ok, %{results: results}}
+    end
+  end
+
+  defmodule EnqueueAction do
+    @moduledoc false
+    use Action,
+      name: "enqueue_action",
+      description: "Enqueues another action based on params",
+      schema: [
+        action: [type: :atom, required: true],
+        params: [type: :map, default: %{}]
+      ]
+
+    def run(%{action: action, params: params}, _context) do
+      directive = %Jido.Agent.Directive.EnqueueDirective{
+        action: action,
+        params: params,
+        context: %{}
+      }
+
+      {:ok, directive}
+    end
+  end
+
+  defmodule RegisterAction do
+    @moduledoc false
+    use Action,
+      name: "register_action",
+      description: "Registers a new action module",
+      schema: [
+        action_module: [type: :atom, required: true]
+      ]
+
+    def run(%{action_module: action_module}, _context) do
+      directive = %Jido.Agent.Directive.RegisterActionDirective{
+        action_module: action_module
+      }
+
+      {:ok, directive}
+    end
+  end
+
+  defmodule DeregisterAction do
+    @moduledoc false
+    use Action,
+      name: "deregister_action",
+      description: "Deregisters an existing action module",
+      schema: [
+        action_module: [type: :atom, required: true]
+      ]
+
+    def run(%{action_module: action_module}, _context) do
+      directive = %Jido.Agent.Directive.DeregisterActionDirective{
+        action_module: action_module
+      }
+
+      {:ok, directive}
     end
   end
 end

@@ -1,13 +1,13 @@
 defmodule Jido.Signal do
   @moduledoc """
   Defines the structure and behavior of a Signal in the Jido system.
-  This is a local implementation of the CloudEvents specification v1.0.
+  Implements CloudEvents specification v1.0.2 with Jido-specific extensions.
   """
 
   use TypedStruct
 
   typedstruct do
-    field(:specversion, String.t(), default: "1.0")
+    field(:specversion, String.t(), default: "1.0.2")
     field(:id, String.t(), enforce: true)
     field(:source, String.t(), enforce: true)
     field(:type, String.t(), enforce: true)
@@ -16,7 +16,9 @@ defmodule Jido.Signal do
     field(:datacontenttype, String.t())
     field(:dataschema, String.t())
     field(:data, term())
-    field(:extensions, %{optional(String.t()) => term()}, default: %{})
+    # Jido-specific fields
+    field(:jidoaction, [{atom(), map()}])
+    field(:jidoopts, map())
   end
 
   @doc """
@@ -39,7 +41,7 @@ defmodule Jido.Signal do
   @spec new(map()) :: {:ok, t()} | {:error, String.t()}
   def new(attrs) when is_map(attrs) do
     defaults = %{
-      "specversion" => "1.0",
+      "specversion" => "1.0.2",
       "id" => Jido.Util.generate_id(),
       "time" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
@@ -69,56 +71,39 @@ defmodule Jido.Signal do
   """
   @spec from_map(map()) :: {:ok, t()} | {:error, String.t()}
   def from_map(map) when is_map(map) do
-    {event_data, ctx_attrs} = Map.pop(map, "data")
-
-    {_, extension_attrs} =
-      Map.split(ctx_attrs, [
-        "specversion",
-        "type",
-        "source",
-        "id",
-        "subject",
-        "time",
-        "datacontenttype",
-        "dataschema",
-        "data"
-      ])
-
-    with :ok <- parse_specversion(ctx_attrs),
-         {:ok, type} <- parse_type(ctx_attrs),
-         {:ok, source} <- parse_source(ctx_attrs),
-         {:ok, id} <- parse_id(ctx_attrs),
-         {:ok, subject} <- parse_subject(ctx_attrs),
-         {:ok, time} <- parse_time(ctx_attrs),
-         {:ok, datacontenttype} <- parse_datacontenttype(ctx_attrs),
-         {:ok, dataschema} <- parse_dataschema(ctx_attrs),
-         {:ok, data} <- parse_data(event_data),
-         {:ok, extensions} <- validated_extensions_attributes(extension_attrs) do
-      datacontenttype =
-        if is_nil(datacontenttype) and not is_nil(data),
-          do: "application/json",
-          else: datacontenttype
-
+    with :ok <- parse_specversion(map),
+         {:ok, type} <- parse_type(map),
+         {:ok, source} <- parse_source(map),
+         {:ok, id} <- parse_id(map),
+         {:ok, subject} <- parse_subject(map),
+         {:ok, time} <- parse_time(map),
+         {:ok, datacontenttype} <- parse_datacontenttype(map),
+         {:ok, dataschema} <- parse_dataschema(map),
+         {:ok, data} <- parse_data(map["data"]),
+         {:ok, jidoaction} <- parse_jidoaction(map["jidoaction"]),
+         {:ok, jidoopts} <- parse_jidoopts(map["jidoopts"]) do
       event = %__MODULE__{
+        specversion: "1.0.2",
         type: type,
         source: source,
         id: id,
         subject: subject,
         time: time,
-        datacontenttype: datacontenttype,
+        datacontenttype: datacontenttype || if(data, do: "application/json"),
         dataschema: dataschema,
         data: data,
-        extensions: extensions
+        jidoaction: jidoaction,
+        jidoopts: jidoopts
       }
 
       {:ok, event}
     else
-      {:error, parse_error} ->
-        {:error, "parse error: #{parse_error}"}
+      {:error, reason} -> {:error, "parse error: #{reason}"}
     end
   end
 
-  defp parse_specversion(%{"specversion" => "1.0"}), do: :ok
+  # Parser functions for standard CloudEvents fields
+  defp parse_specversion(%{"specversion" => "1.0.2"}), do: :ok
   defp parse_specversion(%{"specversion" => x}), do: {:error, "unexpected specversion #{x}"}
   defp parse_specversion(_), do: {:error, "missing specversion"}
 
@@ -153,34 +138,20 @@ defmodule Jido.Signal do
   defp parse_data(""), do: {:error, "data field given but empty"}
   defp parse_data(data), do: {:ok, data}
 
-  defp try_decode(key, val) when is_binary(val) do
-    case Jason.decode(val) do
-      {:ok, val_map} -> {key, val_map}
-      _ -> {key, val}
-    end
+  defp parse_jidoaction(nil), do: {:ok, nil}
+
+  defp parse_jidoaction(actions) when is_list(actions) do
+    if Enum.all?(actions, &valid_action?/1),
+      do: {:ok, actions},
+      else: {:error, "invalid action format"}
   end
 
-  defp try_decode(key, val), do: {key, val}
+  defp parse_jidoaction(_), do: {:error, "jidoaction must be a list of action tuples"}
 
-  defp validated_extensions_attributes(extension_attrs) do
-    invalid =
-      extension_attrs
-      |> Map.keys()
-      |> Enum.map(fn key -> {key, valid_extension_attribute_name(key)} end)
-      |> Enum.filter(fn {_, valid?} -> not valid? end)
+  defp parse_jidoopts(nil), do: {:ok, %{}}
+  defp parse_jidoopts(opts) when is_map(opts), do: {:ok, opts}
+  defp parse_jidoopts(_), do: {:error, "jidoopts must be a map"}
 
-    case invalid do
-      [] ->
-        extensions = Map.new(extension_attrs, fn {key, val} -> try_decode(key, val) end)
-        {:ok, extensions}
-
-      _ ->
-        {:error,
-         "invalid extension attributes: #{Enum.map(invalid, fn {key, _} -> inspect(key) end)}"}
-    end
-  end
-
-  defp valid_extension_attribute_name(name) do
-    name =~ ~r/^[a-z0-9]+$/
-  end
+  defp valid_action?({action, params}) when is_atom(action) and is_map(params), do: true
+  defp valid_action?(_), do: false
 end

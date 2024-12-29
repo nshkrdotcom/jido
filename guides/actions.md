@@ -257,7 +257,7 @@ end
 
 Common error types:
 - `:validation_error` - Invalid parameters
-- `:execution_error` - Runtime execution failure
+- `:execution_error` - Server execution failure
 - `:timeout` - Workflow exceeded time limit
 - `:config_error` - Invalid configuration
 

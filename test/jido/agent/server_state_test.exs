@@ -1,8 +1,8 @@
-defmodule Jido.Agent.Runtime.StateTest do
+defmodule Jido.Agent.Server.StateTest do
   use ExUnit.Case, async: true
-  alias Jido.Agent.Runtime.State
-  alias Jido.Agent.Runtime.Signal, as: RuntimeSignal
-  alias JidoTest.TestAgents.SimpleAgent
+  alias Jido.Agent.Server.State
+  alias Jido.Agent.Server.Signal, as: ServerSignal
+  alias JidoTest.TestAgents.BasicAgent
   alias Jido.Signal
 
   setup do
@@ -12,21 +12,33 @@ defmodule Jido.Agent.Runtime.StateTest do
 
   describe "new state" do
     test "creates state with required fields" do
-      agent = SimpleAgent.new("test")
+      agent = BasicAgent.new("test")
+      state = %State{agent: agent}
+
+      assert state.agent == agent
+      assert state.pubsub == nil
+      assert state.topic == nil
+      assert state.status == :idle
+      assert :queue.is_queue(state.pending_signals)
+      assert :queue.is_empty(state.pending_signals)
+    end
+
+    test "creates state with optional pubsub and topic" do
+      agent = BasicAgent.new("test")
       state = %State{agent: agent, pubsub: TestPubSub, topic: "test"}
 
       assert state.agent == agent
       assert state.pubsub == TestPubSub
       assert state.topic == "test"
       assert state.status == :idle
-      assert :queue.is_queue(state.pending)
-      assert :queue.is_empty(state.pending)
+      assert :queue.is_queue(state.pending_signals)
+      assert :queue.is_empty(state.pending_signals)
     end
   end
 
   describe "transition/2" do
     setup do
-      agent = SimpleAgent.new("test")
+      agent = BasicAgent.new("test")
       state = %State{agent: agent, pubsub: TestPubSub, topic: "test"}
       :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
       {:ok, state: state}
@@ -35,7 +47,7 @@ defmodule Jido.Agent.Runtime.StateTest do
     test "allows valid transitions and emits signals", %{state: state} do
       # initializing -> idle
       state = %{state | status: :initializing}
-      transition_succeeded = RuntimeSignal.transition_succeeded()
+      transition_succeeded = ServerSignal.transition_succeeded()
       assert {:ok, %State{status: :idle}} = State.transition(state, :idle)
 
       assert_receive %Signal{
@@ -83,7 +95,7 @@ defmodule Jido.Agent.Runtime.StateTest do
     test "rejects invalid transitions and emits failure signals", %{state: state} do
       # Can't go from idle to paused
       state = %{state | status: :idle}
-      transition_failed = RuntimeSignal.transition_failed()
+      transition_failed = ServerSignal.transition_failed()
       assert {:error, {:invalid_transition, :idle, :paused}} = State.transition(state, :paused)
 
       assert_receive %Signal{
@@ -106,7 +118,7 @@ defmodule Jido.Agent.Runtime.StateTest do
 
   describe "enqueue/2" do
     setup do
-      agent = SimpleAgent.new("test")
+      agent = BasicAgent.new("test")
       state = %State{agent: agent, pubsub: TestPubSub, topic: "test"}
       :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
       {:ok, state: state}
@@ -116,8 +128,8 @@ defmodule Jido.Agent.Runtime.StateTest do
       signal = %Signal{type: "test.signal", source: "test", id: "test-1"}
       {:ok, new_state} = State.enqueue(state, signal)
 
-      assert :queue.len(new_state.pending) == 1
-      {{:value, queued_signal}, _} = :queue.out(new_state.pending)
+      assert :queue.len(new_state.pending_signals) == 1
+      {{:value, queued_signal}, _} = :queue.out(new_state.pending_signals)
       assert queued_signal == signal
     end
 
@@ -125,13 +137,13 @@ defmodule Jido.Agent.Runtime.StateTest do
       state = %{state | max_queue_size: 1}
       signal1 = %Signal{type: "test.signal.1", source: "test", id: "test-1"}
       signal2 = %Signal{type: "test.signal.2", source: "test", id: "test-2"}
-      queue_overflow = RuntimeSignal.queue_overflow()
+      queue_overflow = ServerSignal.queue_overflow()
 
       {:ok, state_with_one} = State.enqueue(state, signal1)
-      assert :queue.len(state_with_one.pending) == 1
+      assert :queue.len(state_with_one.pending_signals) == 1
 
       assert {:error, :queue_overflow} = State.enqueue(state_with_one, signal2)
-      assert :queue.len(state_with_one.pending) == 1
+      assert :queue.len(state_with_one.pending_signals) == 1
 
       assert_receive %Signal{
         type: ^queue_overflow,
@@ -142,7 +154,7 @@ defmodule Jido.Agent.Runtime.StateTest do
 
   describe "dequeue/1" do
     setup do
-      agent = SimpleAgent.new("test")
+      agent = BasicAgent.new("test")
       state = %State{agent: agent, pubsub: TestPubSub, topic: "test"}
       {:ok, state: state}
     end
@@ -153,7 +165,7 @@ defmodule Jido.Agent.Runtime.StateTest do
 
       assert {:ok, dequeued_signal, new_state} = State.dequeue(state_with_signal)
       assert dequeued_signal == signal
-      assert :queue.is_empty(new_state.pending)
+      assert :queue.is_empty(new_state.pending_signals)
     end
 
     test "returns error when queue is empty", %{state: state} do
@@ -181,7 +193,7 @@ defmodule Jido.Agent.Runtime.StateTest do
 
   describe "clear_queue/1" do
     setup do
-      agent = SimpleAgent.new("test")
+      agent = BasicAgent.new("test")
       state = %State{agent: agent, pubsub: TestPubSub, topic: "test"}
       :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
       {:ok, state: state}
@@ -190,22 +202,22 @@ defmodule Jido.Agent.Runtime.StateTest do
     test "clears all signals from the queue and emits signal", %{state: state} do
       signal1 = %Signal{type: "test.signal.1", source: "test", id: "test-1"}
       signal2 = %Signal{type: "test.signal.2", source: "test", id: "test-2"}
-      queue_cleared = RuntimeSignal.queue_cleared()
+      queue_cleared = ServerSignal.queue_cleared()
 
       {:ok, state} = State.enqueue(state, signal1)
       {:ok, state} = State.enqueue(state, signal2)
-      assert :queue.len(state.pending) == 2
+      assert :queue.len(state.pending_signals) == 2
 
       {:ok, cleared_state} = State.clear_queue(state)
-      assert :queue.is_empty(cleared_state.pending)
+      assert :queue.is_empty(cleared_state.pending_signals)
       assert_receive %Signal{type: ^queue_cleared, data: %{queue_size: 2}}
     end
 
     test "clearing an empty queue emits signal with zero size", %{state: state} do
-      queue_cleared = RuntimeSignal.queue_cleared()
-      assert :queue.is_empty(state.pending)
+      queue_cleared = ServerSignal.queue_cleared()
+      assert :queue.is_empty(state.pending_signals)
       {:ok, cleared_state} = State.clear_queue(state)
-      assert :queue.is_empty(cleared_state.pending)
+      assert :queue.is_empty(cleared_state.pending_signals)
       assert_receive %Signal{type: ^queue_cleared, data: %{queue_size: 0}}
     end
   end

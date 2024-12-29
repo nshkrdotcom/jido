@@ -1,30 +1,30 @@
-defmodule Jido.Agent.Runtime.Process do
+defmodule Jido.Agent.Server.Process do
   @moduledoc """
-  Helper module for managing child processes under the Runtime's DynamicSupervisor.
+  Helper module for managing child processes under the Server's DynamicSupervisor.
   """
 
-  use Jido.Util, debug_enabled: false
-  alias Jido.Agent.Runtime.State, as: RuntimeState
-  alias Jido.Agent.Runtime.Signal, as: RuntimeSignal
-  alias Jido.Agent.Runtime.PubSub
+  use ExDbug, enabled: false
+  alias Jido.Agent.Server.State, as: ServerState
+  alias Jido.Agent.Server.Signal, as: ServerSignal
+  alias Jido.Agent.Server.PubSub
 
   @doc """
-  Starts a child process under the Runtime's DynamicSupervisor.
+  Starts a child process under the Server's DynamicSupervisor.
 
   Returns {:ok, pid} if successful, {:error, reason} on failure.
   """
-  @spec start(%RuntimeState{}, map()) :: {:ok, pid()} | {:error, term()}
-  def start(%RuntimeState{child_supervisor: supervisor} = state, child_spec)
+  @spec start(%ServerState{}, map()) :: {:ok, pid()} | {:error, term()}
+  def start(%ServerState{child_supervisor: supervisor} = state, child_spec)
       when is_pid(supervisor) do
     case DynamicSupervisor.start_child(supervisor, child_spec) do
       {:ok, pid} = result ->
-        debug("Started child process",
+        dbug("Started child process",
           agent_id: state.agent.id,
           child_pid: inspect(pid),
           child_spec: inspect(child_spec)
         )
 
-        PubSub.emit(state, RuntimeSignal.process_started(), %{
+        PubSub.emit_event(state, ServerSignal.process_started(), %{
           child_pid: pid,
           child_spec: child_spec
         })
@@ -32,13 +32,13 @@ defmodule Jido.Agent.Runtime.Process do
         result
 
       {:error, reason} = error ->
-        debug("Failed to start child process",
+        dbug("Failed to start child process",
           agent_id: state.agent.id,
           reason: inspect(reason),
           child_spec: inspect(child_spec)
         )
 
-        PubSub.emit(state, RuntimeSignal.process_start_failed(), %{
+        PubSub.emit_event(state, ServerSignal.process_start_failed(), %{
           reason: reason,
           child_spec: child_spec
         })
@@ -48,38 +48,38 @@ defmodule Jido.Agent.Runtime.Process do
   end
 
   @doc """
-  Lists all child processes currently running under the Runtime's DynamicSupervisor.
+  Lists all child processes currently running under the Server's DynamicSupervisor.
 
   Returns list of child specifications.
   """
-  @spec list(%RuntimeState{}) :: [{:undefined, pid(), :worker, [module()]}]
-  def list(%RuntimeState{child_supervisor: supervisor}) when is_pid(supervisor) do
+  @spec list(%ServerState{}) :: [{:undefined, pid(), :worker, [module()]}]
+  def list(%ServerState{child_supervisor: supervisor}) when is_pid(supervisor) do
     DynamicSupervisor.which_children(supervisor)
   end
 
   @doc """
-  Terminates a specific child process under the Runtime's DynamicSupervisor.
+  Terminates a specific child process under the Server's DynamicSupervisor.
 
   Returns :ok if successful, {:error, reason} on failure.
   """
-  @spec terminate(%RuntimeState{}, pid()) :: :ok | {:error, :not_found}
-  def terminate(%RuntimeState{child_supervisor: supervisor} = state, child_pid)
+  @spec terminate(%ServerState{}, pid()) :: :ok | {:error, :not_found}
+  def terminate(%ServerState{child_supervisor: supervisor} = state, child_pid)
       when is_pid(supervisor) do
     case DynamicSupervisor.terminate_child(supervisor, child_pid) do
       :ok ->
-        debug("Terminated child process",
+        dbug("Terminated child process",
           agent_id: state.agent.id,
           child_pid: inspect(child_pid)
         )
 
-        PubSub.emit(state, RuntimeSignal.process_terminated(), %{
+        PubSub.emit_event(state, ServerSignal.process_terminated(), %{
           child_pid: child_pid
         })
 
         :ok
 
-      {:error, reason} = error ->
-        debug("Failed to terminate child process",
+      {:error, _reason} = error ->
+        dbug("Failed to terminate child process",
           agent_id: state.agent.id,
           child_pid: inspect(child_pid),
           reason: inspect(reason)
@@ -90,23 +90,23 @@ defmodule Jido.Agent.Runtime.Process do
   end
 
   @doc """
-  Restarts a specific child process under the Runtime's DynamicSupervisor.
+  Restarts a specific child process under the Server's DynamicSupervisor.
 
   This is done by terminating the existing process and starting a new one with the same spec.
 
   Returns {:ok, new_pid} if successful, {:error, reason} on failure.
   """
-  @spec restart(%RuntimeState{}, pid(), map()) :: {:ok, pid()} | {:error, term()}
-  def restart(%RuntimeState{} = state, child_pid, child_spec) do
+  @spec restart(%ServerState{}, pid(), map()) :: {:ok, pid()} | {:error, term()}
+  def restart(%ServerState{} = state, child_pid, child_spec) do
     with :ok <- terminate(state, child_pid),
          {:ok, new_pid} = result <- start(state, child_spec) do
-      debug("Restarted child process",
+      dbug("Restarted child process",
         agent_id: state.agent.id,
         old_pid: inspect(child_pid),
         new_pid: inspect(new_pid)
       )
 
-      PubSub.emit(state, RuntimeSignal.process_restart_succeeded(), %{
+      PubSub.emit_event(state, ServerSignal.process_restart_succeeded(), %{
         old_pid: child_pid,
         new_pid: new_pid,
         child_spec: child_spec
@@ -115,7 +115,7 @@ defmodule Jido.Agent.Runtime.Process do
       result
     else
       error ->
-        PubSub.emit(state, RuntimeSignal.process_restart_failed(), %{
+        PubSub.emit_event(state, ServerSignal.process_restart_failed(), %{
           child_pid: child_pid,
           child_spec: child_spec,
           error: error

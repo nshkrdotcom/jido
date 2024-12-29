@@ -1,10 +1,18 @@
 defmodule Jido.Actions.Syscall do
   @moduledoc """
   Actions for executing system calls from within agent workflows.
-  These actions provide controlled access to runtime operations.
+  These actions provide controlled access to server operations.
   """
 
   alias Jido.Action
+
+  alias Jido.Agent.Syscall.{
+    SpawnSyscall,
+    KillSyscall,
+    BroadcastSyscall,
+    SubscribeSyscall,
+    UnsubscribeSyscall
+  }
 
   defmodule Spawn do
     @moduledoc false
@@ -16,9 +24,14 @@ defmodule Jido.Actions.Syscall do
         args: [type: :any, required: true, doc: "Arguments to pass to the module"]
       ]
 
-    @spec run(map(), map()) :: {:ok, map()} | {:error, term()}
+    @spec run(map(), map()) :: {:ok, SpawnSyscall.t()} | {:error, term()}
     def run(%{module: module, args: args}, _ctx) do
-      {:ok, {:syscall, {:spawn, module, args}}}
+      syscall = %SpawnSyscall{
+        module: module,
+        args: args
+      }
+
+      {:ok, syscall}
     end
   end
 
@@ -31,25 +44,10 @@ defmodule Jido.Actions.Syscall do
         pid: [type: :pid, required: true, doc: "PID of process to terminate"]
       ]
 
-    @spec run(map(), map()) :: {:ok, map()} | {:error, term()}
+    @spec run(map(), map()) :: {:ok, KillSyscall.t()} | {:error, term()}
     def run(%{pid: pid}, _ctx) do
-      {:ok, {:syscall, {:kill, pid}}}
-    end
-  end
-
-  defmodule EnqueueCmd do
-    @moduledoc false
-    use Action,
-      name: "enqueue_command",
-      description: "Enqueues a command for later execution",
-      schema: [
-        cmd: [type: :atom, required: true, doc: "Command to enqueue"],
-        params: [type: :map, required: true, doc: "Command parameters"]
-      ]
-
-    @spec run(map(), map()) :: {:ok, map()} | {:error, term()}
-    def run(%{cmd: cmd, params: params}, _ctx) do
-      {:ok, {:syscall, {:enqueue, cmd, params}}}
+      syscall = %KillSyscall{pid: pid}
+      {:ok, syscall}
     end
   end
 
@@ -63,9 +61,14 @@ defmodule Jido.Actions.Syscall do
         message: [type: :any, required: true, doc: "Message to broadcast"]
       ]
 
-    @spec run(map(), map()) :: {:ok, map()} | {:error, term()}
+    @spec run(map(), map()) :: {:ok, BroadcastSyscall.t()} | {:error, term()}
     def run(%{topic: topic, message: msg}, _ctx) do
-      {:ok, {:syscall, {:broadcast, topic, msg}}}
+      syscall = %BroadcastSyscall{
+        topic: topic,
+        message: msg
+      }
+
+      {:ok, syscall}
     end
   end
 
@@ -78,24 +81,26 @@ defmodule Jido.Actions.Syscall do
         topic: [type: :string, required: true, doc: "Topic to subscribe to"]
       ]
 
-    @spec run(map(), map()) :: {:ok, map()} | {:error, term()}
+    @spec run(map(), map()) :: {:ok, SubscribeSyscall.t()} | {:error, term()}
     def run(%{topic: topic}, _ctx) do
-      {:ok, {:syscall, {:subscribe, topic}}}
+      syscall = %SubscribeSyscall{topic: topic}
+      {:ok, syscall}
     end
   end
 
-  defmodule Checkpoint do
+  defmodule Unsubscribe do
     @moduledoc false
     use Action,
-      name: "create_checkpoint",
-      description: "Creates a state checkpoint",
+      name: "unsubscribe_topic",
+      description: "Unsubscribes from a PubSub topic",
       schema: [
-        key: [type: :any, required: true, doc: "Checkpoint identifier"]
+        topic: [type: :string, required: true, doc: "Topic to unsubscribe from"]
       ]
 
-    @spec run(map(), map()) :: {:ok, map()} | {:error, term()}
-    def run(%{key: key}, _ctx) do
-      {:ok, {:syscall, {:checkpoint, key}}}
+    @spec run(map(), map()) :: {:ok, UnsubscribeSyscall.t()} | {:error, term()}
+    def run(%{topic: topic}, _ctx) do
+      syscall = %UnsubscribeSyscall{topic: topic}
+      {:ok, syscall}
     end
   end
 end

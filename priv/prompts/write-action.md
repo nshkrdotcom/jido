@@ -164,7 +164,7 @@ end
 ### Error Types
 
 - `:validation_error` - Parameter or business rule validation failures
-- `:execution_error` - Runtime execution failures
+- `:execution_error` - Server execution failures
 - `:timeout_error` - Operation timeout
 - `:compensation_error` - Error during compensation handling
 - `:internal_server_error` - Unexpected system errors

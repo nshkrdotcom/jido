@@ -21,19 +21,8 @@ defmodule Jido.Util do
   alias Jido.Error
 
   require OK
-  require Logger
 
   @name_regex ~r/^[a-zA-Z][a-zA-Z0-9_]*$/
-
-  defmacro __using__(opts \\ []) do
-    quote do
-      import Jido.Util
-      require Jido.Util
-
-      @debug_opts unquote(opts)
-      @debug_enabled Keyword.get(unquote(opts), :debug_enabled, true)
-    end
-  end
 
   @doc """
   Generates a unique ID.
@@ -61,7 +50,7 @@ defmodule Jido.Util do
       {:ok, "valid_name_123"}
 
       iex> Jido.Action.validate_name("invalid-name")
-      {:error, %Jido.Error{type: :validation_error, message: "The name must contain only letters, numbers, and underscores."}}
+      {:error, "The name must contain only letters, numbers, and underscores."}
 
   """
   @spec validate_name(any()) :: {:ok, String.t()} | {:error, Error.t()}
@@ -70,166 +59,110 @@ defmodule Jido.Util do
       OK.success(name)
     else
       "The name must start with a letter and contain only letters, numbers, and underscores."
-      |> Error.validation_error()
       |> OK.failure()
     end
   end
 
   def validate_name(_) do
     "Invalid name format."
-    |> Error.validation_error()
     |> OK.failure()
   end
 
   @doc """
-  Validates a list of command modules.
+  Validates that all modules in a list implement the Jido.Action behavior.
+  Used as a custom validator for NimbleOptions.
 
-  Each module must implement the Jido.Command behavior and have valid command specifications.
+  This function ensures that all provided modules are valid Jido.Action implementations
+  by checking that they:
+  1. Are valid Elixir modules that can be loaded
+  2. Export the required __action_metadata__/0 function that indicates Jido.Action behavior
 
   ## Parameters
 
-  - `modules`: List of modules to validate
+  - `actions`: A list of module atoms or a single module atom to validate
 
   ## Returns
 
-  - `{:ok, modules}` if all modules are valid
+  - `{:ok, actions}` if all modules are valid Jido.Action implementations
   - `{:error, reason}` if any module is invalid
 
   ## Examples
 
-      iex> Jido.Util.validate_commands([MyApp.ValidCommand])
-      {:ok, [MyApp.ValidCommand]}
+      iex> defmodule ValidAction do
+      ...>   use Jido.Action,
+      ...>     name: "valid_action"
+      ...> end
+      ...> Jido.Util.validate_actions([ValidAction])
+      {:ok, [ValidAction]}
 
-      iex> Jido.Util.validate_commands([InvalidModule])
-      {:error, "Module InvalidModule does not implement Jido.Command behavior"}
+      iex> Jido.Util.validate_actions([InvalidModule])
+      {:error, "All actions must implement the Jido.Action behavior"}
 
+      # Single module validation
+      iex> Jido.Util.validate_actions(ValidAction)
+      {:ok, [ValidAction]}
   """
-  @spec validate_commands([module()]) :: {:ok, [module()]} | {:error, String.t()}
-  def validate_commands(modules) when is_list(modules) do
-    modules
-    |> Enum.reduce_while({:ok, []}, fn module, {:ok, acc} ->
-      with true <- implements_command?(module),
-           {:ok, _commands} <- validate_command_specs(module) do
-        {:cont, {:ok, [module | acc]}}
-      else
-        false ->
-          {:halt, {:error, "Module #{inspect(module)} does not implement Jido.Command behavior"}}
-
-        {:error, reason} ->
-          {:halt, {:error, reason}}
-      end
-    end)
-  end
-
-  def validate_commands(_), do: {:error, "Expected list of modules"}
-
-  defp implements_command?(module) do
-    behaviours = module.module_info(:attributes)[:behaviour] || []
-    Jido.Command in behaviours
-  end
-
-  defp validate_command_specs(module) do
-    try do
-      commands = module.commands()
-
-      commands
-      |> Enum.reduce_while({:ok, []}, fn
-        name, {:ok, acc} when is_atom(name) ->
-          {:cont, {:ok, [name | acc]}}
-
-        {name, spec}, {:ok, acc} when is_atom(name) and is_list(spec) ->
-          case validate_spec(spec) do
-            :ok -> {:cont, {:ok, [name | acc]}}
-            {:error, reason} -> {:halt, {:error, "Invalid command #{name}: #{reason}"}}
-          end
-
-        invalid, {:ok, _} ->
-          {:halt, {:error, "Invalid command format: #{inspect(invalid)}"}}
-      end)
-    rescue
-      UndefinedFunctionError -> {:error, "Missing commands/0 implementation"}
-    end
-  end
-
-  defp validate_spec(spec) do
-    desc = Keyword.get(spec, :description)
-    schema = Keyword.get(spec, :schema)
-
-    cond do
-      desc != nil and not is_binary(desc) -> {:error, "description must be a string"}
-      schema != nil and not is_list(schema) -> {:error, "schema must be a keyword list"}
-      true -> :ok
-    end
-  end
-
-  defmacro debug(message, metadata \\ []) do
-    quote do
-      if @debug_enabled do
-        caller = "#{__MODULE__}.#{elem(__ENV__.function, 0)}"
-        prefixed_message = "[#{caller}] #{unquote(message)}"
-        Jido.Util.log(:debug, prefixed_message, unquote(metadata), @debug_opts)
-      end
-    end
-  end
-
-  defmacro error(message, metadata \\ []) do
-    quote do
-      if @debug_enabled do
-        caller = "#{__MODULE__}.#{elem(__ENV__.function, 0)}"
-        prefixed_message = "[#{caller}] #{unquote(message)}"
-        Jido.Util.log(:error, prefixed_message, unquote(metadata), @debug_opts)
-      end
-    end
-  end
-
-  def log(level, message, metadata, opts) do
-    if should_log?(level, opts) do
-      formatted_metadata = format_metadata(metadata, opts)
-      log_message = "#{message} #{formatted_metadata}"
-
-      case level do
-        :debug -> Logger.debug(log_message)
-        :error -> Logger.error(log_message)
-      end
-    end
-  end
-
-  defp should_log?(level, opts) do
-    config = Application.get_env(:jido, Jido.Util, [])
-    env = Application.get_env(:jido, :env, :prod)
-
-    debug_levels = opts[:levels] || config[:levels] || [:debug, :error]
-    env_whitelist = opts[:env] || config[:env] || [:dev, :test]
-    debug_enabled = opts[:debug_enabled] || false
-
-    level in debug_levels and (env in env_whitelist or debug_enabled)
-  end
-
-  defp format_metadata(metadata, opts) do
-    max_length = opts[:max_length] || 500
-    truncate_threshold = opts[:truncate_threshold] || 100
-    no_truncate = opts[:no_truncate] || false
-
-    Enum.map_join(metadata, ", ", fn {key, value} ->
-      formatted_value =
-        if no_truncate do
-          inspect(value, limit: :infinity, pretty: false)
-        else
-          format_value(value, max_length, truncate_threshold)
-        end
-
-      "#{key}: #{formatted_value}"
-    end)
-  end
-
-  defp format_value(value, max_length, truncate_threshold) do
-    formatted = inspect(value, limit: :infinity, pretty: false)
-
-    if String.length(formatted) > truncate_threshold do
-      truncated = String.slice(formatted, 0, max_length)
-      "#{truncated}... (truncated)"
+  @spec validate_actions(list(module()) | module()) ::
+          {:ok, list(module())} | {:error, String.t()}
+  def validate_actions(actions) when is_list(actions) do
+    if Enum.all?(actions, &implements_action?/1) do
+      {:ok, actions}
     else
-      formatted
+      {:error, "All actions must implement the Jido.Action behavior"}
+    end
+  end
+
+  def validate_actions(action) when is_atom(action) do
+    validate_actions([action])
+  end
+
+  defp implements_action?(module) when is_atom(module) do
+    Code.ensure_loaded?(module) && function_exported?(module, :__action_metadata__, 0)
+  end
+
+  @doc """
+  Validates that a module implements the Jido.Runner behavior.
+
+  This function ensures that the provided module is a valid Jido.Runner implementation
+  by checking that it:
+  1. Is a valid Elixir module that can be loaded
+  2. Exports the required run/2 function that indicates Jido.Runner behavior
+
+  ## Parameters
+
+  - `module`: The module atom to validate
+
+  ## Returns
+
+  - `{:ok, module}` if the module is a valid Jido.Runner implementation
+  - `{:error, Jido.Error.t()}` if the module is invalid
+
+  ## Examples
+
+      iex> defmodule ValidRunner do
+      ...>   @behaviour Jido.Runner
+      ...>   def run(agent, opts), do: {:ok, agent}
+      ...> end
+      ...> Jido.Util.validate_runner(ValidRunner)
+      {:ok, ValidRunner}
+
+      iex> Jido.Util.validate_runner(InvalidModule)
+      {:error, %Jido.Error{type: :validation_error, message: "Module InvalidModule must implement run/2"}}
+  """
+  @spec validate_runner(module()) :: {:ok, module()} | {:error, Jido.Error.t()}
+  def validate_runner(module) when is_atom(module) do
+    with true <- Code.ensure_loaded?(module),
+         true <- function_exported?(module, :run, 2) do
+      {:ok, module}
+    else
+      false ->
+        {:error,
+         Jido.Error.validation_error(
+           "Runner module #{inspect(module)} must exist and implement run/2",
+           %{
+             module: module
+           }
+         )}
     end
   end
 end

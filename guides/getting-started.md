@@ -22,7 +22,7 @@ Welcome to **Jido**, a powerful yet approachable Elixir framework for defining A
     - [Agent Explanation](#agent-explanation)
     - [Running the Agent](#running-the-agent)
 - [Steps in detail:](#steps-in-detail)
-- [We'll assume our runtime was started with name: "announcer\_1"](#well-assume-our-runtime-was-started-with-name-announcer_1)
+- [We'll assume our server was started with name: "announcer\_1"](#well-assume-our-server-was-started-with-name-announcer_1)
 - [... handle other events or unknown signals](#-handle-other-events-or-unknown-signals)
 
 ---
@@ -240,8 +240,8 @@ This will validate state, plan the command, and run all pending actions, returni
 6. Integrating an Agent in a Phoenix Application
 Agents in Jido are often long-running processes so that external systems (HTTP requests, channels, etc.) can interact with them. A typical approach is:
 
-Start a Runtime process (from Jido.Agent.Runtime) in your Phoenix application.ex.
-Supervise that runtime so it stays alive, allowing commands to be dispatched to it via GenServer or PubSub.
+Start a Server process (from Jido.Agent.Server) in your Phoenix application.ex.
+Supervise that server so it stays alive, allowing commands to be dispatched to it via GenServer or PubSub.
 For example, in your lib/my_app/application.ex:
 
 ```elixir
@@ -251,9 +251,9 @@ def start(_type, _args) do
     MyAppWeb.Endpoint,
     # Start the PubSub system
     {Phoenix.PubSub, name: MyApp.PubSub},
-    # Start a Jido Runtime with our agent
+    # Start a Jido Server with our agent
     {
-      Jido.Agent.Runtime,
+      Jido.Agent.Server,
       agent: MyApp.Agents.AnnouncerAgent.new("announcer_1"),
       pubsub: MyApp.PubSub
       # Optionally specify topic or max_queue_size, etc.
@@ -268,25 +268,25 @@ end
 
 What happens here?
 
-Jido.Agent.Runtime starts up with a specific agent instance. We give it a unique ID like "announcer_1".
+Jido.Agent.Server starts up with a specific agent instance. We give it a unique ID like "announcer_1".
 We pass in pubsub: MyApp.PubSub so that it can broadcast/receive events on that named PubSub system.
-Once it’s running, we can call Runtime.act/3, Runtime.manage/3, etc., on that PID or name.
+Once it’s running, we can call Server.act/3, Server.manage/3, etc., on that PID or name.
 7. Sending Commands via PubSub
-Jido provides built-in support for PubSub signals. If you have the runtime started (as shown above), you can do something like:
+Jido provides built-in support for PubSub signals. If you have the server started (as shown above), you can do something like:
 
 elixir
 Copy code
-# We'll assume our runtime was started with name: "announcer_1"
-alias Jido.Agent.Runtime
+# We'll assume our server was started with name: "announcer_1"
+alias Jido.Agent.Server
 
 defmodule MyAppWeb.AnnounceController do
   use MyAppWeb, :controller
 
-  @runtime_server {:via, Registry, {Jido.AgentRegistry, "announcer_1"}}
+  @server_server {:via, Registry, {Jido.AgentRegistry, "announcer_1"}}
 
   def create(conn, %{"msg1" => msg1, "msg2" => msg2}) do
     # Asynchronously trigger announcement
-    :ok = Runtime.act_async(@runtime_server, :announce, %{msg1: msg1, msg2: msg2})
+    :ok = Server.act_async(@server_server, :announce, %{msg1: msg1, msg2: msg2})
 
     conn
     |> put_flash(:info, "Announcement queued!")
@@ -295,8 +295,8 @@ defmodule MyAppWeb.AnnounceController do
 end
 Here’s what’s happening:
 
-We define a @runtime_server referencing the Jido runtime process. Jido automatically registers it under Jido.AgentRegistry.
-We call Runtime.act_async/3 to dispatch the :announce command. This enqueues and executes the command in our supervised agent process.
+We define a @server_server referencing the Jido server process. Jido automatically registers it under Jido.AgentRegistry.
+We call Server.act_async/3 to dispatch the :announce command. This enqueues and executes the command in our supervised agent process.
 Phoenix.PubSub is used under the hood so that events, state transitions, or failures can be broadcast to subscribers.
 If you wanted to subscribe to agent events (like :act_completed or :queue_overflow signals), you can do:
 
@@ -328,7 +328,7 @@ end
 That’s it! Your Jido Agent can now be driven by HTTP requests, WebSockets, or internal messages—making it easy to build robust, stateful workflows in your Phoenix app.
 
 8. Next Steps
-Add More Actions: Create new use Jido.Action modules for your domain (file manipulations, external APIs, arithmetic, etc.).
+Add More Actions: Create new use Jido.Action modules for your domain (file manipulations, external APIs, calculator, etc.).
 Organize Commands: Group them in modules using use Jido.Command—each command can orchestrate multiple actions.
 Extend Agent: Overwrite lifecycle callbacks (on_before_plan/3, on_after_run/2, etc.) to handle advanced logic.
 Distribute: Spin up multiple agents across nodes for parallel, fault-tolerant workflows.

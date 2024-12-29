@@ -2,6 +2,8 @@ defmodule Jido.DiscoveryTest do
   use ExUnit.Case
   alias Jido.Discovery
 
+  @moduletag :capture_log
+
   setup do
     # Reset cache before each test
     :ok = Discovery.init()

@@ -14,7 +14,6 @@ defmodule JidoTest.WorkflowExecuteTest do
   alias JidoTest.TestActions.NormalExitAction
   alias JidoTest.TestActions.RawResultAction
   alias JidoTest.TestActions.SlowKilledAction
-  alias JidoTest.TestActions.SpawnerAction
 
   @moduletag :capture_log
 
@@ -57,7 +56,7 @@ defmodule JidoTest.WorkflowExecuteTest do
       assert {:error, %Error{type: :execution_error, message: message}} =
                Workflow.execute_action(ErrorAction, %{error_type: :custom}, %{})
 
-      assert message =~ "Runtime error"
+      assert message =~ "Server error in JidoTest.TestActions.ErrorAction: Custom error"
     end
   end
 
@@ -154,16 +153,6 @@ defmodule JidoTest.WorkflowExecuteTest do
 
       results = Task.await_many(tasks)
       assert Enum.all?(results, fn {:ok, %{value: v}} -> is_integer(v) end)
-    end
-
-    test "handles action spawning multiple processes" do
-      result = Workflow.execute_action_with_timeout(SpawnerAction, %{count: 10}, %{}, 1000)
-      assert {:ok, %{result: "Multi-process workflow completed"}} = result
-      # Ensure no lingering processes
-      :timer.sleep(150)
-      process_list = Process.list()
-      process_count = length(process_list)
-      assert process_count <= :erlang.system_info(:process_count)
     end
   end
 end

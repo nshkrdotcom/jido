@@ -16,7 +16,7 @@ We welcome feedback and contributions! Please feel free to open an issue or subm
 ## Features
 
 - **Actions**: Discrete, composable units of functionality with consistent interfaces
-- **Workflows**: Robust execution runtime with logging, telemetry, and error handling
+- **Workflows**: Robust execution server with logging, telemetry, and error handling
 - **Agents**: Stateful autonomous entities that can plan and execute workflows
 - **Sensors**: Event-driven data gathering components
 - **Signals**: Cloud Events-based messaging between components
@@ -40,7 +40,7 @@ end
 
 ### Creating an Action
 
-Actions are the basic building blocks in Jido. Here's a simple arithmetic action:
+Actions are the basic building blocks in Jido. Here's a simple calculator action:
 
 ```elixir
 defmodule MyApp.Actions.Add do
@@ -84,7 +84,7 @@ defmodule MyApp.SimpleAgent do
 end
 ```
 
-### Starting an Agent Runtime
+### Starting an Agent Server
 
 Start an agent worker under your supervision tree:
 
@@ -96,7 +96,7 @@ children = [
 ]
 
 # Start an agent instance
-{:ok, pid} = Jido.Agent.Runtime.start_link(MyApp.SimpleAgent.new())
+{:ok, pid} = Jido.Agent.Server.start_link(MyApp.SimpleAgent.new())
 ```
 
 ## Contributing

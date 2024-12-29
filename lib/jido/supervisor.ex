@@ -36,22 +36,15 @@ defmodule Jido.Supervisor do
     Logger.debug("Initializing Jido.Supervisor for #{inspect(jido_module)}")
 
     children = [
-      # Example: A local registry for the agent processes
       {Registry, keys: :unique, name: registry_name(jido_module)},
 
       # Example: A dynamic supervisor to manage agent processes:
       {DynamicSupervisor, name: agent_supervisor_name(jido_module), strategy: :one_for_one}
-
-      # Potentially other children as needed based on config
-      # ...
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
   end
 
-  # Utility to get a custom registry name
   defp registry_name(jido_module), do: Module.concat(jido_module, "Registry")
-
-  # Utility to get a custom dynamic supervisor name
   defp agent_supervisor_name(jido_module), do: Module.concat(jido_module, "AgentSupervisor")
 end

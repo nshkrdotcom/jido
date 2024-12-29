@@ -24,44 +24,49 @@ defmodule JidoTest.Workflow.ActionTest do
   describe "error formatting" do
     test "format_config_error formats NimbleOptions.ValidationError" do
       error = %NimbleOptions.ValidationError{keys_path: [:name], message: "is invalid"}
-      formatted = Error.format_nimble_config_error(error, "Action")
+      formatted = Error.format_nimble_config_error(error, "Action", __MODULE__)
 
       assert formatted ==
-               "Invalid configuration given to use Jido.Action for key [:name]: is invalid"
+               "Invalid configuration given to use Jido.Action (#{__MODULE__}) for key [:name]: is invalid"
     end
 
     test "format_config_error formats NimbleOptions.ValidationError with empty keys_path" do
       error = %NimbleOptions.ValidationError{keys_path: [], message: "is invalid"}
-      formatted = Error.format_nimble_config_error(error, "Action")
-      assert formatted == "Invalid configuration given to use Jido.Action: is invalid"
+      formatted = Error.format_nimble_config_error(error, "Action", __MODULE__)
+
+      assert formatted ==
+               "Invalid configuration given to use Jido.Action (#{__MODULE__}): is invalid"
     end
 
     test "format_config_error handles binary errors" do
-      assert Error.format_nimble_config_error("Some error", "Action") == "Some error"
+      assert Error.format_nimble_config_error("Some error", "Action", __MODULE__) == "Some error"
     end
 
     test "format_config_error handles other error types" do
-      assert Error.format_nimble_config_error(:some_atom, "Action") == ":some_atom"
+      assert Error.format_nimble_config_error(:some_atom, "Action", __MODULE__) ==
+               ":some_atom"
     end
 
     test "format_nimble_validation_error formats NimbleOptions.ValidationError" do
       error = %NimbleOptions.ValidationError{keys_path: [:input], message: "is required"}
-      formatted = Error.format_nimble_validation_error(error, "Action")
-      assert formatted == "Invalid parameters for Action at [:input]: is required"
+      formatted = Error.format_nimble_validation_error(error, "Action", __MODULE__)
+      assert formatted == "Invalid parameters for Action (#{__MODULE__}) at [:input]: is required"
     end
 
     test "format_nimble_validation_error formats NimbleOptions.ValidationError with empty keys_path" do
       error = %NimbleOptions.ValidationError{keys_path: [], message: "is invalid"}
-      formatted = Error.format_nimble_validation_error(error, "Action")
-      assert formatted == "Invalid parameters for Action: is invalid"
+      formatted = Error.format_nimble_validation_error(error, "Action", __MODULE__)
+      assert formatted == "Invalid parameters for Action (#{__MODULE__}): is invalid"
     end
 
     test "format_nimble_validation_error handles binary errors" do
-      assert Error.format_nimble_validation_error("Some error", "Action") == "Some error"
+      assert Error.format_nimble_validation_error("Some error", "Action", __MODULE__) ==
+               "Some error"
     end
 
     test "format_nimble_validation_error handles other error types" do
-      assert Error.format_nimble_validation_error(:some_atom, "Action") == ":some_atom"
+      assert Error.format_nimble_validation_error(:some_atom, "Action", __MODULE__) ==
+               ":some_atom"
     end
   end
 
@@ -123,7 +128,7 @@ defmodule JidoTest.Workflow.ActionTest do
       assert result.result == 7
     end
 
-    test "executes basic arithmetic actions" do
+    test "executes basic calculator actions" do
       assert {:ok, %{value: 6}} = Add.run(%{value: 5, amount: 1}, %{})
       assert {:ok, %{value: 10}} = Multiply.run(%{value: 5, amount: 2}, %{})
       assert {:ok, %{value: 3}} = Subtract.run(%{value: 5, amount: 2}, %{})
@@ -185,7 +190,7 @@ defmodule JidoTest.Workflow.ActionTest do
   end
 
   describe "edge cases" do
-    test "handles very large numbers in arithmetic workflows" do
+    test "handles very large numbers in calculator workflows" do
       large_number = 1_000_000_000_000_000_000_000
       assert {:ok, result} = Add.run(%{value: large_number, amount: 1}, %{})
       assert result.value == large_number + 1

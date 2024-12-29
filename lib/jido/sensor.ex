@@ -96,7 +96,7 @@ defmodule Jido.Sensor do
                                          type: :keyword_list,
                                          default: [],
                                          doc:
-                                           "A NimbleOptions schema for validating the Sensor's runtime options."
+                                           "A NimbleOptions schema for validating the Sensor's server options."
                                        ]
                                      )
 
@@ -120,41 +120,41 @@ defmodule Jido.Sensor do
         {:ok, validated_opts} ->
           @validated_opts validated_opts
 
-          @sensor_runtime_options_schema NimbleOptions.new!(
-                                           [
-                                             id: [
-                                               type: :string,
-                                               doc: "Unique identifier for the sensor instance"
-                                             ],
-                                             topic: [
-                                               type: :string,
-                                               default: "#{@validated_opts[:name]}:${id}",
-                                               doc: "PubSub topic for the sensor"
-                                             ],
-                                             heartbeat_interval: [
-                                               type: :non_neg_integer,
-                                               default: 10_000,
-                                               doc: "Interval in milliseconds between heartbeats"
-                                             ],
-                                             pubsub: [
-                                               type: :atom,
-                                               required: true,
-                                               doc: "PubSub module to use"
-                                             ],
-                                             retain_last: [
-                                               type: :pos_integer,
-                                               default: 10,
-                                               doc: "Number of last values to retain"
-                                             ]
-                                           ] ++ @validated_opts[:schema]
-                                         )
+          @sensor_server_options_schema NimbleOptions.new!(
+                                          [
+                                            id: [
+                                              type: :string,
+                                              doc: "Unique identifier for the sensor instance"
+                                            ],
+                                            topic: [
+                                              type: :string,
+                                              default: "#{@validated_opts[:name]}:${id}",
+                                              doc: "PubSub topic for the sensor"
+                                            ],
+                                            heartbeat_interval: [
+                                              type: :non_neg_integer,
+                                              default: 10_000,
+                                              doc: "Interval in milliseconds between heartbeats"
+                                            ],
+                                            pubsub: [
+                                              type: :atom,
+                                              required: true,
+                                              doc: "PubSub module to use"
+                                            ],
+                                            retain_last: [
+                                              type: :pos_integer,
+                                              default: 10,
+                                              doc: "Number of last values to retain"
+                                            ]
+                                          ] ++ @validated_opts[:schema]
+                                        )
 
           @doc """
           Starts a new Sensor process.
 
           ## Options
 
-          #{NimbleOptions.docs(@sensor_runtime_options_schema)}
+          #{NimbleOptions.docs(@sensor_server_options_schema)}
           """
           @spec start_link(Keyword.t()) :: GenServer.on_start()
           def start_link(opts) do
@@ -235,12 +235,12 @@ defmodule Jido.Sensor do
 
           @spec validate_opts(map()) :: {:ok, map()} | {:error, String.t()}
           defp validate_opts(opts) do
-            case NimbleOptions.validate(Map.to_list(opts), @sensor_runtime_options_schema) do
+            case NimbleOptions.validate(Map.to_list(opts), @sensor_server_options_schema) do
               {:ok, validated} ->
                 OK.success(Map.new(validated))
 
               {:error, %NimbleOptions.ValidationError{} = error} ->
-                OK.failure(Error.format_nimble_validation_error(error, "Sensor"))
+                OK.failure(Error.format_nimble_validation_error(error, "Sensor", __MODULE__))
             end
           end
 
@@ -332,7 +332,7 @@ defmodule Jido.Sensor do
 
         {:error, error} ->
           error
-          |> Error.format_nimble_config_error("Sensor")
+          |> Error.format_nimble_config_error("Sensor", __MODULE__)
           |> Error.config_error()
           |> OK.failure()
       end
@@ -348,7 +348,7 @@ defmodule Jido.Sensor do
 
       {:error, %NimbleOptions.ValidationError{} = error} ->
         error
-        |> Error.format_nimble_validation_error("Sensor")
+        |> Error.format_nimble_validation_error("Sensor", __MODULE__)
         |> Error.config_error()
         |> OK.failure()
     end

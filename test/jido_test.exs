@@ -51,11 +51,11 @@ defmodule JidoTest do
     test "returns the pid of an existing agent", %{pubsub: pubsub} do
       # Set up test agent using BasicAgent from test_agent.ex
       agent = JidoTest.TestAgents.BasicAgent.new("test_agent")
-      {:ok, runtime} = Jido.Agent.Runtime.start_link(agent: agent, pubsub: pubsub)
+      {:ok, server} = Jido.Agent.Server.start_link(agent: agent, pubsub: pubsub)
 
       # Look up the agent by ID
       assert {:ok, pid} = Jido.get_agent("test_agent")
-      assert pid == runtime
+      assert pid == server
       assert Process.alive?(pid)
     end
 
@@ -83,7 +83,7 @@ defmodule JidoTest do
     test "successfully clones an existing agent", %{pubsub: pubsub} do
       # Create source agent
       source_agent = JidoTest.TestAgents.BasicAgent.new("source_agent")
-      {:ok, source_pid} = Jido.Agent.Runtime.start_link(agent: source_agent, pubsub: pubsub)
+      {:ok, source_pid} = Jido.Agent.Server.start_link(agent: source_agent, pubsub: pubsub)
 
       # Clone the agent
       assert {:ok, cloned_pid} = Jido.clone_agent("source_agent", "cloned_agent")

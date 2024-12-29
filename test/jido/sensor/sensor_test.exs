@@ -162,7 +162,7 @@ defmodule JidoTest.SensorTest do
   end
 
   describe "Error handling" do
-    test "handles invalid runtime options" do
+    test "handles invalid server options" do
       opts = [pubsub: SensorTestPubSub, test_param: "not an integer"]
       assert {:error, reason} = TestSensor.start_link(opts)
       assert reason =~ "Invalid parameters for Sensor"

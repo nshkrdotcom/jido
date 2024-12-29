@@ -1,6 +1,6 @@
 defmodule Jido.Workflow do
   @moduledoc """
-  Workflows are the Action runtime. They provide a robust framework for executing and managing workflows (multiple Actions) in a distributed system.
+  Workflows provide a robust framework for executing and managing workflows (Action sequences) in a distributed system.
 
   This module offers functionality to:
   - Run workflows synchronously or asynchronously
@@ -212,7 +212,7 @@ defmodule Jido.Workflow do
         end
 
       {:DOWN, _monitor_ref, :process, ^pid, reason} ->
-        {:error, Error.execution_error("Runtime error in async workflow: #{inspect(reason)}")}
+        {:error, Error.execution_error("Server error in async workflow: #{inspect(reason)}")}
     after
       timeout ->
         Process.exit(pid, :kill)
@@ -571,11 +571,29 @@ defmodule Jido.Workflow do
       parent = self()
       ref = make_ref()
 
+      # Create a temporary task group for this execution
+      {:ok, task_group} =
+        Task.Supervisor.start_child(
+          Jido.Workflow.TaskSupervisor,
+          fn ->
+            Process.flag(:trap_exit, true)
+
+            receive do
+              {:shutdown} -> :ok
+            end
+          end
+        )
+
+      # Add task_group to context so Actions can use it
+      enhanced_context = Map.put(context, :__task_group__, task_group)
+
       {pid, monitor_ref} =
         spawn_monitor(fn ->
+          Process.group_leader(self(), task_group)
+
           result =
             try do
-              execute_action(action, params, context)
+              execute_action(action, params, enhanced_context)
             catch
               kind, reason ->
                 {:error, Error.execution_error("Caught #{kind}: #{inspect(reason)}")}
@@ -586,16 +604,21 @@ defmodule Jido.Workflow do
 
       receive do
         {:done, ^ref, result} ->
+          cleanup_task_group(task_group)
           Process.demonitor(monitor_ref, [:flush])
           result
 
         {:DOWN, ^monitor_ref, :process, ^pid, :killed} ->
+          cleanup_task_group(task_group)
           {:error, Error.execution_error("Task was killed")}
 
         {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
+          cleanup_task_group(task_group)
           {:error, Error.execution_error("Task exited: #{inspect(reason)}")}
       after
         timeout ->
+          # Kill the entire process group
+          cleanup_task_group(task_group)
           Process.exit(pid, :kill)
 
           receive do
@@ -610,6 +633,21 @@ defmodule Jido.Workflow do
 
     defp execute_action_with_timeout(action, params, context, _timeout) do
       execute_action_with_timeout(action, params, context, @default_timeout)
+    end
+
+    defp cleanup_task_group(task_group) do
+      send(task_group, {:shutdown})
+
+      Process.exit(task_group, :kill)
+
+      Task.Supervisor.children(Jido.Workflow.TaskSupervisor)
+      |> Enum.filter(fn pid ->
+        case Process.info(pid, :group_leader) do
+          {:group_leader, ^task_group} -> true
+          _ -> false
+        end
+      end)
+      |> Enum.each(&Process.exit(&1, :kill))
     end
 
     @spec execute_action(action(), params(), context()) :: {:ok, map()} | {:error, Error.t()}
@@ -630,7 +668,7 @@ defmodule Jido.Workflow do
     rescue
       e in RuntimeError ->
         OK.failure(
-          Error.execution_error("Runtime error in #{inspect(action)}: #{Exception.message(e)}")
+          Error.execution_error("Server error in #{inspect(action)}: #{Exception.message(e)}")
         )
 
       e in ArgumentError ->

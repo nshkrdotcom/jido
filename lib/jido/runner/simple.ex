@@ -1,27 +1,27 @@
 defmodule Jido.Runner.Simple do
   @moduledoc """
-    A simple runner that executes a single instruction from an Agent's instruction queue.
+  A simple runner that executes a single instruction from an Agent's instruction queue.
 
-    ## Overview
+  ## Overview
 
-    The Simple Runner follows a sequential execution model:
-    1. Dequeues a single instruction from the agent's pending queue
-    2. Executes the instruction via its action module
-    3. Processes the result (either a directive, syscall or state update)
-    4. Returns a Result struct containing the execution outcome
+  The Simple Runner follows a sequential execution model:
+  1. Dequeues a single instruction from the agent's pending queue
+  2. Executes the instruction via its action module
+  3. Processes the result (either a directive, syscall or state update)
+  4. Returns a Result struct containing the execution outcome
 
-    ## Features
-    * Single instruction execution
-    * Support for directives, syscalls and state results
-    * Atomic execution guarantees
-    * Comprehensive error handling
-    * Debug logging at key execution points
+  ## Features
+  * Single instruction execution
+  * Support for directives, syscalls and state results
+  * Atomic execution guarantees
+  * Comprehensive error handling
+  * Debug logging at key execution points
 
-    ## Error Handling
-    * Invalid instructions are rejected
-    * Action execution failures return error results
-    * Queue empty condition handled gracefully
-    * All errors preserve the original agent state
+  ## Error Handling
+  * Invalid instructions are rejected
+  * Action execution failures return error results
+  * Queue empty condition handled gracefully
+  * All errors preserve the original agent state
   """
   @behaviour Jido.Runner
 

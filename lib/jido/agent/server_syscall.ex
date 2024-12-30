@@ -1,10 +1,9 @@
 defmodule Jido.Agent.Server.Syscall do
-  @moduledoc """
-  Executes validated syscalls within an agent server context.
+  @moduledoc false
+  # Executes validated syscalls within an agent server context.
 
-  This module handles applying syscall structs to modify server state and behavior.
-  Only syscalls defined in Jido.Agent.Syscall are valid.
-  """
+  # This module handles applying syscall structs to modify server state and behavior.
+  # Only syscalls defined in Jido.Agent.Syscall are valid.
 
   alias Jido.Agent.Server.Process, as: ServerProcess
   alias Jido.Agent.Server.State, as: ServerState

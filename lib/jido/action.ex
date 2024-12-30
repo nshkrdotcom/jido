@@ -56,7 +56,7 @@ defmodule Jido.Action do
 
   ## Parameter Validation
 
-  > **Note on Validation:** The validation process for Actions is intentionally loose.
+  > **Note on Validation:** The validation process for Actions is intentionally open.
   > Only fields specified in the schema are validated. Unspecified fields are not
   > validated, allowing for easier Action composition. This approach enables Actions
   > to accept and pass along additional parameters that may be required by other

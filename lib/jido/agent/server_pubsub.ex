@@ -1,23 +1,22 @@
 defmodule Jido.Agent.Server.PubSub do
-  @moduledoc """
-  Handles PubSub event management for Jido Agent Servers.
+  @moduledoc false
+  # Handles PubSub event management for Jido Agent Servers.
 
-  This module provides functionality for:
-  - Event emission
-  - Topic management
-  - Event subscription
-  - Signal generation
-  - Signal processing
+  # This module provides functionality for:
+  # - Event emission
+  # - Topic management
+  # - Event subscription
+  # - Signal generation
+  # - Signal processing
 
-  All events are broadcast through Phoenix.PubSub and follow a consistent
-  format using Jido.Signal structs.
+  # All events are broadcast through Phoenix.PubSub and follow a consistent
+  # format using Jido.Signal structs.
 
-  ## Examples
+  # ## Examples
 
-      iex> state = %Jido.Agent.Server.State{pubsub: MyPubSub, topic: "jido.agent.agent-123"}
-      iex> Jido.Agent.Server.PubSub.subscribe(state)
-      :ok
-  """
+  #     iex> state = %Jido.Agent.Server.State{pubsub: MyPubSub, topic: "jido.agent.agent-123"}
+  #     iex> Jido.Agent.Server.PubSub.subscribe(state)
+  #     :ok
 
   use ExDbug, enabled: false
 

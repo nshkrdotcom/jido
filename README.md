@@ -13,7 +13,7 @@
 
 Jido provides a robust foundation for building autonomous agents that can plan, execute, and adapt their behavior in distributed Elixir applications. Think of it as a toolkit for creating smart, composable workflows that can evolve and respond to their environment.
 
-> ⚠️ **Status**: Jido is under active development. While the API is usable, we're working towards API stability for a 1.0 release. We welcome feedback and contributions!
+> ⚠️ **Status**: Jido is under active development. The API is stable for Actions, Workflows, Agents and Sensors. We are actively working on the Agent Server and Supervisor for the 1.1 release.
 
 ## Key Features
 
@@ -171,7 +171,7 @@ Supervisor.start_link(children, strategy: :one_for_one)
 - [🧩 Actions & Workflows](guides/actions.md)
 - [🤖 Building Agents](guides/agents.md)
 - [📡 Sensors & Monitoring](guides/sensors.md)
-- [🔄 Agent Directives](guides/agent-directives.md)
+- [🔄 Agent Directives](guides/directives.md)
 
 ## Contributing
 

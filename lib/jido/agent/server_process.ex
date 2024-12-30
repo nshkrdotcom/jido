@@ -1,7 +1,6 @@
 defmodule Jido.Agent.Server.Process do
-  @moduledoc """
-  Helper module for managing child processes under the Server's DynamicSupervisor.
-  """
+  @moduledoc false
+  # Helper module for managing child processes under the Server's DynamicSupervisor.
 
   use ExDbug, enabled: false
   alias Jido.Agent.Server.State, as: ServerState

@@ -1,59 +1,58 @@
 defmodule Jido.Agent.Server.State do
-  @moduledoc """
-  Defines the state management structure and transition logic for Agent Servers.
+  @moduledoc false
+  # Defines the state management structure and transition logic for Agent Servers.
 
-  The Server.State module implements a finite state machine (FSM) that governs
-  the lifecycle of agent workers in the Jido system. It ensures type safety and
-  enforces valid state transitions while providing telemetry and logging for
-  observability.
+  # The Server.State module implements a finite state machine (FSM) that governs
+  # the lifecycle of agent workers in the Jido system. It ensures type safety and
+  # enforces valid state transitions while providing telemetry and logging for
+  # observability.
 
   ## State Machine
 
-  The worker can be in one of the following states:
-  - `:initializing` - Initial state when worker is starting up
-  - `:idle` - Server is inactive and ready to accept new commands
-  - `:planning` - Server is planning but not yet executing actions
-  - `:running` - Server is actively executing commands
-  - `:paused` - Server execution is temporarily suspended
+  # The worker can be in one of the following states:
+  # - `:initializing` - Initial state when worker is starting up
+  # - `:idle` - Server is inactive and ready to accept new commands
+  # - `:planning` - Server is planning but not yet executing actions
+  # - `:running` - Server is actively executing commands
+  # - `:paused` - Server execution is temporarily suspended
 
   ## State Transitions
 
-  Valid state transitions are:
-  ```
-  initializing -> idle        (initialization_complete)
-  idle         -> planning    (plan_initiated)
-  idle         -> running     (direct_execution)
-  planning     -> running     (plan_completed)
-  planning     -> idle        (plan_cancelled)
-  running      -> paused      (execution_paused)
-  running      -> idle        (execution_completed)
-  paused       -> running     (execution_resumed)
-  paused       -> idle        (execution_cancelled)
-  ```
+  # Valid state transitions are:
+  # ```
+  # initializing -> idle        (initialization_complete)
+  # idle         -> planning    (plan_initiated)
+  # idle         -> running     (direct_execution)
+  # planning     -> running     (plan_completed)
+  # planning     -> idle        (plan_cancelled)
+  # running      -> paused      (execution_paused)
+  # running      -> idle        (execution_completed)
+  # paused       -> running     (execution_resumed)
+  # paused       -> idle        (execution_cancelled)
+  # ```
 
-  ## Fields
+  # ## Fields
 
-  - `:agent` - The Agent struct being managed by this worker (required)
-  - `:pubsub` - PubSub module for event broadcasting (required)
-  - `:topic` - PubSub topic for worker events (required)
-  - `:subscriptions` - List of subscribed topics (default: [])
-  - `:status` - Current state of the worker (default: :idle)
-  - `:pending_signals` - Queue of pending signals awaiting execution
-  - `:max_queue_size` - Maximum number of commands that can be queued (default: 10000)
-  - `:child_supervisor` - Dynamic supervisor PID for managing child processes
+  # - `:agent` - The Agent struct being managed by this worker (required)
+  # - `:pubsub` - PubSub module for event broadcasting (required)
+  # - `:topic` - PubSub topic for worker events (required)
+  # - `:subscriptions` - List of subscribed topics (default: [])
+  # - `:status` - Current state of the worker (default: :idle)
+  # - `:pending_signals` - Queue of pending signals awaiting execution
+  # - `:max_queue_size` - Maximum number of commands that can be queued (default: 10000)
+  # - `:child_supervisor` - Dynamic supervisor PID for managing child processes
 
   ## Example
 
-      iex> state = %Server.State{
-      ...>   agent: my_agent,
-      ...>   pubsub: MyApp.PubSub,
-      ...>   topic: "agent.worker.1",
-      ...>   status: :idle
-      ...> }
-      iex> {:ok, new_state} = Server.State.transition(state, :running)
-      iex> new_state.status
-      :running
-  """
+  #     iex> state = %Server.State{
+  #     ...>   agent: my_agent,
+  #     ...>   pubsub: MyApp.PubSub,
+  #     ...>   topic: "agent.worker.1",
+  #     ...>   status: :idle
+  #     ...> }
+  #     iex> {:ok, new_state} = Server.State.transition(state, :running)
+  #     iex> new_state.status
+  #     :running
 
   use TypedStruct
   require Logger

@@ -1,13 +1,12 @@
 defmodule Jido.Agent.Server.Execute do
-  @moduledoc """
-  Handles execution of signals in the agent server.
+  @moduledoc false
+  # Handles execution of signals in the agent server.
 
-  This module is responsible for:
-  - Processing incoming signals by enqueuing them
-  - Managing the signal queue and execution flow
-  - Handling signal execution results and state transitions
-  - Emitting events for signal processing lifecycle
-  """
+  # This module is responsible for:
+  # - Processing incoming signals by enqueuing them
+  # - Managing the signal queue and execution flow
+  # - Handling signal execution results and state transitions
+  # - Emitting events for signal processing lifecycle
 
   use Private
   use ExDbug, enabled: true

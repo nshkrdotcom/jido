@@ -1,7 +1,7 @@
 defmodule Jido.MixProject do
   use Mix.Project
 
-  @version "1.0.0-rc.5"
+  @version "1.0.0"
 
   def project do
     [
@@ -58,7 +58,7 @@ defmodule Jido.MixProject do
         {"guides/actions.md", title: "Actions & Workflows"},
         {"guides/agents.md", title: "Agents"},
         {"guides/sensors.md", title: "Sensors"},
-        {"guides/agent-directives.md", title: "Agent Directives"}
+        {"guides/directives.md", title: "Agent Directives"}
       ],
       groups_for_modules: [
         Core: [
@@ -69,18 +69,16 @@ defmodule Jido.MixProject do
           Jido.Signal,
           Jido.Sensor,
           Jido.Discovery,
-          Jido.Supervisor
+          Jido.Supervisor,
+          Jido.Agent.Server
         ],
         Workflows: [
           Jido.Workflow.Chain,
           Jido.Workflow.Closure,
           Jido.Workflow.Tool
         ],
-        Agent_Server: [
-          Jido.Agent.Server,
-          Jido.Agent.Supervisor
-        ],
         Example_Actions: [
+          Jido.Action.Directives,
           Jido.Actions.Calculator,
           Jido.Actions.Basic,
           Jido.Actions.Files,
@@ -92,7 +90,6 @@ defmodule Jido.MixProject do
           Jido.Actions.Files.WriteFile
         ],
         Directives: [
-          Jido.Action.Directives,
           Jido.Agent.Directive,
           Jido.Agent.Directive.DeregisterActionDirective,
           Jido.Agent.Directive.EnqueueDirective,
@@ -135,8 +132,8 @@ defmodule Jido.MixProject do
           "Getting Started": "guides/getting-started.md",
           Actions: "guides/actions.md",
           Agents: "guides/agents.md",
-          Sensors: "guides/sensors.md",
-          "Agent Directives": "guides/agent-directives.md"
+          "Sensors & Signals": "guides/sensors.md",
+          Directives: "guides/directives.md"
         ]
       ]
     ]

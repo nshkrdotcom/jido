@@ -1,6 +1,6 @@
 defmodule Jido do
   @moduledoc """
-  Jido is a flexible framework for building distributed AI Agents and Workflows in Elixir.
+  自動 (Jido) - A foundational framework for building autonomous, distributed agent systems in Elixir.
 
   This module provides the main interface for interacting with Jido components, including:
   - Managing and interacting with Agents through a high-level API

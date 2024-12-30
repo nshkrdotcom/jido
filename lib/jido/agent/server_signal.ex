@@ -1,10 +1,9 @@
 defmodule Jido.Agent.Server.Signal do
-  # @moduledoc """
+  @moduledoc false
   # Defines specialized signals for Agent Server communication and control.
 
   # This module provides functions for creating standardized signals used by the Agent Server
   # for operations like process management, state transitions, and command execution.
-  # """
   use ExDbug, enabled: false
 
   alias Jido.Signal

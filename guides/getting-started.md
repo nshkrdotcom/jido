@@ -215,7 +215,7 @@ Now that you understand the basics, you can explore:
    - Metric collection
    - Event processing
 
-4. [Using Agent Directives](guides/agent-directives.md)
+4. [Using Agent Directives](guides/directives.md)
    - Runtime adaptation
    - Dynamic capabilities
    - Self-modification patterns

@@ -1,5 +1,7 @@
 defmodule Jido.Agent.Server do
   @moduledoc """
+  > This module is under active development and may undergo changes.
+
   A fault-tolerant, distributed agent server implementation that manages stateful agents
   with built-in pub/sub capabilities and dynamic supervision.
 

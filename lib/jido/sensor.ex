@@ -126,6 +126,11 @@ defmodule Jido.Sensor do
                                               type: :string,
                                               doc: "Unique identifier for the sensor instance"
                                             ],
+                                            pubsub: [
+                                              type: :atom,
+                                              required: true,
+                                              doc: "PubSub module to use"
+                                            ],
                                             topic: [
                                               type: :string,
                                               default: "#{@validated_opts[:name]}:${id}",
@@ -135,11 +140,6 @@ defmodule Jido.Sensor do
                                               type: :non_neg_integer,
                                               default: 10_000,
                                               doc: "Interval in milliseconds between heartbeats"
-                                            ],
-                                            pubsub: [
-                                              type: :atom,
-                                              required: true,
-                                              doc: "PubSub module to use"
                                             ],
                                             retain_last: [
                                               type: :pos_integer,

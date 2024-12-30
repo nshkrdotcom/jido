@@ -202,6 +202,12 @@ The planning phase lets us:
 - Prepare parameters for each step
 - Check for obvious problems before execution
 
+> Why doesn't the agent pass it's state to the first action?
+>
+> Great question - and there are two reasons for this:
+> 1. The Runner is the component responsible for passing state to the Action - so in our contrived example, it's important to demonstrate that the state is being explicitly passed
+> 2. The Agent has sensible defaults that try to remove as many assumptions and require explicit programming.  Passing the state by default is a good example of this.  If you want to pass the state to the first action, you can do so explicitly.
+
 ### Running Actions
 
 Once we've planned our Actions, we can execute them:

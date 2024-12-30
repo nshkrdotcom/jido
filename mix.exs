@@ -7,7 +7,7 @@ defmodule Jido.MixProject do
     [
       app: :jido,
       version: @version,
-      elixir: "~> 1.15",
+      elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -16,7 +16,7 @@ defmodule Jido.MixProject do
       # Docs
       name: "Jido",
       description:
-        "A flexible framework for building distributed Agents and Workflows in Elixir.",
+        "A foundational framework for building autonomous, distributed agent systems in Elixir",
       source_url: "https://github.com/agentjido/jido",
       homepage_url: "https://github.com/agentjido/jido",
       package: package(),
@@ -48,18 +48,17 @@ defmodule Jido.MixProject do
 
   defp docs do
     [
-      main: "Jido",
+      main: "readme",
       source_ref: "v#{@version}",
       source_url: "https://github.com/agentjido/jido",
       extra_section: "Guides",
       extras: [
         {"README.md", title: "Home"},
         {"guides/getting-started.md", title: "Getting Started"},
-        {"guides/getting-started-actions.md", title: "Actions & Workflows"}
-        # {"guides/actions.md", title: "Actions"},
-        # {"guides/commands.md", title: "Commands"},
-        # {"guides/agents.md", title: "Agents"}
-        # {"guides/sensors.md", title: "Sensors"}
+        {"guides/actions.md", title: "Actions & Workflows"},
+        {"guides/agents.md", title: "Agents"},
+        {"guides/sensors.md", title: "Sensors"},
+        {"guides/agent-directives.md", title: "Agent Directives"}
       ],
       groups_for_modules: [
         Core: [
@@ -68,7 +67,9 @@ defmodule Jido.MixProject do
           Jido.Action,
           Jido.Workflow,
           Jido.Signal,
-          Jido.Sensor
+          Jido.Sensor,
+          Jido.Discovery,
+          Jido.Supervisor
         ],
         Workflows: [
           Jido.Workflow.Chain,
@@ -83,12 +84,59 @@ defmodule Jido.MixProject do
           Jido.Actions.Calculator,
           Jido.Actions.Basic,
           Jido.Actions.Files,
-          Jido.Actions.Simplebot
+          Jido.Actions.Simplebot,
+          Jido.Actions.Syscall,
+          Jido.Actions.Files.DeleteFile,
+          Jido.Actions.Files.ListDirectory,
+          Jido.Actions.Files.MakeDirectory,
+          Jido.Actions.Files.WriteFile
+        ],
+        Directives: [
+          Jido.Action.Directives,
+          Jido.Agent.Directive,
+          Jido.Agent.Directive.DeregisterActionDirective,
+          Jido.Agent.Directive.EnqueueDirective,
+          Jido.Agent.Directive.RegisterActionDirective
+        ],
+        Syscalls: [
+          Jido.Agent.Syscall,
+          Jido.Agent.Syscall.BroadcastSyscall,
+          Jido.Agent.Syscall.KillSyscall,
+          Jido.Agent.Syscall.SpawnSyscall,
+          Jido.Agent.Syscall.SubscribeSyscall,
+          Jido.Agent.Syscall.UnsubscribeSyscall
+        ],
+        Runner: [
+          Jido.Runner,
+          Jido.Runner.Chain,
+          Jido.Runner.Instruction,
+          Jido.Runner.Result,
+          Jido.Runner.Simple
         ],
         Utilities: [
           Jido.Util,
           Jido.Error,
           Jido.Agent.Server.State
+        ]
+      ],
+      skip_undefined_reference_warnings_on: [
+        Jido.Agent.Server.Execute,
+        Jido.Agent.Server.Process,
+        Jido.Agent.Server.PubSub,
+        Jido.Agent.Server.Signal,
+        Jido.Agent.Server.Syscall
+      ],
+      groups_for_extras: [
+        Guides: ~r/guides\/.*md/
+      ],
+      sidebar_items: [
+        Home: "README.md",
+        Guides: [
+          "Getting Started": "guides/getting-started.md",
+          Actions: "guides/actions.md",
+          Agents: "guides/agents.md",
+          Sensors: "guides/sensors.md",
+          "Agent Directives": "guides/agent-directives.md"
         ]
       ]
     ]

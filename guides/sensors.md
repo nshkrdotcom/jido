@@ -1,6 +1,6 @@
-# Getting Started with Jido Signals and Sensors
+# Signals and Sensors
 
-Welcome to the Jido Signals and Sensors guide! In our previous guides, we explored how Actions serve as composable building blocks and how Agents provide stateful wrappers around them. Now, let's discover how Signals and Sensors enable real-time event monitoring and metrics collection in your Jido system.
+In our previous guides, we explored how Actions serve as composable building blocks and how Agents provide stateful wrappers around them. Now, let's discover how Signals and Sensors enable real-time event monitoring and metrics collection in your Jido system.
 
 ## Understanding Signals and Sensors
 

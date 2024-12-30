@@ -23,10 +23,11 @@ defmodule Jido.MixProject do
       docs: docs(),
 
       # Coverage
-      test_coverage: [tool: ExCoveralls],
+      test_coverage: [tool: ExCoveralls, export: "cov"],
       preferred_cli_env: [
         coveralls: :test,
         "coveralls.github": :test,
+        "coveralls.lcov": :test,
         "coveralls.detail": :test,
         "coveralls.post": :test,
         "coveralls.html": :test,

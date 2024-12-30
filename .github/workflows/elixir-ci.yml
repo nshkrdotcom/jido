@@ -52,3 +52,6 @@ jobs:
         uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: cover/cov.coverdata
+          # Don't fail CI if coveralls fails to upload
+          fail-on-error: false

@@ -40,8 +40,16 @@ jobs:
       - name: Check formatting
         run: mix format --check-formatted
 
-      - name: Run tests
-        run: mix test
+      - name: Run tests with coverage
+        run: mix coveralls.github
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check for unused dependencies
         run: mix deps.unlock --check-unused
+
+      - name: Upload coverage to Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: ./cover/lcov.info

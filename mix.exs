@@ -169,7 +169,7 @@ defmodule Jido.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev], server: false},
       {:ex_doc, "~> 0.34", only: :dev, server: false},
       {:excoveralls, "~> 0.18.3", only: [:dev, :test]},
-      {:ex_dbug, "~> 1.1"},
+      {:ex_dbug, "~> 1.2"},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], server: false},
       {:mimic, "~> 1.7", only: [:dev, :test]},
       {:mock, "~> 0.3.8", only: [:dev, :test]},

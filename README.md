@@ -1,6 +1,8 @@
 # Jido (自動)
 
-自動 (Jido) - A foundational framework for building autonomous, distributed agent systems in Elixir.
+The name "Jido" (自動) comes from the Japanese word meaning "automatic" or "automated", where 自 (ji) means "self" and 動 (dō) means "movement".
+
+Jido is a foundational framework for building autonomous, distributed agent systems in Elixir.
 
 > **Note**: Jido is a foundational framework that does not include AI or LLM capabilities out of the box. For AI integration, please see the separate [`jido_ai`](https://github.com/agentjido/jido_ai) package which provides custom actions for AI/LLM functionality like structured interactions with Anthropic's Claude models.
 

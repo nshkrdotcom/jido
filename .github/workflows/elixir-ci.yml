@@ -31,7 +31,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: deps
-          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          key: ${{ runner.os }}-${{ hashFiles('**/mix.lock') }}
           restore-keys: ${{ runner.os }}-mix-
 
       - name: Install dependencies
@@ -40,18 +40,10 @@ jobs:
       - name: Check formatting
         run: mix format --check-formatted
 
+      - name: Check for unused dependencies
+        run: mix deps.unlock --check-unused
+
       - name: Run tests with coverage
         run: mix coveralls.github
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check for unused dependencies
-        run: mix deps.unlock --check-unused
-
-      - name: Upload coverage to Coveralls
-        uses: coverallsapp/github-action@v2
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: cover/cov.coverdata
-          # Don't fail CI if coveralls fails to upload
-          fail-on-error: false

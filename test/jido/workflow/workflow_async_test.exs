@@ -9,6 +9,8 @@ defmodule JidoTest.WorkflowAsyncTest do
   alias JidoTest.TestActions.DelayAction
   alias JidoTest.TestActions.ErrorAction
 
+  @moduletag :capture_log
+
   describe "run_async/4" do
     test "returns an async_ref with pid and ref" do
       capture_log(fn ->

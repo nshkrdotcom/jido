@@ -30,6 +30,12 @@ defmodule Jido.SignalStore do
   @type application :: Application.t()
   @type config :: Keyword.t()
 
+  def get_adapter(application) do
+    # Application.event_store_adapter(application)
+    # {Jido.SignalStore.Adapters.InMemory, %{name: Jido.SignalStore.Adapters.InMemory.SignalStore}}
+    [adapter: Jido.SignalStore.Adapters.InMemory, serializer: Jido.Serialization.JsonSerializer]
+  end
+
   @doc """
   Append one or more signals to a stream atomically.
   """
@@ -41,7 +47,7 @@ defmodule Jido.SignalStore do
     }
 
     span(:append_to_stream, meta, fn ->
-      {adapter, adapter_meta} = Application.event_store_adapter(application)
+      {adapter, adapter_meta} = get_adapter(application)
 
       if function_exported?(adapter, :append_to_stream, 5) do
         adapter.append_to_stream(adapter_meta, stream_uuid, expected_version, events, opts)
@@ -68,7 +74,7 @@ defmodule Jido.SignalStore do
     }
 
     span(:stream_forward, meta, fn ->
-      {adapter, adapter_meta} = Application.event_store_adapter(application)
+      {adapter, adapter_meta} = get_adapter(application)
 
       case adapter.stream_forward(
              adapter_meta,
@@ -95,7 +101,7 @@ defmodule Jido.SignalStore do
   """
   def subscribe(application, stream_uuid) do
     span(:subscribe, %{application: application, stream_uuid: stream_uuid}, fn ->
-      {adapter, adapter_meta} = Application.event_store_adapter(application)
+      {adapter, adapter_meta} = get_adapter(application)
 
       adapter.subscribe(adapter_meta, stream_uuid)
     end)
@@ -152,7 +158,7 @@ defmodule Jido.SignalStore do
     }
 
     span(:subscribe_to, meta, fn ->
-      {adapter, adapter_meta} = Application.event_store_adapter(application)
+      {adapter, adapter_meta} = get_adapter(application)
 
       if function_exported?(adapter, :subscribe_to, 6) do
         adapter.subscribe_to(
@@ -183,7 +189,7 @@ defmodule Jido.SignalStore do
     meta = %{application: application, subscription: subscription, event: event}
 
     span(:ack_event, meta, fn ->
-      {adapter, adapter_meta} = Application.event_store_adapter(application)
+      {adapter, adapter_meta} = get_adapter(application)
 
       adapter.ack_event(adapter_meta, subscription, event)
     end)
@@ -201,7 +207,7 @@ defmodule Jido.SignalStore do
   """
   def unsubscribe(application, subscription) do
     span(:unsubscribe, %{application: application, subscription: subscription}, fn ->
-      {adapter, adapter_meta} = Application.event_store_adapter(application)
+      {adapter, adapter_meta} = get_adapter(application)
 
       adapter.unsubscribe(adapter_meta, subscription)
     end)
@@ -219,7 +225,7 @@ defmodule Jido.SignalStore do
     meta = %{application: application, subscribe_to: subscribe_to, handler_name: handler_name}
 
     span(:delete_subscription, meta, fn ->
-      {adapter, adapter_meta} = Application.event_store_adapter(application)
+      {adapter, adapter_meta} = get_adapter(application)
 
       adapter.delete_subscription(adapter_meta, subscribe_to, handler_name)
     end)
@@ -229,7 +235,7 @@ defmodule Jido.SignalStore do
   Read a snapshot, if available, for a given source.
   """
   def read_snapshot(application, source_uuid) do
-    {adapter, adapter_meta} = Application.event_store_adapter(application)
+    {adapter, adapter_meta} = get_adapter(application)
 
     span(:read_snapshot, %{application: application, source_uuid: source_uuid}, fn ->
       adapter.read_snapshot(adapter_meta, source_uuid)
@@ -240,7 +246,7 @@ defmodule Jido.SignalStore do
   Record a snapshot of the data and metadata for a given source
   """
   def record_snapshot(application, snapshot) do
-    {adapter, adapter_meta} = Application.event_store_adapter(application)
+    {adapter, adapter_meta} = get_adapter(application)
 
     span(:record_snapshot, %{application: application, snapshot: snapshot}, fn ->
       adapter.record_snapshot(adapter_meta, snapshot)
@@ -251,7 +257,7 @@ defmodule Jido.SignalStore do
   Delete a previously recorded snapshot for a given source
   """
   def delete_snapshot(application, source_uuid) do
-    {adapter, adapter_meta} = Application.event_store_adapter(application)
+    {adapter, adapter_meta} = get_adapter(application)
 
     span(:delete_snapshot, %{application: application, source_uuid: source_uuid}, fn ->
       adapter.delete_snapshot(adapter_meta, source_uuid)

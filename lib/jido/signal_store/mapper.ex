@@ -14,8 +14,6 @@ defmodule Jido.Event.Mapper do
 
   """
 
-  # alias Jido.EventStore.TypeProvider
-  # alias Jido.EventStore.{EventData, RecordedEvent}
   alias Jido.SignalStore.TypeProvider
   alias Jido.SignalStore.{EventData, RecordedEvent}
 

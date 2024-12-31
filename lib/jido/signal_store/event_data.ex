@@ -4,21 +4,17 @@ defmodule Jido.SignalStore.EventData do
   storage.
   """
 
+  use TypedStruct
+
   @type uuid :: String.t()
 
-  @type t :: %Jido.SignalStore.EventData{
-          causation_id: uuid() | nil,
-          correlation_id: uuid(),
-          event_type: String.t(),
-          data: struct(),
-          metadata: map()
-        }
+  typedstruct do
+    @typedoc "Represents event data before persistence to storage"
 
-  defstruct [
-    :causation_id,
-    :correlation_id,
-    :event_type,
-    :data,
-    :metadata
-  ]
+    field(:causation_id, uuid() | nil)
+    field(:correlation_id, uuid(), enforce: true)
+    field(:event_type, String.t(), enforce: true)
+    field(:data, struct(), enforce: true)
+    field(:metadata, map(), default: %{})
+  end
 end

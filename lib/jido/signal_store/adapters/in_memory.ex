@@ -9,25 +9,21 @@ defmodule Jido.SignalStore.Adapters.InMemory do
   @behaviour Jido.SignalStore.Adapter
 
   use GenServer
+  use TypedStruct
 
-  defmodule State do
-    @moduledoc false
-
-    defstruct [
-      :name,
-      :serializer,
-      persisted_events: [],
-      streams: %{},
-      transient_subscribers: %{},
-      persistent_subscriptions: %{},
-      snapshots: %{},
-      next_event_number: 1
-    ]
+  typedstruct module: State do
+    field(:name, String.t(), enforce: true)
+    field(:serializer, any(), default: nil)
+    field(:persisted_events, [EventData.t()], default: [])
+    field(:streams, %{String.t() => [EventData.t()]}, default: %{})
+    field(:transient_subscribers, %{String.t() => [pid()]}, default: %{})
+    field(:persistent_subscriptions, %{String.t() => PersistentSubscription.t()}, default: %{})
+    field(:snapshots, %{String.t() => SnapshotData.t()}, default: %{})
+    field(:next_event_number, non_neg_integer(), default: 1)
   end
 
   alias Jido.SignalStore.Adapters.InMemory.{PersistentSubscription, State, Subscription}
   alias Jido.SignalStore.{EventData, RecordedEvent, SnapshotData}
-  alias Commanded.UUID
 
   def start_link(opts \\ []) do
     {start_opts, in_memory_opts} =
@@ -429,7 +425,7 @@ defmodule Jido.SignalStore.Adapters.InMemory do
     } = event
 
     %RecordedEvent{
-      event_id: UUID.uuid4(),
+      event_id: Jido.Util.generate_id(),
       event_number: event_number,
       stream_id: stream_uuid,
       stream_version: stream_version,
@@ -584,7 +580,7 @@ defmodule Jido.SignalStore.Adapters.InMemory do
     state
   end
 
-  defp serialize(%State{serializer: nil}, data), do: data
+  defp serialize(%State{serializer: _}, data), do: data
 
   defp serialize(%State{} = state, %RecordedEvent{} = recorded_event) do
     %State{serializer: serializer} = state
@@ -608,7 +604,7 @@ defmodule Jido.SignalStore.Adapters.InMemory do
     }
   end
 
-  defp deserialize(%State{serializer: nil}, data), do: data
+  defp deserialize(%State{serializer: _}, data), do: data
 
   defp deserialize(%State{} = state, %RecordedEvent{} = recorded_event) do
     %State{serializer: serializer} = state

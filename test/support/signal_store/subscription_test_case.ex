@@ -1,10 +1,9 @@
 defmodule Jido.SignalStore.SubscriptionTestCase do
-  import Commanded.SharedTestCase
+  import Jido.SharedTestCase
 
   define_tests do
     alias Jido.SignalStore.{EventData, RecordedEvent, Subscriber}
-    alias Commanded.Helpers.ProcessHelper
-    alias Commanded.UUID
+    alias Jido.Helpers.ProcessHelper
 
     defmodule BankAccountOpened do
       @derive Jason.Encoder
@@ -16,7 +15,7 @@ defmodule Jido.SignalStore.SubscriptionTestCase do
         event_store: event_store,
         event_store_meta: event_store_meta
       } do
-        stream_uuid = UUID.uuid4()
+        stream_uuid = Jido.Util.generate_id()
 
         assert :ok = event_store.subscribe(event_store_meta, stream_uuid)
 
@@ -60,8 +59,8 @@ defmodule Jido.SignalStore.SubscriptionTestCase do
         event_store: event_store,
         event_store_meta: event_store_meta
       } do
-        stream_uuid = UUID.uuid4()
-        another_stream_uuid = UUID.uuid4()
+        stream_uuid = Jido.Util.generate_id()
+        another_stream_uuid = Jido.Util.generate_id()
 
         assert :ok = event_store.subscribe(event_store_meta, stream_uuid)
 
@@ -836,8 +835,8 @@ defmodule Jido.SignalStore.SubscriptionTestCase do
 
     defp build_event(account_number) do
       %EventData{
-        causation_id: UUID.uuid4(),
-        correlation_id: UUID.uuid4(),
+        causation_id: Jido.Util.generate_id(),
+        correlation_id: Jido.Util.generate_id(),
         event_type: "#{__MODULE__}.BankAccountOpened",
         data: %BankAccountOpened{account_number: account_number, initial_balance: 1_000},
         metadata: %{"user_id" => "test"}

@@ -3,7 +3,6 @@ defmodule Jido.SignalStore.Adapters.InMemoryTest do
 
   alias Jido.SignalStore.Adapters.InMemory
   alias Jido.SignalStore.EventData
-  alias Commanded.UUID
 
   defmodule BankAccountOpened do
     @derive Jason.Encoder
@@ -30,8 +29,8 @@ defmodule Jido.SignalStore.Adapters.InMemoryTest do
 
   defp build_event(account_number) do
     %EventData{
-      causation_id: UUID.uuid4(),
-      correlation_id: UUID.uuid4(),
+      causation_id: Jido.Util.generate_id(),
+      correlation_id: Jido.Util.generate_id(),
       event_type: "#{__MODULE__}.BankAccountOpened",
       data: %BankAccountOpened{account_number: account_number, initial_balance: 1_000},
       metadata: %{"user_id" => "test"}

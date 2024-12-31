@@ -30,9 +30,9 @@ defmodule Jido.SignalStore.TypeProvider do
   @spec type_provider() :: module()
   def type_provider do
     Application.get_env(
-      :commanded,
+      :jido,
       :type_provider,
-      Commanded.Serialization.ModuleNameTypeProvider
+      Jido.Serialization.ModuleNameTypeProvider
     )
   end
 end

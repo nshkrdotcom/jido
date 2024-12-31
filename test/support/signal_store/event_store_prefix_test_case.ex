@@ -1,9 +1,8 @@
 defmodule Jido.SignalStore.SignalStorePrefixTestCase do
-  import Commanded.SharedTestCase
+  import Jido.SharedTestCase
 
   define_tests do
     alias Jido.SignalStore.EventData
-    alias Commanded.UUID
 
     defmodule BankAccountOpened do
       @derive Jason.Encoder
@@ -32,7 +31,11 @@ defmodule Jido.SignalStore.SignalStorePrefixTestCase do
       end
     end
 
-    defp build_events(count, correlation_id \\ UUID.uuid4(), causation_id \\ UUID.uuid4())
+    defp build_events(
+           count,
+           correlation_id \\ Jido.Util.generate_id(),
+           causation_id \\ Jido.Util.generate_id()
+         )
 
     defp build_events(count, correlation_id, causation_id) do
       for account_number <- 1..count,

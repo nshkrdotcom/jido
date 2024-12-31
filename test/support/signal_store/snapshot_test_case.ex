@@ -1,9 +1,8 @@
 defmodule Jido.SignalStore.SnapshotTestCase do
-  import Commanded.SharedTestCase
+  import Jido.SharedTestCase
 
   define_tests do
     alias Jido.SignalStore.SnapshotData
-    alias Commanded.UUID
 
     defmodule BankAccountOpened do
       @derive Jason.Encoder
@@ -68,7 +67,7 @@ defmodule Jido.SignalStore.SnapshotTestCase do
 
     defp build_snapshot_data(account_number) do
       %SnapshotData{
-        source_uuid: UUID.uuid4(),
+        source_uuid: Jido.Util.generate_id(),
         source_version: account_number,
         source_type: "#{__MODULE__}.BankAccountOpened",
         data: %BankAccountOpened{account_number: account_number, initial_balance: 1_000},

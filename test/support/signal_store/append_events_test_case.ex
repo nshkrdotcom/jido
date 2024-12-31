@@ -1,11 +1,11 @@
 defmodule Jido.SignalStore.AppendEventsTestCase do
-  import Commanded.SharedTestCase
+  import Jido.SharedTestCase
 
   define_tests do
-    import Commanded.Enumerable, only: [pluck: 2]
+    import Jido.Enumerable, only: [pluck: 2]
 
     alias Jido.SignalStore.EventData
-    alias Commanded.UUID
+    alias Jido.Util
 
     defmodule BankAccountOpened do
       @derive Jason.Encoder
@@ -161,8 +161,8 @@ defmodule Jido.SignalStore.AppendEventsTestCase do
 
     describe "stream events from an existing stream" do
       test "should read events", %{event_store: event_store, event_store_meta: event_store_meta} do
-        correlation_id = UUID.uuid4()
-        causation_id = UUID.uuid4()
+        correlation_id = Util.generate_id()
+        causation_id = Util.generate_id()
         events = build_events(4, correlation_id, causation_id)
 
         assert :ok == event_store.append_to_stream(event_store_meta, "stream", 0, events)
@@ -235,7 +235,11 @@ defmodule Jido.SignalStore.AppendEventsTestCase do
       }
     end
 
-    defp build_events(count, correlation_id \\ UUID.uuid4(), causation_id \\ UUID.uuid4())
+    defp build_events(
+           count,
+           correlation_id \\ Util.generate_id(),
+           causation_id \\ Util.generate_id()
+         )
 
     defp build_events(count, correlation_id, causation_id) do
       for account_number <- 1..count,

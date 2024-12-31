@@ -2,7 +2,7 @@ defmodule Jido.SignalStore.RecordedEventTest do
   use ExUnit.Case
 
   alias Jido.SignalStore.RecordedEvent
-  alias Commanded.Helpers.EventFactory
+  alias Jido.Helpers.EventFactory
 
   defmodule BankAccountOpened do
     @derive Jason.Encoder

@@ -1,12 +1,12 @@
 defmodule Jido.SignalStore.Adapter do
   @moduledoc """
-  Defines the behaviour to be implemented by an event store adapter to be used by Commanded.
+  Defines the behaviour to be implemented by an signal store adapter to be used by Jido.
   """
 
   alias Jido.SignalStore.{EventData, RecordedEvent, SnapshotData}
 
   @type adapter_meta :: map
-  @type application :: Commanded.Application.t()
+  @type agent :: Jido.Agent.t()
   @type config :: Keyword.t()
   @type stream_uuid :: String.t()
   @type start_from :: :origin | :current | integer
@@ -20,7 +20,7 @@ defmodule Jido.SignalStore.Adapter do
   @doc """
   Return a child spec defining all processes required by the event store.
   """
-  @callback child_spec(application, config) ::
+  @callback child_spec(agent, config) ::
               {:ok, [:supervisor.child_spec() | {module, term} | module], adapter_meta}
 
   @doc """

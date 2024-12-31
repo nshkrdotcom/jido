@@ -1,12 +1,12 @@
 defmodule Jido.SignalStore do
   @moduledoc """
-  Use the event store configured for a Commanded application.
+  Use the event store configured for a Jido application.
 
   ### Telemetry Events
 
   Adds telemetry events for the following functions. Events are emitted in the form
 
-  `[:commanded, :event_store, event]` with their spannable postfixes (`start`, `stop`, `exception`)
+  `[:jido, :event_store, event]` with their spannable postfixes (`start`, `stop`, `exception`)
 
     * ack_event/3
     * adapter/2
@@ -24,14 +24,14 @@ defmodule Jido.SignalStore do
     * unsubscribe/2
 
   """
-  alias Commanded.Application
-  alias Commanded.Event.Upcast
+  alias Jido.Application
+  alias Jido.Event.Upcast
 
   @type application :: Application.t()
   @type config :: Keyword.t()
 
   @doc """
-  Append one or more events to a stream atomically.
+  Append one or more signals to a stream atomically.
   """
   def append_to_stream(application, stream_uuid, expected_version, events, opts \\ []) do
     meta = %{
@@ -285,7 +285,7 @@ defmodule Jido.SignalStore do
 
   # TODO convert to macro
   defp span(event, meta, func) do
-    :telemetry.span([:commanded, :event_store, event], meta, fn ->
+    :telemetry.span([:jido, :event_store, event], meta, fn ->
       {func.(), meta}
     end)
   end

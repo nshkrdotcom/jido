@@ -2,7 +2,7 @@ defmodule Jido.SignalStore.InMemoryTestCase do
   use ExUnit.CaseTemplate
 
   alias Jido.SignalStore.Adapters.InMemory
-  alias Commanded.Serialization.JsonSerializer
+  alias Jido.Serialization.JsonSerializer
 
   setup do
     {:ok, child_spec, event_store_meta} =

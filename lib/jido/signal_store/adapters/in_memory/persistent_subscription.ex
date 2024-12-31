@@ -4,17 +4,18 @@ defmodule Jido.SignalStore.Adapters.InMemory.PersistentSubscription do
   alias Jido.SignalStore.Adapters.InMemory.Subscriber
   alias Jido.SignalStore.RecordedEvent
   alias __MODULE__
+  use TypedStruct
 
-  defstruct [
-    :checkpoint,
-    :concurrency_limit,
-    :name,
-    :partition_by,
-    :ref,
-    :start_from,
-    :stream_uuid,
-    subscribers: []
-  ]
+  typedstruct do
+    field(:checkpoint, non_neg_integer())
+    field(:concurrency_limit, non_neg_integer())
+    field(:name, String.t())
+    field(:partition_by, (RecordedEvent.t() -> any()))
+    field(:ref, reference())
+    field(:start_from, Jido.SignalStore.Adapter.start_from())
+    field(:stream_uuid, Jido.SignalStore.Adapter.stream_uuid())
+    field(:subscribers, [Subscriber.t()], default: [])
+  end
 
   @doc """
   Subscribe a new subscriber to the persistent subscription.

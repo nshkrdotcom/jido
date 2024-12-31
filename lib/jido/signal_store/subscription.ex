@@ -1,48 +1,26 @@
 defmodule Jido.SignalStore.Subscription do
   @moduledoc false
 
+  use TypedStruct
   alias Jido.SignalStore
   alias Jido.SignalStore.{RecordedEvent, Subscription}
 
-  @enforce_keys [
-    :application,
-    :backoff,
-    :concurrency,
-    :subscribe_to,
-    :subscribe_from,
-    :subscription_name,
-    :subscription_opts
-  ]
-
-  @type t :: %Subscription{
-          application: Commanded.Application.t(),
-          backoff: any(),
-          concurrency: pos_integer(),
-          partition_by: (RecordedEvent -> any()) | nil,
-          subscribe_to: SignalStore.Adapter.stream_uuid() | :all,
-          subscribe_from: SignalStore.Adapter.start_from(),
-          subscription_name: SignalStore.Adapter.subscription_name(),
-          subscription_opts: Keyword.t(),
-          subscription_pid: pid() | nil,
-          subscription_ref: reference() | nil
-        }
-
-  defstruct [
-    :application,
-    :backoff,
-    :concurrency,
-    :partition_by,
-    :subscribe_to,
-    :subscribe_from,
-    :subscription_name,
-    :subscription_opts,
-    :subscription_pid,
-    :subscription_ref
-  ]
+  typedstruct do
+    field(:agent, Jido.Agent.t(), enforce: true)
+    field(:backoff, any(), enforce: true)
+    field(:concurrency, pos_integer(), enforce: true)
+    field(:partition_by, (RecordedEvent -> any()) | nil, default: nil)
+    field(:subscribe_to, SignalStore.Adapter.stream_uuid() | :all, enforce: true)
+    field(:subscribe_from, SignalStore.Adapter.start_from(), enforce: true)
+    field(:subscription_name, SignalStore.Adapter.subscription_name(), enforce: true)
+    field(:subscription_opts, Keyword.t(), enforce: true)
+    field(:subscription_pid, pid() | nil, default: nil)
+    field(:subscription_ref, reference() | nil, default: nil)
+  end
 
   def new(opts) do
     %Subscription{
-      application: Keyword.fetch!(opts, :application),
+      agent: Keyword.fetch!(opts, :agent),
       backoff: init_backoff(),
       concurrency: parse_concurrency(opts),
       partition_by: parse_partition_by(opts),
@@ -81,15 +59,15 @@ defmodule Jido.SignalStore.Subscription do
 
   @spec ack_event(Subscription.t(), RecordedEvent.t()) :: :ok
   def ack_event(%Subscription{} = subscription, %RecordedEvent{} = event) do
-    %Subscription{application: application, subscription_pid: subscription_pid} = subscription
+    %Subscription{agent: agent, subscription_pid: subscription_pid} = subscription
 
-    SignalStore.ack_event(application, subscription_pid, event)
+    SignalStore.ack_event(agent, subscription_pid, event)
   end
 
   @spec reset(Subscription.t()) :: Subscription.t()
   def reset(%Subscription{} = subscription) do
     %Subscription{
-      application: application,
+      agent: agent,
       subscribe_to: subscribe_to,
       subscription_name: subscription_name,
       subscription_pid: subscription_pid,
@@ -98,8 +76,8 @@ defmodule Jido.SignalStore.Subscription do
 
     Process.demonitor(subscription_ref)
 
-    :ok = SignalStore.unsubscribe(application, subscription_pid)
-    :ok = SignalStore.delete_subscription(application, subscribe_to, subscription_name)
+    :ok = SignalStore.unsubscribe(agent, subscription_pid)
+    :ok = SignalStore.delete_subscription(agent, subscribe_to, subscription_name)
 
     %Subscription{
       subscription
@@ -111,7 +89,7 @@ defmodule Jido.SignalStore.Subscription do
 
   defp subscribe_to(%Subscription{} = subscription, pid) do
     %Subscription{
-      application: application,
+      agent: agent,
       concurrency: concurrency,
       partition_by: partition_by,
       subscribe_to: subscribe_to,
@@ -126,7 +104,7 @@ defmodule Jido.SignalStore.Subscription do
       |> Keyword.put(:partition_by, partition_by)
 
     SignalStore.subscribe_to(
-      application,
+      agent,
       subscribe_to,
       subscription_name,
       pid,

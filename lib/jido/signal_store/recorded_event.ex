@@ -30,6 +30,7 @@ defmodule Jido.SignalStore.RecordedEvent do
 
   """
 
+  use TypedStruct
   alias Jido.SignalStore.RecordedEvent
 
   @type causation_id :: uuid() | nil
@@ -45,19 +46,6 @@ defmodule Jido.SignalStore.RecordedEvent do
   @type stream_version :: non_neg_integer()
   @type uuid :: String.t()
 
-  @type t :: %RecordedEvent{
-          event_id: event_id(),
-          event_number: event_number(),
-          stream_id: stream_id(),
-          stream_version: stream_version(),
-          causation_id: causation_id(),
-          correlation_id: correlation_id(),
-          event_type: event_type(),
-          data: data(),
-          metadata: metadata(),
-          created_at: created_at()
-        }
-
   @type enriched_metadata :: %{
           :event_id => event_id(),
           :event_number => event_number(),
@@ -70,18 +58,18 @@ defmodule Jido.SignalStore.RecordedEvent do
           optional(String.t()) => term()
         }
 
-  defstruct [
-    :event_id,
-    :event_number,
-    :stream_id,
-    :stream_version,
-    :causation_id,
-    :correlation_id,
-    :event_type,
-    :data,
-    :created_at,
-    metadata: %{}
-  ]
+  typedstruct do
+    field(:event_id, event_id(), enforce: true)
+    field(:event_number, event_number(), enforce: true)
+    field(:stream_id, stream_id(), enforce: true)
+    field(:stream_version, stream_version(), enforce: true)
+    field(:causation_id, causation_id())
+    field(:correlation_id, correlation_id())
+    field(:event_type, event_type(), enforce: true)
+    field(:data, data(), enforce: true)
+    field(:metadata, metadata(), default: %{})
+    field(:created_at, created_at(), enforce: true)
+  end
 
   @doc """
   Enrich the event's metadata with fields from the `RecordedEvent` struct and

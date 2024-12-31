@@ -3,21 +3,14 @@ defmodule Jido.SignalStore.SnapshotData do
   Snapshot data
   """
 
-  @type t :: %Jido.SignalStore.SnapshotData{
-          source_uuid: String.t(),
-          source_version: non_neg_integer,
-          source_type: String.t(),
-          data: binary,
-          metadata: binary,
-          created_at: DateTime.t()
-        }
+  use TypedStruct
 
-  defstruct [
-    :source_uuid,
-    :source_version,
-    :source_type,
-    :data,
-    :metadata,
-    :created_at
-  ]
+  typedstruct do
+    field(:source_uuid, String.t(), enforce: true)
+    field(:source_version, non_neg_integer(), enforce: true)
+    field(:source_type, String.t(), enforce: true)
+    field(:data, binary(), enforce: true)
+    field(:metadata, binary(), enforce: true)
+    field(:created_at, DateTime.t(), enforce: true)
+  end
 end

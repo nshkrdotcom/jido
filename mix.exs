@@ -133,6 +133,7 @@ defmodule Jido.MixProject do
         Guides: [
           "Getting Started": "guides/getting-started.md",
           Actions: "guides/actions.md",
+          Instructions: "guides/instructions.md",
           Agents: "guides/agents.md",
           "Sensors & Signals": "guides/sensors.md",
           Directives: "guides/directives.md"

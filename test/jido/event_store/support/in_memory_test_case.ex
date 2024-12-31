@@ -1,7 +1,7 @@
-defmodule Commanded.EventStore.InMemoryTestCase do
+defmodule Jido.SignalStore.InMemoryTestCase do
   use ExUnit.CaseTemplate
 
-  alias Commanded.EventStore.Adapters.InMemory
+  alias Jido.SignalStore.Adapters.InMemory
   alias Commanded.Serialization.JsonSerializer
 
   setup do

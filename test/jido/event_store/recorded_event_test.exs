@@ -1,7 +1,7 @@
-defmodule Commanded.EventStore.RecordedEventTest do
+defmodule Jido.SignalStore.RecordedEventTest do
   use ExUnit.Case
 
-  alias Commanded.EventStore.RecordedEvent
+  alias Jido.SignalStore.RecordedEvent
   alias Commanded.Helpers.EventFactory
 
   defmodule BankAccountOpened do

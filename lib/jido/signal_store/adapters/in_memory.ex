@@ -1,4 +1,4 @@
-defmodule Commanded.EventStore.Adapters.InMemory do
+defmodule Jido.SignalStore.Adapters.InMemory do
   @moduledoc """
   An in-memory event store adapter implemented as a `GenServer` process which
   stores events in memory only.
@@ -6,7 +6,7 @@ defmodule Commanded.EventStore.Adapters.InMemory do
   This is only designed for testing purposes.
   """
 
-  @behaviour Commanded.EventStore.Adapter
+  @behaviour Jido.SignalStore.Adapter
 
   use GenServer
 
@@ -25,8 +25,8 @@ defmodule Commanded.EventStore.Adapters.InMemory do
     ]
   end
 
-  alias Commanded.EventStore.Adapters.InMemory.{PersistentSubscription, State, Subscription}
-  alias Commanded.EventStore.{EventData, RecordedEvent, SnapshotData}
+  alias Jido.SignalStore.Adapters.InMemory.{PersistentSubscription, State, Subscription}
+  alias Jido.SignalStore.{EventData, RecordedEvent, SnapshotData}
   alias Commanded.UUID
 
   def start_link(opts \\ []) do
@@ -46,7 +46,7 @@ defmodule Commanded.EventStore.Adapters.InMemory do
     {:ok, state}
   end
 
-  @impl Commanded.EventStore.Adapter
+  @impl Jido.SignalStore.Adapter
   def child_spec(application, config) do
     {event_store_name, config} = parse_config(application, config)
 
@@ -63,14 +63,14 @@ defmodule Commanded.EventStore.Adapters.InMemory do
     {:ok, child_spec, %{name: event_store_name}}
   end
 
-  @impl Commanded.EventStore.Adapter
+  @impl Jido.SignalStore.Adapter
   def append_to_stream(adapter_meta, stream_uuid, expected_version, events, _opts \\ []) do
     event_store = event_store_name(adapter_meta)
 
     GenServer.call(event_store, {:append, stream_uuid, expected_version, events})
   end
 
-  @impl Commanded.EventStore.Adapter
+  @impl Jido.SignalStore.Adapter
   def stream_forward(adapter_meta, stream_uuid, start_version \\ 0, read_batch_size \\ 1_000)
 
   def stream_forward(adapter_meta, stream_uuid, start_version, _read_batch_size) do
@@ -79,14 +79,14 @@ defmodule Commanded.EventStore.Adapters.InMemory do
     GenServer.call(event_store, {:stream_forward, stream_uuid, start_version})
   end
 
-  @impl Commanded.EventStore.Adapter
+  @impl Jido.SignalStore.Adapter
   def subscribe(adapter_meta, stream_uuid) do
     event_store = event_store_name(adapter_meta)
 
     GenServer.call(event_store, {:subscribe, stream_uuid, self()})
   end
 
-  @impl Commanded.EventStore.Adapter
+  @impl Jido.SignalStore.Adapter
   def subscribe_to(adapter_meta, stream_uuid, subscription_name, subscriber, start_from, opts) do
     event_store = event_store_name(adapter_meta)
 
@@ -101,42 +101,42 @@ defmodule Commanded.EventStore.Adapters.InMemory do
     GenServer.call(event_store, {:subscribe_to, subscription, subscriber})
   end
 
-  @impl Commanded.EventStore.Adapter
+  @impl Jido.SignalStore.Adapter
   def ack_event(adapter_meta, subscription, %RecordedEvent{} = event) when is_pid(subscription) do
     event_store = event_store_name(adapter_meta)
 
     GenServer.call(event_store, {:ack_event, event, subscription})
   end
 
-  @impl Commanded.EventStore.Adapter
+  @impl Jido.SignalStore.Adapter
   def unsubscribe(adapter_meta, subscription) when is_pid(subscription) do
     event_store = event_store_name(adapter_meta)
 
     GenServer.call(event_store, {:unsubscribe, subscription})
   end
 
-  @impl Commanded.EventStore.Adapter
+  @impl Jido.SignalStore.Adapter
   def delete_subscription(adapter_meta, stream_uuid, subscription_name) do
     event_store = event_store_name(adapter_meta)
 
     GenServer.call(event_store, {:delete_subscription, stream_uuid, subscription_name})
   end
 
-  @impl Commanded.EventStore.Adapter
+  @impl Jido.SignalStore.Adapter
   def read_snapshot(adapter_meta, source_uuid) do
     event_store = event_store_name(adapter_meta)
 
     GenServer.call(event_store, {:read_snapshot, source_uuid})
   end
 
-  @impl Commanded.EventStore.Adapter
+  @impl Jido.SignalStore.Adapter
   def record_snapshot(adapter_meta, snapshot) do
     event_store = event_store_name(adapter_meta)
 
     GenServer.call(event_store, {:record_snapshot, snapshot})
   end
 
-  @impl Commanded.EventStore.Adapter
+  @impl Jido.SignalStore.Adapter
   def delete_snapshot(adapter_meta, source_uuid) do
     event_store = event_store_name(adapter_meta)
 
@@ -635,7 +635,7 @@ defmodule Commanded.EventStore.Adapters.InMemory do
   defp parse_config(application, config) do
     case Keyword.get(config, :name) do
       nil ->
-        name = Module.concat([application, EventStore])
+        name = Module.concat([application, SignalStore])
 
         {name, Keyword.put(config, :name, name)}
 

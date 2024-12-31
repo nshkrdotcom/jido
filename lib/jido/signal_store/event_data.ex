@@ -1,4 +1,4 @@
-defmodule Commanded.EventStore.EventData do
+defmodule Jido.SignalStore.EventData do
   @moduledoc """
   EventData contains the data for a single event before being persisted to
   storage.
@@ -6,7 +6,7 @@ defmodule Commanded.EventStore.EventData do
 
   @type uuid :: String.t()
 
-  @type t :: %Commanded.EventStore.EventData{
+  @type t :: %Jido.SignalStore.EventData{
           causation_id: uuid() | nil,
           correlation_id: uuid(),
           event_type: String.t(),

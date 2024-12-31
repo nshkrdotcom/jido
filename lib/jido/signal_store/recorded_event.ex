@@ -1,4 +1,4 @@
-defmodule Commanded.EventStore.RecordedEvent do
+defmodule Jido.SignalStore.RecordedEvent do
   @moduledoc """
   Contains the persisted stream identity, type, data, and metadata for a single event.
 
@@ -30,7 +30,7 @@ defmodule Commanded.EventStore.RecordedEvent do
 
   """
 
-  alias Commanded.EventStore.RecordedEvent
+  alias Jido.SignalStore.RecordedEvent
 
   @type causation_id :: uuid() | nil
   @type correlation_id :: uuid() | nil

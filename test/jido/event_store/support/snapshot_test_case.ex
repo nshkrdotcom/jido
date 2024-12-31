@@ -1,8 +1,8 @@
-defmodule Commanded.EventStore.SnapshotTestCase do
+defmodule Jido.SignalStore.SnapshotTestCase do
   import Commanded.SharedTestCase
 
   define_tests do
-    alias Commanded.EventStore.SnapshotData
+    alias Jido.SignalStore.SnapshotData
     alias Commanded.UUID
 
     defmodule BankAccountOpened do

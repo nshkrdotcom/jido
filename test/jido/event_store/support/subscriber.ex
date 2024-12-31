@@ -1,7 +1,7 @@
-defmodule Commanded.EventStore.Subscriber do
+defmodule Jido.SignalStore.Subscriber do
   use GenServer
 
-  alias Commanded.EventStore.Subscriber
+  alias Jido.SignalStore.Subscriber
 
   defmodule State do
     defstruct [

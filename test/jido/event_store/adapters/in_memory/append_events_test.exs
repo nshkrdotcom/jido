@@ -1,6 +1,6 @@
-defmodule Commanded.EventStore.Adapters.InMemory.AppendEventsTest do
-  alias Commanded.EventStore.Adapters.InMemory
+defmodule Jido.SignalStore.Adapters.InMemory.AppendEventsTest do
+  alias Jido.SignalStore.Adapters.InMemory
 
-  use Commanded.EventStore.InMemoryTestCase
-  use Commanded.EventStore.AppendEventsTestCase, event_store: InMemory
+  use Jido.SignalStore.InMemoryTestCase
+  use Jido.SignalStore.AppendEventsTestCase, event_store: InMemory
 end

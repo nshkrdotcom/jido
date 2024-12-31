@@ -1,4 +1,4 @@
-defmodule Commanded.EventStore.TypeProvider do
+defmodule Jido.SignalStore.TypeProvider do
   @moduledoc """
   Specification to convert between an Elixir struct and a corresponding string type.
   """

@@ -1,8 +1,8 @@
-defmodule Commanded.EventStore.Adapters.InMemoryTest do
-  use Commanded.EventStore.InMemoryTestCase
+defmodule Jido.SignalStore.Adapters.InMemoryTest do
+  use Jido.SignalStore.InMemoryTestCase
 
-  alias Commanded.EventStore.Adapters.InMemory
-  alias Commanded.EventStore.EventData
+  alias Jido.SignalStore.Adapters.InMemory
+  alias Jido.SignalStore.EventData
   alias Commanded.UUID
 
   defmodule BankAccountOpened do
@@ -12,7 +12,7 @@ defmodule Commanded.EventStore.Adapters.InMemoryTest do
 
   describe "reset!/0" do
     test "wipes all data from memory", %{event_store_meta: event_store_meta} do
-      pid = Process.whereis(InMemory.EventStore)
+      pid = Process.whereis(InMemory.SignalStore)
       initial = :sys.get_state(pid)
       events = [build_event(1)]
 

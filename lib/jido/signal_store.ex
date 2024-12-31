@@ -1,4 +1,4 @@
-defmodule Commanded.EventStore do
+defmodule Jido.SignalStore do
   @moduledoc """
   Use the event store configured for a Commanded application.
 
@@ -120,19 +120,19 @@ defmodule Commanded.EventStore do
   for a single aggregate.
 
   The subscriber must ack each received, and successfully processed event, using
-  `Commanded.EventStore.ack_event/3`.
+  `Jido.SignalStore.ack_event/3`.
 
   ## Examples
 
   Subscribe to all streams:
 
       {:ok, subscription} =
-        Commanded.EventStore.subscribe_to(MyApp, :all, "Example", self(), :current)
+        Jido.SignalStore.subscribe_to(MyApp, :all, "Example", self(), :current)
 
   Subscribe to a single stream:
 
       {:ok, subscription} =
-        Commanded.EventStore.subscribe_to(MyApp, "stream1", "Example", self(), :origin)
+        Jido.SignalStore.subscribe_to(MyApp, "stream1", "Example", self(), :origin)
 
   """
   def subscribe_to(
@@ -196,7 +196,7 @@ defmodule Commanded.EventStore do
 
   ## Example
 
-      :ok = Commanded.EventStore.unsubscribe(MyApp, subscription)
+      :ok = Jido.SignalStore.unsubscribe(MyApp, subscription)
 
   """
   def unsubscribe(application, subscription) do
@@ -212,7 +212,7 @@ defmodule Commanded.EventStore do
 
   ## Example
 
-      :ok = Commanded.EventStore.delete_subscription(MyApp, :all, "Example")
+      :ok = Jido.SignalStore.delete_subscription(MyApp, :all, "Example")
 
   """
   def delete_subscription(application, subscribe_to, handler_name) do

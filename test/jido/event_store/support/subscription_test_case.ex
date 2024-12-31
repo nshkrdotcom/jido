@@ -1,8 +1,8 @@
-defmodule Commanded.EventStore.SubscriptionTestCase do
+defmodule Jido.SignalStore.SubscriptionTestCase do
   import Commanded.SharedTestCase
 
   define_tests do
-    alias Commanded.EventStore.{EventData, RecordedEvent, Subscriber}
+    alias Jido.SignalStore.{EventData, RecordedEvent, Subscriber}
     alias Commanded.Helpers.ProcessHelper
     alias Commanded.UUID
 

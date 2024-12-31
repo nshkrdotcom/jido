@@ -1,9 +1,9 @@
-defmodule Commanded.EventStore.SnapshotData do
+defmodule Jido.SignalStore.SnapshotData do
   @moduledoc """
   Snapshot data
   """
 
-  @type t :: %Commanded.EventStore.SnapshotData{
+  @type t :: %Jido.SignalStore.SnapshotData{
           source_uuid: String.t(),
           source_version: non_neg_integer,
           source_type: String.t(),

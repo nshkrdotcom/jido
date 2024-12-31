@@ -1,10 +1,10 @@
-defmodule Commanded.EventStore.AppendEventsTestCase do
+defmodule Jido.SignalStore.AppendEventsTestCase do
   import Commanded.SharedTestCase
 
   define_tests do
     import Commanded.Enumerable, only: [pluck: 2]
 
-    alias Commanded.EventStore.EventData
+    alias Jido.SignalStore.EventData
     alias Commanded.UUID
 
     defmodule BankAccountOpened do
@@ -13,10 +13,10 @@ defmodule Commanded.EventStore.AppendEventsTestCase do
     end
 
     describe "event store adapter" do
-      test "should implement `Commanded.EventStore.Adapter` behaviour", %{
+      test "should implement `Jido.SignalStore.Adapter` behaviour", %{
         event_store: event_store
       } do
-        assert_implements(event_store, Commanded.EventStore.Adapter)
+        assert_implements(event_store, Jido.SignalStore.Adapter)
       end
     end
 

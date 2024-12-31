@@ -1,4 +1,4 @@
-defmodule Commanded.EventStore.Adapters.InMemory.Subscription do
+defmodule Jido.SignalStore.Adapters.InMemory.Subscription do
   @moduledoc false
 
   use GenServer

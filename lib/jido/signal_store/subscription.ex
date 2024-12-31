@@ -1,8 +1,8 @@
-defmodule Commanded.EventStore.Subscription do
+defmodule Jido.SignalStore.Subscription do
   @moduledoc false
 
-  alias Commanded.EventStore
-  alias Commanded.EventStore.{RecordedEvent, Subscription}
+  alias Jido.SignalStore
+  alias Jido.SignalStore.{RecordedEvent, Subscription}
 
   @enforce_keys [
     :application,
@@ -19,9 +19,9 @@ defmodule Commanded.EventStore.Subscription do
           backoff: any(),
           concurrency: pos_integer(),
           partition_by: (RecordedEvent -> any()) | nil,
-          subscribe_to: EventStore.Adapter.stream_uuid() | :all,
-          subscribe_from: EventStore.Adapter.start_from(),
-          subscription_name: EventStore.Adapter.subscription_name(),
+          subscribe_to: SignalStore.Adapter.stream_uuid() | :all,
+          subscribe_from: SignalStore.Adapter.start_from(),
+          subscription_name: SignalStore.Adapter.subscription_name(),
           subscription_opts: Keyword.t(),
           subscription_pid: pid() | nil,
           subscription_ref: reference() | nil
@@ -83,7 +83,7 @@ defmodule Commanded.EventStore.Subscription do
   def ack_event(%Subscription{} = subscription, %RecordedEvent{} = event) do
     %Subscription{application: application, subscription_pid: subscription_pid} = subscription
 
-    EventStore.ack_event(application, subscription_pid, event)
+    SignalStore.ack_event(application, subscription_pid, event)
   end
 
   @spec reset(Subscription.t()) :: Subscription.t()
@@ -98,8 +98,8 @@ defmodule Commanded.EventStore.Subscription do
 
     Process.demonitor(subscription_ref)
 
-    :ok = EventStore.unsubscribe(application, subscription_pid)
-    :ok = EventStore.delete_subscription(application, subscribe_to, subscription_name)
+    :ok = SignalStore.unsubscribe(application, subscription_pid)
+    :ok = SignalStore.delete_subscription(application, subscribe_to, subscription_name)
 
     %Subscription{
       subscription
@@ -125,7 +125,7 @@ defmodule Commanded.EventStore.Subscription do
       |> Keyword.put(:concurrency_limit, concurrency)
       |> Keyword.put(:partition_by, partition_by)
 
-    EventStore.subscribe_to(
+    SignalStore.subscribe_to(
       application,
       subscribe_to,
       subscription_name,

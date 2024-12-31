@@ -1,9 +1,9 @@
-defmodule Commanded.EventStore.Adapter do
+defmodule Jido.SignalStore.Adapter do
   @moduledoc """
   Defines the behaviour to be implemented by an event store adapter to be used by Commanded.
   """
 
-  alias Commanded.EventStore.{EventData, RecordedEvent, SnapshotData}
+  alias Jido.SignalStore.{EventData, RecordedEvent, SnapshotData}
 
   @type adapter_meta :: map
   @type application :: Commanded.Application.t()

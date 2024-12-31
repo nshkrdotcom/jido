@@ -1,7 +1,7 @@
-defmodule Commanded.EventStore.Adapters.InMemory.EventStorePrefixTest do
-  alias Commanded.EventStore.Adapters.InMemory
+defmodule Jido.SignalStore.Adapters.InMemory.SignalStorePrefixTest do
+  alias Jido.SignalStore.Adapters.InMemory
 
-  use Commanded.EventStore.EventStorePrefixTestCase, event_store: InMemory
+  use Jido.SignalStore.SignalStorePrefixTestCase, event_store: InMemory
 
   def start_event_store(config) do
     {:ok, child_spec, event_store_meta} = InMemory.child_spec(InMemory, config)

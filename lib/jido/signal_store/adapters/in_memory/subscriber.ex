@@ -1,7 +1,7 @@
-defmodule Commanded.EventStore.Adapters.InMemory.Subscriber do
+defmodule Jido.SignalStore.Adapters.InMemory.Subscriber do
   @moduledoc false
 
-  alias Commanded.EventStore.RecordedEvent
+  alias Jido.SignalStore.RecordedEvent
   alias __MODULE__
 
   defstruct [:pid, in_flight_events: [], pending_events: []]

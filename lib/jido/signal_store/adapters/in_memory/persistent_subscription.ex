@@ -1,8 +1,8 @@
-defmodule Commanded.EventStore.Adapters.InMemory.PersistentSubscription do
+defmodule Jido.SignalStore.Adapters.InMemory.PersistentSubscription do
   @moduledoc false
 
-  alias Commanded.EventStore.Adapters.InMemory.Subscriber
-  alias Commanded.EventStore.RecordedEvent
+  alias Jido.SignalStore.Adapters.InMemory.Subscriber
+  alias Jido.SignalStore.RecordedEvent
   alias __MODULE__
 
   defstruct [

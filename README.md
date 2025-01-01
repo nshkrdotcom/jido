@@ -38,7 +38,7 @@ An Agent is a system where LLMs _or_ classical planning algorithms dynamically d
 
 If your application doesn’t involve dynamic workflows or data pipelines that change based on AI or planning algorithms, you can likely do more with less.
 
-> 💡 **NOTE**: This library intends to support both LLM planning and Classical AI planning as a design principle via Actions. See [`jido_ai`](https://github.com/agentjido/jido_ai) for example LLM actions.
+> 💡 **NOTE**: This library intends to support both LLM planning and Classical AI planning (ie. [Behavior Trees](https://github.com/jschomay/elixir-behavior-tree) as a design principle via Actions. See [`jido_ai`](https://github.com/agentjido/jido_ai) for example LLM actions.
 
 _This space is evolving rapidly. Last updated 2025-01-01_
 

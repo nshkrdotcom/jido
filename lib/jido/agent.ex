@@ -1195,12 +1195,25 @@ defmodule Jido.Agent do
             :queue.len(agent.pending_instructions)
           end
 
+          @spec on_before_validate_state(t()) :: agent_result()
           def on_before_validate_state(agent), do: {:ok, agent}
+
+          @spec on_after_validate_state(t()) :: agent_result()
           def on_after_validate_state(agent), do: {:ok, agent}
+
+          @spec on_before_plan(t(), module(), map()) :: agent_result()
           def on_before_plan(agent, _action, _params), do: {:ok, agent}
+
+          @spec on_before_run(t()) :: agent_result()
           def on_before_run(agent), do: {:ok, agent}
+
+          @spec on_after_run(t(), map()) :: agent_result()
           def on_after_run(agent, _result), do: {:ok, agent}
+
+          @spec on_after_directives(t(), map()) :: agent_result()
           def on_after_directives(agent, _result), do: {:ok, agent}
+
+          @spec on_error(t(), any()) :: agent_result()
           def on_error(agent, reason), do: {:error, agent}
 
           defoverridable on_before_validate_state: 1,

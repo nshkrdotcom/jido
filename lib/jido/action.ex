@@ -69,8 +69,6 @@ defmodule Jido.Action do
 
   use TypedStruct
 
-  @derive Jason.Encoder
-  @derive Inspect
   typedstruct do
     field(:name, String.t(), enforce: true)
     field(:description, String.t())

@@ -6,8 +6,6 @@ defmodule Jido.Signal do
 
   use TypedStruct
 
-  @derive Jason.Encoder
-  @derive Inspect
   typedstruct do
     field(:specversion, String.t(), default: "1.0.2")
     field(:id, String.t(), enforce: true)

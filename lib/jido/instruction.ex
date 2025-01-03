@@ -70,8 +70,6 @@ defmodule Jido.Instruction do
   @type instruction :: action_module() | action_tuple() | t()
   @type instruction_list :: [instruction()]
 
-  @derive Inspect
-  @derive Jason.Encoder
   typedstruct do
     field(:action, module(), enforce: true)
     field(:params, map(), default: %{})

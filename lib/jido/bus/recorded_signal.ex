@@ -12,15 +12,13 @@ defmodule Jido.Bus.RecordedSignal do
     - `stream_version` - the version of the stream for the signal
     - `causation_id` - an optional UUID identifier used to identify which message you are responding to
     - `correlation_id` - an optional UUID identifier used to correlate related messages
-    - `signal_type` - the type of the signal
     - `data` - the signal data deserialized into a struct
     - `metadata` - a string keyed map of metadata associated with the signal
     - `created_at` - the datetime, in UTC, indicating when the signal was created
   """
 
   use TypedStruct
-
-  alias Jido.Signal
+  alias __MODULE__
 
   @type signal_id :: String.t()
   @type signal_number :: non_neg_integer()
@@ -33,6 +31,18 @@ defmodule Jido.Bus.RecordedSignal do
   @type metadata :: map()
   @type created_at :: DateTime.t()
 
+  @type enriched_metadata :: %{
+          :signal_id => signal_id(),
+          :signal_number => signal_number(),
+          :stream_id => stream_id(),
+          :stream_version => stream_version(),
+          :correlation_id => correlation_id(),
+          :causation_id => causation_id(),
+          :created_at => created_at(),
+          optional(atom()) => term(),
+          optional(String.t()) => term()
+        }
+
   typedstruct do
     field(:signal_id, signal_id(), enforce: true)
     field(:signal_number, signal_number(), enforce: true)
@@ -44,5 +54,37 @@ defmodule Jido.Bus.RecordedSignal do
     field(:data, data(), enforce: true)
     field(:metadata, metadata(), default: %{})
     field(:created_at, created_at(), enforce: true)
+  end
+
+  @doc """
+  Enrich the signal's metadata with fields from the `RecordedSignal` struct and
+  any additional metadata passed as an option.
+  """
+  @spec enrich_metadata(t(), [{:additional_metadata, map()}]) :: enriched_metadata()
+  def enrich_metadata(%RecordedSignal{} = signal, opts) do
+    %RecordedSignal{
+      signal_id: signal_id,
+      signal_number: signal_number,
+      stream_id: stream_id,
+      stream_version: stream_version,
+      correlation_id: correlation_id,
+      causation_id: causation_id,
+      created_at: created_at,
+      metadata: metadata
+    } = signal
+
+    additional_metadata = Keyword.get(opts, :additional_metadata, %{})
+
+    %{
+      signal_id: signal_id,
+      signal_number: signal_number,
+      stream_id: stream_id,
+      stream_version: stream_version,
+      correlation_id: correlation_id,
+      causation_id: causation_id,
+      created_at: created_at
+    }
+    |> Map.merge(metadata || %{})
+    |> Map.merge(additional_metadata)
   end
 end

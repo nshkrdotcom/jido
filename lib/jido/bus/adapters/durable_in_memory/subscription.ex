@@ -17,8 +17,8 @@ defmodule Jido.Bus.Adapters.DurableInMemory.Subscription do
   end
 
   @impl GenServer
-  def handle_info({:events, events}, subscriber) do
-    send(subscriber, {:events, events})
+  def handle_info({:signals, signals}, subscriber) do
+    send(subscriber, {:signals, signals})
 
     {:noreply, subscriber}
   end

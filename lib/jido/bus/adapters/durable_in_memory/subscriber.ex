@@ -1,52 +1,60 @@
 defmodule Jido.Bus.Adapters.DurableInMemory.Subscriber do
   @moduledoc false
 
-  alias Jido.SignalStore.RecordedEvent
+  alias Jido.Bus.RecordedSignal
   alias __MODULE__
 
-  defstruct [:pid, in_flight_events: [], pending_events: []]
+  use TypedStruct
+
+  typedstruct do
+    field(:pid, pid(), enforce: true)
+    field(:in_flight_signals, [RecordedSignal.t()], default: [])
+    field(:pending_signals, [RecordedSignal.t()], default: [])
+  end
 
   def new(pid), do: %Subscriber{pid: pid}
 
-  def available?(%Subscriber{in_flight_events: []}), do: true
+  def available?(%Subscriber{in_flight_signals: []}), do: true
   def available?(%Subscriber{}), do: false
 
   def ack(%Subscriber{} = subscriber, ack) do
-    %Subscriber{in_flight_events: in_flight_events, pending_events: pending_events} = subscriber
+    %Subscriber{in_flight_signals: in_flight_signals, pending_signals: pending_signals} =
+      subscriber
 
-    in_flight_events =
-      Enum.reject(in_flight_events, fn %RecordedEvent{event_number: event_number} ->
-        event_number <= ack
+    in_flight_signals =
+      Enum.reject(in_flight_signals, fn %RecordedSignal{signal_number: signal_number} ->
+        signal_number <= ack
       end)
 
-    subscriber = %Subscriber{subscriber | in_flight_events: in_flight_events}
+    subscriber = %Subscriber{subscriber | in_flight_signals: in_flight_signals}
 
-    case pending_events do
-      [pending_event | pending_events] ->
-        subscriber = %Subscriber{subscriber | pending_events: pending_events}
+    case pending_signals do
+      [pending_signal | pending_signals] ->
+        subscriber = %Subscriber{subscriber | pending_signals: pending_signals}
 
-        send_event(subscriber, pending_event)
+        send_signal(subscriber, pending_signal)
 
       [] ->
         subscriber
     end
   end
 
-  def publish(%Subscriber{} = subscriber, %RecordedEvent{} = event) do
-    %Subscriber{in_flight_events: in_flight_events, pending_events: pending_events} = subscriber
+  def publish(%Subscriber{} = subscriber, %RecordedSignal{} = signal) do
+    %Subscriber{in_flight_signals: in_flight_signals, pending_signals: pending_signals} =
+      subscriber
 
-    if Enum.any?(in_flight_events) do
-      %Subscriber{subscriber | pending_events: pending_events ++ [event]}
+    if Enum.any?(in_flight_signals) do
+      %Subscriber{subscriber | pending_signals: pending_signals ++ [signal]}
     else
-      send_event(subscriber, event)
+      send_signal(subscriber, signal)
     end
   end
 
-  defp send_event(%Subscriber{} = subscriber, %RecordedEvent{} = event) do
-    %Subscriber{in_flight_events: in_flight_events, pid: pid} = subscriber
+  defp send_signal(%Subscriber{} = subscriber, %RecordedSignal{} = signal) do
+    %Subscriber{in_flight_signals: in_flight_signals, pid: pid} = subscriber
 
-    send(pid, {:events, [event]})
+    send(pid, {:signals, [signal]})
 
-    %Subscriber{subscriber | in_flight_events: in_flight_events ++ [event]}
+    %Subscriber{subscriber | in_flight_signals: in_flight_signals ++ [signal]}
   end
 end

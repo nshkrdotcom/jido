@@ -1,12 +1,12 @@
 defmodule Jido.Bus.Adapters.DurableInMemory do
   @moduledoc """
-  An in-memory event store adapter implemented as a `GenServer` process which
-  stores events in memory only.
+  An in-memory signal store adapter implemented as a `GenServer` process which
+  stores signals in memory only.
 
   This is only designed for testing purposes.
   """
 
-  @behaviour Jido.SignalStore.Adapter
+  @behaviour Jido.Bus.Adapter
 
   use GenServer
   use TypedStruct
@@ -14,16 +14,17 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
   typedstruct module: State do
     field(:name, String.t(), enforce: true)
     field(:serializer, any(), default: nil)
-    field(:persisted_events, [EventData.t()], default: [])
-    field(:streams, %{String.t() => [EventData.t()]}, default: %{})
+    field(:persisted_signals, [Signal.t()], default: [])
+    field(:streams, %{String.t() => [Signal.t()]}, default: %{})
     field(:transient_subscribers, %{String.t() => [pid()]}, default: %{})
     field(:persistent_subscriptions, %{String.t() => PersistentSubscription.t()}, default: %{})
-    field(:snapshots, %{String.t() => SnapshotData.t()}, default: %{})
-    field(:next_event_number, non_neg_integer(), default: 1)
+    field(:snapshots, %{String.t() => Snapshot.t()}, default: %{})
+    field(:next_signal_number, non_neg_integer(), default: 1)
   end
 
-  alias Jido.SignalStore.Adapters.InMemory.{PersistentSubscription, State, Subscription}
-  alias Jido.SignalStore.{EventData, RecordedEvent, SnapshotData}
+  alias Jido.Bus.Adapters.DurableInMemory.{PersistentSubscription, State, Subscription}
+  alias Jido.Bus.{RecordedSignal, Snapshot}
+  alias Jido.Signal
 
   def start_link(opts \\ []) do
     {start_opts, in_memory_opts} =
@@ -42,181 +43,182 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
     {:ok, state}
   end
 
-  @impl Jido.SignalStore.Adapter
+  @impl Jido.Bus.Adapter
   def child_spec(application, config) do
-    {event_store_name, config} = parse_config(application, config)
+    {signal_store_name, config} = parse_config(application, config)
 
-    supervisor_name = subscriptions_supervisor_name(event_store_name)
+    supervisor_name = subscriptions_supervisor_name(signal_store_name)
 
     child_spec = [
       {DynamicSupervisor, strategy: :one_for_one, name: supervisor_name},
       %{
-        id: event_store_name,
+        id: signal_store_name,
         start: {__MODULE__, :start_link, [config]}
       }
     ]
 
-    {:ok, child_spec, %{name: event_store_name}}
+    {:ok, child_spec, %{name: signal_store_name}}
   end
 
-  @impl Jido.SignalStore.Adapter
-  def append_to_stream(adapter_meta, stream_uuid, expected_version, events, _opts \\ []) do
-    event_store = event_store_name(adapter_meta)
+  @impl Jido.Bus.Adapter
+  def publish(adapter_meta, stream_id, expected_version, signals, _opts \\ []) do
+    signal_store = signal_store_name(adapter_meta)
 
-    GenServer.call(event_store, {:append, stream_uuid, expected_version, events})
+    GenServer.call(signal_store, {:append, stream_id, expected_version, signals})
   end
 
-  @impl Jido.SignalStore.Adapter
-  def stream_forward(adapter_meta, stream_uuid, start_version \\ 0, read_batch_size \\ 1_000)
+  @impl Jido.Bus.Adapter
+  def replay(adapter_meta, stream_id, start_version \\ 0, read_batch_size \\ 1_000)
 
-  def stream_forward(adapter_meta, stream_uuid, start_version, _read_batch_size) do
-    event_store = event_store_name(adapter_meta)
+  def replay(adapter_meta, stream_id, start_version, _read_batch_size) do
+    signal_store = signal_store_name(adapter_meta)
 
-    GenServer.call(event_store, {:stream_forward, stream_uuid, start_version})
+    GenServer.call(signal_store, {:stream_forward, stream_id, start_version})
   end
 
-  @impl Jido.SignalStore.Adapter
-  def subscribe(adapter_meta, stream_uuid) do
-    event_store = event_store_name(adapter_meta)
+  @impl Jido.Bus.Adapter
+  def subscribe(adapter_meta, stream_id) do
+    signal_store = signal_store_name(adapter_meta)
 
-    GenServer.call(event_store, {:subscribe, stream_uuid, self()})
+    GenServer.call(signal_store, {:subscribe, stream_id, self()})
   end
 
-  @impl Jido.SignalStore.Adapter
-  def subscribe_to(adapter_meta, stream_uuid, subscription_name, subscriber, start_from, opts) do
-    event_store = event_store_name(adapter_meta)
+  @impl Jido.Bus.Adapter
+  def subscribe_to(adapter_meta, stream_id, subscription_name, subscriber, start_from, opts) do
+    signal_store = signal_store_name(adapter_meta)
 
     subscription = %PersistentSubscription{
       concurrency_limit: Keyword.get(opts, :concurrency_limit),
       name: subscription_name,
       partition_by: Keyword.get(opts, :partition_by),
       start_from: start_from,
-      stream_uuid: stream_uuid
+      stream_id: stream_id
     }
 
-    GenServer.call(event_store, {:subscribe_to, subscription, subscriber})
+    GenServer.call(signal_store, {:subscribe_to, subscription, subscriber})
   end
 
-  @impl Jido.SignalStore.Adapter
-  def ack_event(adapter_meta, subscription, %RecordedEvent{} = event) when is_pid(subscription) do
-    event_store = event_store_name(adapter_meta)
+  @impl Jido.Bus.Adapter
+  def ack_signal(adapter_meta, subscription, %RecordedSignal{} = signal)
+      when is_pid(subscription) do
+    signal_store = signal_store_name(adapter_meta)
 
-    GenServer.call(event_store, {:ack_event, event, subscription})
+    GenServer.call(signal_store, {:ack_signal, signal, subscription})
   end
 
-  @impl Jido.SignalStore.Adapter
+  @impl Jido.Bus.Adapter
   def unsubscribe(adapter_meta, subscription) when is_pid(subscription) do
-    event_store = event_store_name(adapter_meta)
+    signal_store = signal_store_name(adapter_meta)
 
-    GenServer.call(event_store, {:unsubscribe, subscription})
+    GenServer.call(signal_store, {:unsubscribe, subscription})
   end
 
-  @impl Jido.SignalStore.Adapter
-  def delete_subscription(adapter_meta, stream_uuid, subscription_name) do
-    event_store = event_store_name(adapter_meta)
+  @impl Jido.Bus.Adapter
+  def delete_subscription(adapter_meta, stream_id, subscription_name) do
+    signal_store = signal_store_name(adapter_meta)
 
-    GenServer.call(event_store, {:delete_subscription, stream_uuid, subscription_name})
+    GenServer.call(signal_store, {:delete_subscription, stream_id, subscription_name})
   end
 
-  @impl Jido.SignalStore.Adapter
-  def read_snapshot(adapter_meta, source_uuid) do
-    event_store = event_store_name(adapter_meta)
+  @impl Jido.Bus.Adapter
+  def read_snapshot(adapter_meta, source_id) do
+    signal_store = signal_store_name(adapter_meta)
 
-    GenServer.call(event_store, {:read_snapshot, source_uuid})
+    GenServer.call(signal_store, {:read_snapshot, source_id})
   end
 
-  @impl Jido.SignalStore.Adapter
+  @impl Jido.Bus.Adapter
   def record_snapshot(adapter_meta, snapshot) do
-    event_store = event_store_name(adapter_meta)
+    signal_store = signal_store_name(adapter_meta)
 
-    GenServer.call(event_store, {:record_snapshot, snapshot})
+    GenServer.call(signal_store, {:record_snapshot, snapshot})
   end
 
-  @impl Jido.SignalStore.Adapter
-  def delete_snapshot(adapter_meta, source_uuid) do
-    event_store = event_store_name(adapter_meta)
+  @impl Jido.Bus.Adapter
+  def delete_snapshot(adapter_meta, source_id) do
+    signal_store = signal_store_name(adapter_meta)
 
-    GenServer.call(event_store, {:delete_snapshot, source_uuid})
+    GenServer.call(signal_store, {:delete_snapshot, source_id})
   end
 
   def reset!(application, config \\ []) do
-    {event_store, _config} = parse_config(application, config)
+    {signal_store, _config} = parse_config(application, config)
 
-    GenServer.call(event_store, :reset!)
+    GenServer.call(signal_store, :reset!)
   end
 
   @impl GenServer
-  def handle_call({:append, stream_uuid, expected_version, events}, _from, %State{} = state) do
+  def handle_call({:append, stream_id, expected_version, signals}, _from, %State{} = state) do
     %State{streams: streams} = state
 
-    stream_events = Map.get(streams, stream_uuid)
+    stream_signals = Map.get(streams, stream_id)
 
     {reply, state} =
-      case {expected_version, stream_events} do
+      case {expected_version, stream_signals} do
         {:any_version, nil} ->
-          persist_events(state, stream_uuid, [], events)
+          persist_signals(state, stream_id, [], signals)
 
-        {:any_version, stream_events} ->
-          persist_events(state, stream_uuid, stream_events, events)
+        {:any_version, stream_signals} ->
+          persist_signals(state, stream_id, stream_signals, signals)
 
-        {:no_stream, stream_events} when is_list(stream_events) ->
+        {:no_stream, stream_signals} when is_list(stream_signals) ->
           {{:error, :stream_exists}, state}
 
         {:no_stream, nil} ->
-          persist_events(state, stream_uuid, [], events)
+          persist_signals(state, stream_id, [], signals)
 
         {:stream_exists, nil} ->
           {{:error, :stream_not_found}, state}
 
-        {:stream_exists, stream_events} ->
-          persist_events(state, stream_uuid, stream_events, events)
+        {:stream_exists, stream_signals} ->
+          persist_signals(state, stream_id, stream_signals, signals)
 
         {0, nil} ->
-          persist_events(state, stream_uuid, [], events)
+          persist_signals(state, stream_id, [], signals)
 
         {expected_version, nil} when is_integer(expected_version) ->
           {{:error, :wrong_expected_version}, state}
 
-        {expected_version, stream_events}
-        when is_integer(expected_version) and length(stream_events) != expected_version ->
+        {expected_version, stream_signals}
+        when is_integer(expected_version) and length(stream_signals) != expected_version ->
           {{:error, :wrong_expected_version}, state}
 
-        {expected_version, stream_events}
-        when is_integer(expected_version) and length(stream_events) == expected_version ->
-          persist_events(state, stream_uuid, stream_events, events)
+        {expected_version, stream_signals}
+        when is_integer(expected_version) and length(stream_signals) == expected_version ->
+          persist_signals(state, stream_id, stream_signals, signals)
       end
 
     {:reply, reply, state}
   end
 
   @impl GenServer
-  def handle_call({:stream_forward, stream_uuid, start_version}, _from, %State{} = state) do
+  def handle_call({:stream_forward, stream_id, start_version}, _from, %State{} = state) do
     %State{streams: streams} = state
 
     reply =
-      case Map.get(streams, stream_uuid) do
+      case Map.get(streams, stream_id) do
         nil ->
           {:error, :stream_not_found}
 
-        events ->
-          events
+        signals ->
+          signals
           |> Enum.reverse()
           |> Stream.drop(max(0, start_version - 1))
           |> Stream.map(&deserialize(state, &1))
-          |> Enum.map(&set_event_number_from_version(&1, stream_uuid))
+          |> Enum.map(&set_signal_number_from_version(&1, stream_id))
       end
 
     {:reply, reply, state}
   end
 
   @impl GenServer
-  def handle_call({:subscribe, stream_uuid, subscriber}, _from, %State{} = state) do
+  def handle_call({:subscribe, stream_id, subscriber}, _from, %State{} = state) do
     %State{transient_subscribers: transient_subscribers} = state
 
     Process.monitor(subscriber)
 
     transient_subscribers =
-      Map.update(transient_subscribers, stream_uuid, [subscriber], fn subscribers ->
+      Map.update(transient_subscribers, stream_id, [subscriber], fn subscribers ->
         [subscriber | subscribers]
       end)
 
@@ -268,12 +270,12 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
   end
 
   @impl GenServer
-  def handle_call({:delete_subscription, stream_uuid, subscription_name}, _from, %State{} = state) do
+  def handle_call({:delete_subscription, stream_id, subscription_name}, _from, %State{} = state) do
     %State{persistent_subscriptions: persistent_subscriptions} = state
 
     {reply, state} =
       case Map.get(persistent_subscriptions, subscription_name) do
-        %PersistentSubscription{stream_uuid: ^stream_uuid, subscribers: []} ->
+        %PersistentSubscription{stream_id: ^stream_id, subscribers: []} ->
           state = %State{
             state
             | persistent_subscriptions: Map.delete(persistent_subscriptions, subscription_name)
@@ -289,11 +291,11 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
   end
 
   @impl GenServer
-  def handle_call({:read_snapshot, source_uuid}, _from, %State{} = state) do
+  def handle_call({:read_snapshot, source_id}, _from, %State{} = state) do
     %State{snapshots: snapshots} = state
 
     reply =
-      case Map.get(snapshots, source_uuid, nil) do
+      case Map.get(snapshots, source_id, nil) do
         nil -> {:error, :snapshot_not_found}
         snapshot -> {:ok, deserialize(state, snapshot)}
       end
@@ -302,20 +304,20 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
   end
 
   @impl GenServer
-  def handle_call({:record_snapshot, %SnapshotData{} = snapshot}, _from, %State{} = state) do
-    %SnapshotData{source_uuid: source_uuid} = snapshot
+  def handle_call({:record_snapshot, %Snapshot{} = snapshot}, _from, %State{} = state) do
+    %Snapshot{source_id: source_id} = snapshot
     %State{snapshots: snapshots} = state
 
-    state = %State{state | snapshots: Map.put(snapshots, source_uuid, serialize(state, snapshot))}
+    state = %State{state | snapshots: Map.put(snapshots, source_id, serialize(state, snapshot))}
 
     {:reply, :ok, state}
   end
 
   @impl GenServer
-  def handle_call({:delete_snapshot, source_uuid}, _from, %State{} = state) do
+  def handle_call({:delete_snapshot, source_id}, _from, %State{} = state) do
     %State{snapshots: snapshots} = state
 
-    state = %State{state | snapshots: Map.delete(snapshots, source_uuid)}
+    state = %State{state | snapshots: Map.delete(snapshots, source_id)}
 
     {:reply, :ok, state}
   end
@@ -337,8 +339,8 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
   end
 
   @impl GenServer
-  def handle_call({:ack_event, event, subscriber}, _from, %State{} = state) do
-    state = ack_persistent_subscription_by_pid(state, event, subscriber)
+  def handle_call({:ack_signal, signal, subscriber}, _from, %State{} = state) do
+    state = ack_persistent_subscription_by_pid(state, signal, subscriber)
 
     {:reply, :ok, state}
   end
@@ -353,49 +355,49 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
     {:noreply, state}
   end
 
-  defp persist_events(%State{} = state, stream_uuid, existing_events, new_events) do
+  defp persist_signals(%State{} = state, stream_id, existing_signals, new_signals) do
     %State{
-      next_event_number: next_event_number,
-      persisted_events: persisted_events,
+      next_signal_number: next_signal_number,
+      persisted_signals: persisted_signals,
       persistent_subscriptions: persistent_subscriptions,
       streams: streams
     } = state
 
-    initial_stream_version = length(existing_events) + 1
+    initial_stream_version = length(existing_signals) + 1
     now = DateTime.utc_now()
 
-    new_events =
-      new_events
+    new_signals =
+      new_signals
       |> Enum.with_index(0)
-      |> Enum.map(fn {recorded_event, index} ->
-        event_number = next_event_number + index
+      |> Enum.map(fn {recorded_signal, index} ->
+        signal_number = next_signal_number + index
         stream_version = initial_stream_version + index
 
-        map_to_recorded_event(event_number, stream_uuid, stream_version, now, recorded_event)
+        map_to_recorded_signal(signal_number, stream_id, stream_version, now, recorded_signal)
       end)
       |> Enum.map(&serialize(state, &1))
 
-    stream_events = prepend(existing_events, new_events)
-    next_event_number = List.last(new_events).event_number + 1
+    stream_signals = prepend(existing_signals, new_signals)
+    next_signal_number = List.last(new_signals).signal_number + 1
 
     state = %State{
       state
-      | streams: Map.put(streams, stream_uuid, stream_events),
-        persisted_events: prepend(persisted_events, new_events),
-        next_event_number: next_event_number
+      | streams: Map.put(streams, stream_id, stream_signals),
+        persisted_signals: prepend(persisted_signals, new_signals),
+        next_signal_number: next_signal_number
     }
 
-    publish_all_events = Enum.map(new_events, &deserialize(state, &1))
+    publish_all_signals = Enum.map(new_signals, &deserialize(state, &1))
 
-    publish_stream_events =
-      Enum.map(publish_all_events, &set_event_number_from_version(&1, stream_uuid))
+    publish_stream_signals =
+      Enum.map(publish_all_signals, &set_signal_number_from_version(&1, stream_id))
 
-    state = publish_to_transient_subscribers(state, :all, publish_all_events)
-    state = publish_to_transient_subscribers(state, stream_uuid, publish_stream_events)
+    state = publish_to_transient_subscribers(state, :all, publish_all_signals)
+    state = publish_to_transient_subscribers(state, stream_id, publish_stream_signals)
 
     persistent_subscriptions =
       Enum.into(persistent_subscriptions, %{}, fn {subscription_name, subscription} ->
-        {subscription_name, publish_events(state, subscription)}
+        {subscription_name, publish_signals(state, subscription)}
       end)
 
     state = %State{state | persistent_subscriptions: persistent_subscriptions}
@@ -403,46 +405,54 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
     {:ok, state}
   end
 
-  defp set_event_number_from_version(%RecordedEvent{} = event, :all), do: event
+  defp set_signal_number_from_version(%RecordedSignal{} = signal, :all), do: signal
 
-  # Event number should equal stream version for stream events.
-  defp set_event_number_from_version(%RecordedEvent{} = event, _stream_uuid) do
-    %RecordedEvent{stream_version: stream_version} = event
+  # Signal number should equal stream version for stream signals.
+  defp set_signal_number_from_version(%RecordedSignal{} = signal, _stream_id) do
+    %RecordedSignal{stream_version: stream_version} = signal
 
-    %RecordedEvent{event | event_number: stream_version}
+    %RecordedSignal{signal | signal_number: stream_version}
   end
 
   defp prepend(list, []), do: list
   defp prepend(list, [item | remainder]), do: prepend([item | list], remainder)
 
-  defp map_to_recorded_event(event_number, stream_uuid, stream_version, now, %EventData{} = event) do
-    %EventData{
-      causation_id: causation_id,
-      correlation_id: correlation_id,
-      event_type: event_type,
-      data: data,
-      metadata: metadata
-    } = event
+  defp map_to_recorded_signal(
+         signal_number,
+         stream_id,
+         stream_version,
+         now,
+         %Signal{} = signal
+       ) do
+    %Signal{
+      # causation_id: causation_id,
+      # correlation_id: correlation_id,
+      # signal_type: signal_type,
+      type: type,
+      data: data
+      # metadata: metadata
+    } = signal
 
-    %RecordedEvent{
-      event_id: Jido.Util.generate_id(),
-      event_number: event_number,
-      stream_id: stream_uuid,
+    %RecordedSignal{
+      signal_id: Jido.Util.generate_id(),
+      signal_number: signal_number,
+      stream_id: stream_id,
       stream_version: stream_version,
-      causation_id: causation_id,
-      correlation_id: correlation_id,
-      event_type: event_type,
+      # causation_id: causation_id,
+      # correlation_id: correlation_id,
+      # signal_type: signal_type,
+      signal_type: type,
       data: data,
-      metadata: metadata,
+      # metadata: metadata,
       created_at: now
     }
   end
 
   defp start_persistent_subscription(%State{} = state, subscription, subscriber) do
-    %State{name: event_store_name, persistent_subscriptions: persistent_subscriptions} = state
+    %State{name: signal_store_name, persistent_subscriptions: persistent_subscriptions} = state
     %PersistentSubscription{name: subscription_name, checkpoint: checkpoint} = subscription
 
-    supervisor_name = subscriptions_supervisor_name(event_store_name)
+    supervisor_name = subscriptions_supervisor_name(signal_store_name)
     subscription_spec = Subscription.child_spec(subscriber) |> Map.put(:restart, :temporary)
 
     {:ok, pid} = DynamicSupervisor.start_child(supervisor_name, subscription_spec)
@@ -452,7 +462,7 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
     checkpoint = if is_nil(checkpoint), do: start_from(state, subscription), else: checkpoint
 
     subscription = PersistentSubscription.subscribe(subscription, pid, checkpoint)
-    subscription = publish_events(state, subscription)
+    subscription = publish_signals(state, subscription)
 
     persistent_subscriptions = Map.put(persistent_subscriptions, subscription_name, subscription)
 
@@ -461,25 +471,25 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
     {{:ok, pid}, state}
   end
 
-  defp publish_events(%State{} = state, %PersistentSubscription{} = subscription) do
-    %State{persisted_events: persisted_events, streams: streams} = state
-    %PersistentSubscription{checkpoint: checkpoint, stream_uuid: stream_uuid} = subscription
+  defp publish_signals(%State{} = state, %PersistentSubscription{} = subscription) do
+    %State{persisted_signals: persisted_signals, streams: streams} = state
+    %PersistentSubscription{checkpoint: checkpoint, stream_id: stream_id} = subscription
 
-    events =
-      case stream_uuid do
-        :all -> persisted_events
-        stream_uuid -> Map.get(streams, stream_uuid, [])
+    signals =
+      case stream_id do
+        :all -> persisted_signals
+        stream_id -> Map.get(streams, stream_id, [])
       end
 
     position = if checkpoint == 0, do: -1, else: -(checkpoint + 1)
 
-    case Enum.at(events, position) do
-      %RecordedEvent{} = unseen_event ->
-        unseen_event =
-          deserialize(state, unseen_event) |> set_event_number_from_version(stream_uuid)
+    case Enum.at(signals, position) do
+      %RecordedSignal{} = unseen_signal ->
+        unseen_signal =
+          deserialize(state, unseen_signal) |> set_signal_number_from_version(stream_id)
 
-        case PersistentSubscription.publish(subscription, unseen_event) do
-          {:ok, subscription} -> publish_events(state, subscription)
+        case PersistentSubscription.publish(subscription, unseen_signal) do
+          {:ok, subscription} -> publish_signals(state, subscription)
           {:error, :no_subscriber_available} -> subscription
         end
 
@@ -496,16 +506,16 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
     DynamicSupervisor.terminate_child(supervisor_name, subscription)
   end
 
-  defp ack_persistent_subscription_by_pid(%State{} = state, %RecordedEvent{} = event, pid) do
-    %RecordedEvent{event_number: event_number} = event
+  defp ack_persistent_subscription_by_pid(%State{} = state, %RecordedSignal{} = signal, pid) do
+    %RecordedSignal{signal_number: signal_number} = signal
 
     update_persistent_subscription(state, pid, fn %PersistentSubscription{} = subscription ->
-      case PersistentSubscription.ack(subscription, event_number) do
+      case PersistentSubscription.ack(subscription, signal_number) do
         %PersistentSubscription{} = subscription ->
-          publish_events(state, subscription)
+          publish_signals(state, subscription)
 
         {:error, :unexpected_ack} ->
-          # We tried to ack an event but there is no matching in-flight event
+          # We tried to ack an signal but there is no matching in-flight signal
           # I *think* it's okay to ignore this and leave the subscription as is
           subscription
       end
@@ -516,7 +526,7 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
     update_persistent_subscription(state, pid, fn %PersistentSubscription{} = subscription ->
       subscription = PersistentSubscription.unsubscribe(subscription, pid)
 
-      publish_events(state, subscription)
+      publish_signals(state, subscription)
     end)
   end
 
@@ -549,32 +559,32 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
 
     transient_subscribers =
       Enum.reduce(transient_subscribers, transient_subscribers, fn
-        {stream_uuid, subscribers}, acc ->
-          Map.put(acc, stream_uuid, List.delete(subscribers, pid))
+        {stream_id, subscribers}, acc ->
+          Map.put(acc, stream_id, List.delete(subscribers, pid))
       end)
 
     %State{state | transient_subscribers: transient_subscribers}
   end
 
   defp start_from(%State{} = state, %PersistentSubscription{} = subscription) do
-    %State{persisted_events: persisted_events, streams: streams} = state
-    %PersistentSubscription{start_from: start_from, stream_uuid: stream_uuid} = subscription
+    %State{persisted_signals: persisted_signals, streams: streams} = state
+    %PersistentSubscription{start_from: start_from, stream_id: stream_id} = subscription
 
-    case {start_from, stream_uuid} do
-      {:current, :all} -> length(persisted_events)
-      {:current, stream_uuid} -> Map.get(streams, stream_uuid, []) |> length()
-      {:origin, _stream_uuid} -> 0
-      {position, _stream_uuid} when is_integer(position) -> position
+    case {start_from, stream_id} do
+      {:current, :all} -> length(persisted_signals)
+      {:current, stream_id} -> Map.get(streams, stream_id, []) |> length()
+      {:origin, _stream_id} -> 0
+      {position, _stream_id} when is_integer(position) -> position
     end
   end
 
-  defp publish_to_transient_subscribers(%State{} = state, stream_uuid, events) do
+  defp publish_to_transient_subscribers(%State{} = state, stream_id, signals) do
     %State{transient_subscribers: transient_subscribers} = state
 
-    subscribers = Map.get(transient_subscribers, stream_uuid, [])
+    subscribers = Map.get(transient_subscribers, stream_id, [])
 
     for subscriber <- subscribers, &is_pid/1 do
-      send(subscriber, {:events, events})
+      send(subscriber, {:signals, signals})
     end
 
     state
@@ -582,22 +592,22 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
 
   defp serialize(%State{serializer: _}, data), do: data
 
-  defp serialize(%State{} = state, %RecordedEvent{} = recorded_event) do
+  defp serialize(%State{} = state, %RecordedSignal{} = recorded_signal) do
     %State{serializer: serializer} = state
-    %RecordedEvent{data: data, metadata: metadata} = recorded_event
+    %RecordedSignal{data: data, metadata: metadata} = recorded_signal
 
-    %RecordedEvent{
-      recorded_event
+    %RecordedSignal{
+      recorded_signal
       | data: serializer.serialize(data),
         metadata: serializer.serialize(metadata)
     }
   end
 
-  defp serialize(%State{} = state, %SnapshotData{} = snapshot) do
+  defp serialize(%State{} = state, %Snapshot{} = snapshot) do
     %State{serializer: serializer} = state
-    %SnapshotData{data: data, metadata: metadata} = snapshot
+    %Snapshot{data: data, metadata: metadata} = snapshot
 
-    %SnapshotData{
+    %Snapshot{
       snapshot
       | data: serializer.serialize(data),
         metadata: serializer.serialize(metadata)
@@ -606,22 +616,22 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
 
   defp deserialize(%State{serializer: _}, data), do: data
 
-  defp deserialize(%State{} = state, %RecordedEvent{} = recorded_event) do
+  defp deserialize(%State{} = state, %RecordedSignal{} = recorded_signal) do
     %State{serializer: serializer} = state
-    %RecordedEvent{data: data, metadata: metadata, event_type: event_type} = recorded_event
+    %RecordedSignal{data: data, metadata: metadata, signal_type: signal_type} = recorded_signal
 
-    %RecordedEvent{
-      recorded_event
-      | data: serializer.deserialize(data, type: event_type),
+    %RecordedSignal{
+      recorded_signal
+      | data: serializer.deserialize(data, type: signal_type),
         metadata: serializer.deserialize(metadata)
     }
   end
 
-  defp deserialize(%State{} = state, %SnapshotData{} = snapshot) do
+  defp deserialize(%State{} = state, %Snapshot{} = snapshot) do
     %State{serializer: serializer} = state
-    %SnapshotData{data: data, metadata: metadata, source_type: source_type} = snapshot
+    %Snapshot{data: data, metadata: metadata, source_type: source_type} = snapshot
 
-    %SnapshotData{
+    %Snapshot{
       snapshot
       | data: serializer.deserialize(data, type: source_type),
         metadata: serializer.deserialize(metadata)
@@ -646,9 +656,9 @@ defmodule Jido.Bus.Adapters.DurableInMemory do
     end
   end
 
-  defp event_store_name(adapter_meta) when is_map(adapter_meta),
+  defp signal_store_name(adapter_meta) when is_map(adapter_meta),
     do: Map.get(adapter_meta, :name)
 
-  defp subscriptions_supervisor_name(event_store),
-    do: Module.concat([event_store, SubscriptionsSupervisor])
+  defp subscriptions_supervisor_name(signal_store),
+    do: Module.concat([signal_store, SubscriptionsSupervisor])
 end

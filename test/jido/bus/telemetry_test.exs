@@ -73,7 +73,7 @@
 
 #       assert %{
 #                application: DefaultApp,
-#                stream_uuid: ^uuid,
+#                stream_id: ^uuid,
 #                start_version: 0,
 #                read_batch_size: 1_000
 #              } = meta
@@ -99,7 +99,7 @@
 
 #       assert_receive {[:commanded, :signal_store, :publish, :start], 1, _meas, _meta}
 #       assert_receive {[:commanded, :signal_store, :publish, :stop], 2, _meas, meta}
-#       assert %{application: DefaultApp, expected_version: 0, stream_uuid: ^uuid} = meta
+#       assert %{application: DefaultApp, expected_version: 0, stream_id: ^uuid} = meta
 #     end
 #   end
 
@@ -110,7 +110,7 @@
 
 #       assert_receive {[:commanded, :signal_store, :subscribe, :start], 1, _meas, _meta}
 #       assert_receive {[:commanded, :signal_store, :subscribe, :stop], 2, _meas, meta}
-#       assert %{application: DefaultApp, stream_uuid: ^uuid} = meta
+#       assert %{application: DefaultApp, stream_id: ^uuid} = meta
 #     end
 
 #     test "emit `[:commanded, :signal_store, :subscribe_persistent, :start | :stop]` signal" do
@@ -123,7 +123,7 @@
 
 #       assert %{
 #                application: DefaultApp,
-#                stream_uuid: :all,
+#                stream_id: :all,
 #                subscription_name: "Test",
 #                subscriber: ^subscriber,
 #                start_from: :current

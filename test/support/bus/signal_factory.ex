@@ -1,7 +1,7 @@
-defmodule Commanded.Helpers.SignalFactory do
+defmodule JidoTest.Helpers.SignalFactory do
   @moduledoc false
-  alias Commanded.Signal.Mapper
   alias Jido.Bus.RecordedSignal
+  alias Jido.Signal
 
   def map_to_recorded_signals(signals, initial_signal_number \\ 1, opts \\ []) do
     stream_id = UUID.uuid4()
@@ -16,7 +16,7 @@ defmodule Commanded.Helpers.SignalFactory do
     ]
 
     signals
-    |> Mapper.map_to_signal_data(fields)
+    |> Signal.map_to_signal_data(fields)
     |> Enum.with_index(initial_signal_number)
     |> Enum.map(fn {signal, index} ->
       %RecordedSignal{

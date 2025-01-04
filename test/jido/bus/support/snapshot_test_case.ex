@@ -1,5 +1,5 @@
 defmodule Jido.Bus.SnapshotTestCase do
-  import Commanded.SharedTestCase
+  import JidoTest.SharedTestCase
 
   define_tests do
     alias Jido.Bus.Snapshot

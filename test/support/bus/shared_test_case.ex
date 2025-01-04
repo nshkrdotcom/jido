@@ -1,4 +1,4 @@
-defmodule Commanded.SharedTestCase do
+defmodule JidoTest.SharedTestCase do
   defmacro define_tests(do: block) do
     quote do
       defmacro __using__(options) do

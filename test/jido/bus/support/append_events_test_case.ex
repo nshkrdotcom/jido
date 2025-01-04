@@ -1,10 +1,10 @@
 defmodule Jido.Bus.AppendSignalsTestCase do
-  import Commanded.SharedTestCase
+  import JidoTest.SharedTestCase
 
   define_tests do
     import Jido.Util, only: [pluck: 2]
 
-    alias Jido.Bus.Signal
+    alias Jido.Signal
 
     defmodule BankAccountOpened do
       @derive Jason.Encoder
@@ -232,6 +232,8 @@ defmodule Jido.Bus.AppendSignalsTestCase do
 
     defp build_signal(account_number, jido_correlation_id, jido_causation_id) do
       %Signal{
+        id: UUID.uuid4(),
+        source: "http://example.com/bank",
         jido_correlation_id: jido_correlation_id,
         jido_causation_id: jido_causation_id,
         type: "#{__MODULE__}.BankAccountOpened",

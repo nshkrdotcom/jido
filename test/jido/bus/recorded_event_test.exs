@@ -2,7 +2,7 @@ defmodule Jido.Bus.RecordedSignalTest do
   use ExUnit.Case
 
   alias Jido.Bus.RecordedSignal
-  alias Commanded.Helpers.SignalFactory
+  alias JidoTest.Helpers.SignalFactory
 
   defmodule BankAccountOpened do
     @derive Jason.Encoder

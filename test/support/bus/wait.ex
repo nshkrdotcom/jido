@@ -1,4 +1,4 @@
-defmodule Commanded.Helpers.Wait do
+defmodule JidoTest.Helpers.Wait do
   @moduledoc false
 
   def until(fun), do: until(500, fun)

@@ -19,7 +19,7 @@ defmodule Jido.Bus.Subscription do
           backoff: any(),
           concurrency: pos_integer(),
           partition_by: (RecordedSignal -> any()) | nil,
-          subscribe_persistent: Bus.Adapter.stream_uuid() | :all,
+          subscribe_persistent: Bus.Adapter.stream_id() | :all,
           subscribe_from: Bus.Adapter.start_from(),
           subscription_name: Bus.Adapter.subscription_name(),
           subscription_opts: Keyword.t(),

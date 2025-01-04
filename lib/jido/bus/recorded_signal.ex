@@ -44,6 +44,7 @@ defmodule Jido.Bus.RecordedSignal do
   @type stream_id :: String.t()
   @type stream_version :: non_neg_integer()
   @type uuid :: String.t()
+  @type signal :: struct()
 
   @type t :: %RecordedSignal{
           signal_id: signal_id(),
@@ -114,4 +115,18 @@ defmodule Jido.Bus.RecordedSignal do
     |> Map.merge(metadata || %{})
     |> Map.merge(additional_metadata)
   end
+
+  @doc """
+  Map a list of `Jido.Bus.RecordedSignal` structs to their signal data.
+  """
+  @spec map_from_recorded_signals(list(RecordedSignal.t())) :: [signal]
+  def map_from_recorded_signals(recorded_signals) when is_list(recorded_signals) do
+    Enum.map(recorded_signals, &map_from_recorded_signal/1)
+  end
+
+  @doc """
+  Map an `Jido.Bus.RecordedSignal` struct to its signal data.
+  """
+  @spec map_from_recorded_signal(RecordedSignal.t()) :: signal
+  def map_from_recorded_signal(%RecordedSignal{data: data}), do: data
 end

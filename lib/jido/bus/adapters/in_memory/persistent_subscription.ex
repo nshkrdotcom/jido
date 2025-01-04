@@ -12,7 +12,7 @@ defmodule Jido.Bus.Adapters.InMemory.PersistentSubscription do
     :partition_by,
     :ref,
     :start_from,
-    :stream_uuid,
+    :stream_id,
     subscribers: []
   ]
 

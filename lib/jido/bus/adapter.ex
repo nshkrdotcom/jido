@@ -8,7 +8,7 @@ defmodule Jido.Bus.Adapter do
   @type bus :: map
   @type application :: Commanded.Application.t()
   @type config :: Keyword.t()
-  @type stream_uuid :: String.t()
+  @type stream_id :: String.t()
   @type start_from :: :origin | :current | integer
   @type expected_version :: :any_version | :no_stream | :stream_exists | non_neg_integer
   @type subscription_name :: String.t()
@@ -28,7 +28,7 @@ defmodule Jido.Bus.Adapter do
   """
   @callback publish(
               bus,
-              stream_uuid,
+              stream_id,
               expected_version,
               signals :: list(Signal.t()),
               opts :: Keyword.t()
@@ -43,7 +43,7 @@ defmodule Jido.Bus.Adapter do
   """
   @callback replay(
               bus,
-              stream_uuid,
+              stream_id,
               start_version :: non_neg_integer,
               read_batch_size :: non_neg_integer
             ) ::
@@ -59,7 +59,7 @@ defmodule Jido.Bus.Adapter do
 
   The subscriber does not need to acknowledge receipt of the signals.
   """
-  @callback subscribe(bus, stream_uuid | :all) ::
+  @callback subscribe(bus, stream_id | :all) ::
               :ok | {:error, error}
 
   @doc """
@@ -67,7 +67,7 @@ defmodule Jido.Bus.Adapter do
   """
   @callback subscribe_persistent(
               bus,
-              stream_uuid | :all,
+              stream_id | :all,
               subscription_name,
               subscriber,
               start_from,
@@ -95,7 +95,7 @@ defmodule Jido.Bus.Adapter do
   """
   @callback unsubscribe(
               bus,
-              stream_uuid | :all,
+              stream_id | :all,
               subscription_name
             ) ::
               :ok | {:error, :subscription_not_found} | {:error, error}

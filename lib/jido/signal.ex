@@ -19,6 +19,9 @@ defmodule Jido.Signal do
     # Jido-specific fields
     field(:jidoinstructions, Jido.Runner.Instruction.instruction_list())
     field(:jidoopts, map())
+    field(:jido_causation_id, String.t())
+    field(:jido_correlation_id, String.t())
+    field(:metadata, map())
   end
 
   @doc """
@@ -100,6 +103,28 @@ defmodule Jido.Signal do
     else
       {:error, reason} -> {:error, "parse error: #{reason}"}
     end
+  end
+
+  def map_to_signal_data(signals, fields \\ [])
+
+  @spec map_to_signal_data(list(struct), Keyword.t()) :: list(t())
+  def map_to_signal_data(signals, fields) when is_list(signals) do
+    Enum.map(signals, &map_to_signal_data(&1, fields))
+  end
+
+  alias Jido.Serialization.TypeProvider
+
+  @spec map_to_signal_data(struct, Keyword.t()) :: t()
+  def map_to_signal_data(signal, fields) do
+    %__MODULE__{
+      id: UUID.uuid4(),
+      source: "http://example.com/bank",
+      jido_causation_id: Keyword.get(fields, :jido_causation_id),
+      jido_correlation_id: Keyword.get(fields, :jido_correlation_id),
+      type: TypeProvider.to_string(signal),
+      data: signal,
+      metadata: Keyword.get(fields, :metadata, %{})
+    }
   end
 
   # Parser functions for standard CloudEvents fields

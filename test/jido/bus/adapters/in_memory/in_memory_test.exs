@@ -2,7 +2,7 @@ defmodule Jido.Bus.Adapters.InMemoryTest do
   use Jido.Bus.InMemoryTestCase
 
   alias Jido.Bus.Adapters.InMemory
-  alias Jido.Bus.Signal
+  alias Jido.Signal
 
   defmodule BankAccountOpened do
     @derive Jason.Encoder
@@ -29,6 +29,8 @@ defmodule Jido.Bus.Adapters.InMemoryTest do
 
   defp build_signal(account_number) do
     %Signal{
+      id: UUID.uuid4(),
+      source: "http://example.com/bank",
       jido_causation_id: UUID.uuid4(),
       jido_correlation_id: UUID.uuid4(),
       type: "#{__MODULE__}.BankAccountOpened",

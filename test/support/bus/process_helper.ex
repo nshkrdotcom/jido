@@ -1,9 +1,9 @@
-defmodule Commanded.Helpers.ProcessHelper do
+defmodule JidoTest.Helpers.ProcessHelper do
   @moduledoc false
 
   import ExUnit.Assertions
 
-  alias Commanded.Helpers.Wait
+  alias JidoTest.Helpers.Wait
   alias Commanded.Registration
 
   @doc """

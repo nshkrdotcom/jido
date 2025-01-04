@@ -1,9 +1,10 @@
 defmodule Jido.Bus.SubscriptionTestCase do
-  import Commanded.SharedTestCase
+  import JidoTest.SharedTestCase
 
   define_tests do
-    alias Jido.Bus.{Signal, RecordedSignal, Subscriber}
-    alias Commanded.Helpers.ProcessHelper
+    alias Jido.Bus.{RecordedSignal, Subscriber}
+    alias Jido.Signal
+    alias JidoTest.Helpers.ProcessHelper
 
     defmodule BankAccountOpened do
       @derive Jason.Encoder
@@ -15,41 +16,41 @@ defmodule Jido.Bus.SubscriptionTestCase do
         signal_store: signal_store,
         signal_store_meta: signal_store_meta
       } do
-        stream_uuid = UUID.uuid4()
+        stream_id = UUID.uuid4()
 
-        assert :ok = signal_store.subscribe(signal_store_meta, stream_uuid)
+        assert :ok = signal_store.subscribe(signal_store_meta, stream_id)
 
-        :ok = signal_store.publish(signal_store_meta, stream_uuid, 0, build_signals(1))
+        :ok = signal_store.publish(signal_store_meta, stream_id, 0, build_signals(1))
 
         received_signals =
           assert_receive_signals(signal_store, signal_store_meta, count: 1, from: 1)
 
         for %RecordedSignal{} = signal <- received_signals do
-          assert signal.stream_id == stream_uuid
+          assert signal.stream_id == stream_id
           assert %DateTime{} = signal.created_at
         end
 
         assert Enum.map(received_signals, & &1.stream_version) == [1]
 
-        :ok = signal_store.publish(signal_store_meta, stream_uuid, 1, build_signals(2))
+        :ok = signal_store.publish(signal_store_meta, stream_id, 1, build_signals(2))
 
         received_signals =
           assert_receive_signals(signal_store, signal_store_meta, count: 2, from: 2)
 
         for %RecordedSignal{} = signal <- received_signals do
-          assert signal.stream_id == stream_uuid
+          assert signal.stream_id == stream_id
           assert %DateTime{} = signal.created_at
         end
 
         assert Enum.map(received_signals, & &1.stream_version) == [2, 3]
 
-        :ok = signal_store.publish(signal_store_meta, stream_uuid, 3, build_signals(3))
+        :ok = signal_store.publish(signal_store_meta, stream_id, 3, build_signals(3))
 
         received_signals =
           assert_receive_signals(signal_store, signal_store_meta, count: 3, from: 4)
 
         for %RecordedSignal{} = signal <- received_signals do
-          assert signal.stream_id == stream_uuid
+          assert signal.stream_id == stream_id
           assert %DateTime{} = signal.created_at
         end
 
@@ -62,16 +63,16 @@ defmodule Jido.Bus.SubscriptionTestCase do
         signal_store: signal_store,
         signal_store_meta: signal_store_meta
       } do
-        stream_uuid = UUID.uuid4()
-        another_stream_uuid = UUID.uuid4()
+        stream_id = UUID.uuid4()
+        another_stream_id = UUID.uuid4()
 
-        assert :ok = signal_store.subscribe(signal_store_meta, stream_uuid)
-
-        :ok =
-          signal_store.publish(signal_store_meta, another_stream_uuid, 0, build_signals(1))
+        assert :ok = signal_store.subscribe(signal_store_meta, stream_id)
 
         :ok =
-          signal_store.publish(signal_store_meta, another_stream_uuid, 1, build_signals(2))
+          signal_store.publish(signal_store_meta, another_stream_id, 0, build_signals(1))
+
+        :ok =
+          signal_store.publish(signal_store_meta, another_stream_id, 1, build_signals(2))
 
         refute_receive {:signals, _received_signals}
       end
@@ -964,6 +965,8 @@ defmodule Jido.Bus.SubscriptionTestCase do
 
     defp build_signal(account_number) do
       %Signal{
+        id: UUID.uuid4(),
+        source: "http://example.com/bank",
         jido_causation_id: UUID.uuid4(),
         jido_correlation_id: UUID.uuid4(),
         type: "#{__MODULE__}.BankAccountOpened",

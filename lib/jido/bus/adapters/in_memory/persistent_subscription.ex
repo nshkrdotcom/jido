@@ -1,21 +1,20 @@
-defmodule Jido.Bus.Adapters.DurableInMemory.PersistentSubscription do
+defmodule Jido.Bus.Adapters.InMemory.PersistentSubscription do
   @moduledoc false
 
-  alias Jido.Bus.Adapters.DurableInMemory.Subscriber
+  alias Jido.Bus.Adapters.InMemory.Subscriber
   alias Jido.Bus.RecordedSignal
   alias __MODULE__
-  use TypedStruct
 
-  typedstruct do
-    field(:checkpoint, non_neg_integer())
-    field(:concurrency_limit, non_neg_integer())
-    field(:name, String.t())
-    field(:partition_by, (RecordedSignal.t() -> any()))
-    field(:ref, reference())
-    field(:start_from, Jido.Bus.Adapter.start_from())
-    field(:stream_id, Jido.Bus.Adapter.stream_id())
-    field(:subscribers, [Subscriber.t()], default: [])
-  end
+  defstruct [
+    :checkpoint,
+    :concurrency_limit,
+    :name,
+    :partition_by,
+    :ref,
+    :start_from,
+    :stream_uuid,
+    subscribers: []
+  ]
 
   @doc """
   Subscribe a new subscriber to the persistent subscription.

@@ -462,9 +462,9 @@ defmodule Jido.Workflow do
     defp emit_telemetry_event(_, _, _), do: :ok
 
     # In handle_action_error:
-    @spec handle_action_error(action(), params(), context(), Error.t()) ::
+    @spec handle_action_error(action(), params(), context(), Error.t(), run_opts()) ::
             {:error, Error.t() | map()}
-    defp handle_action_error(action, params, context, error, opts \\ []) do
+    defp handle_action_error(action, params, context, error, opts) do
       if compensation_enabled?(action) do
         metadata = action.__action_metadata__()
         compensation_opts = metadata[:compensation] || []

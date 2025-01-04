@@ -12,6 +12,7 @@ defmodule Jido.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
+      consolidate_protocols: Mix.env() != :test,
 
       # Docs
       name: "Jido",
@@ -45,7 +46,7 @@ defmodule Jido.MixProject do
   end
 
   # Specifies which paths to compile per environment.
-  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(:test), do: ["lib", "test/support", "test/jido/bus/support"]
   defp elixirc_paths(_), do: ["lib"]
 
   defp docs do

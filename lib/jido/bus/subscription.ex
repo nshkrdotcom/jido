@@ -1,44 +1,66 @@
 defmodule Jido.Bus.Subscription do
   @moduledoc false
 
-  use TypedStruct
   alias Jido.Bus
-  alias Jido.Bus.RecordedSignal
+  alias Jido.Bus.{RecordedSignal, Subscription}
 
-  typedstruct do
-    field(:bus, Bus.t(), enforce: true)
-    field(:backoff, any(), enforce: true)
-    field(:concurrency, pos_integer(), enforce: true)
-    field(:partition_by, (RecordedSignal -> any()) | nil, default: nil)
-    field(:subscribe_to, String.t() | :all, enforce: true)
-    field(:subscribe_from, non_neg_integer() | :origin | :current, enforce: true)
-    field(:subscription_name, String.t(), enforce: true)
-    field(:subscription_opts, Keyword.t(), enforce: true)
-    field(:subscription_pid, pid() | nil, default: nil)
-    field(:subscription_ref, reference() | nil, default: nil)
-  end
+  @enforce_keys [
+    :application,
+    :backoff,
+    :concurrency,
+    :subscribe_persistent,
+    :subscribe_from,
+    :subscription_name,
+    :subscription_opts
+  ]
+
+  @type t :: %Subscription{
+          application: Commanded.Application.t(),
+          backoff: any(),
+          concurrency: pos_integer(),
+          partition_by: (RecordedSignal -> any()) | nil,
+          subscribe_persistent: Bus.Adapter.stream_uuid() | :all,
+          subscribe_from: Bus.Adapter.start_from(),
+          subscription_name: Bus.Adapter.subscription_name(),
+          subscription_opts: Keyword.t(),
+          subscription_pid: pid() | nil,
+          subscription_ref: reference() | nil
+        }
+
+  defstruct [
+    :application,
+    :backoff,
+    :concurrency,
+    :partition_by,
+    :subscribe_persistent,
+    :subscribe_from,
+    :subscription_name,
+    :subscription_opts,
+    :subscription_pid,
+    :subscription_ref
+  ]
 
   def new(opts) do
-    %__MODULE__{
-      bus: Keyword.fetch!(opts, :bus),
+    %Subscription{
+      application: Keyword.fetch!(opts, :application),
       backoff: init_backoff(),
       concurrency: parse_concurrency(opts),
       partition_by: parse_partition_by(opts),
       subscription_name: Keyword.fetch!(opts, :subscription_name),
       subscription_opts: Keyword.fetch!(opts, :subscription_opts),
-      subscribe_to: parse_subscribe_to(opts),
+      subscribe_persistent: parse_subscribe_persistent(opts),
       subscribe_from: parse_subscribe_from(opts)
     }
   end
 
-  @spec subscribe(__MODULE__.t(), pid()) :: {:ok, __MODULE__.t()} | {:error, any()}
-  def subscribe(%__MODULE__{} = subscription, pid) do
-    with {:ok, subscription_pid} <- subscribe_to(subscription, pid) do
-      subscription_ref = Process.monitor(subscription_pid)
+  @spec subscribe(Subscription.t(), pid()) :: {:ok, Subscription.t()} | {:error, any()}
+  def subscribe(%Subscription{} = subscription, pid) do
+    with {:ok, pid} <- subscribe_persistent(subscription, pid) do
+      subscription_ref = Process.monitor(pid)
 
-      subscription = %__MODULE__{
+      subscription = %Subscription{
         subscription
-        | subscription_pid: subscription_pid,
+        | subscription_pid: pid,
           subscription_ref: subscription_ref
       }
 
@@ -46,37 +68,40 @@ defmodule Jido.Bus.Subscription do
     end
   end
 
-  @spec backoff(__MODULE__.t()) :: {non_neg_integer(), __MODULE__.t()}
-  def backoff(%__MODULE__{} = subscription) do
-    %__MODULE__{backoff: backoff} = subscription
+  @spec backoff(Subscription.t()) :: {non_neg_integer(), Subscription.t()}
+  def backoff(%Subscription{} = subscription) do
+    %Subscription{backoff: backoff} = subscription
 
     {next, backoff} = :backoff.fail(backoff)
 
-    subscription = %__MODULE__{subscription | backoff: backoff}
+    subscription = %Subscription{subscription | backoff: backoff}
 
     {next, subscription}
   end
 
-  @spec ack_signal(__MODULE__.t(), RecordedSignal.t()) :: :ok
-  def ack_signal(%__MODULE__{} = subscription, %RecordedSignal{} = signal) do
-    %__MODULE__{bus: bus, subscription_pid: subscription_pid} = subscription
+  @spec ack(Subscription.t(), RecordedSignal.t()) :: :ok
+  def ack(%Subscription{} = subscription, %RecordedSignal{} = signal) do
+    %Subscription{application: application, subscription_pid: subscription_pid} = subscription
 
-    Bus.ack(bus, subscription_pid, signal)
+    Bus.ack(application, subscription_pid, signal)
   end
 
-  @spec reset(__MODULE__.t()) :: __MODULE__.t()
-  def reset(%__MODULE__{} = subscription) do
-    %__MODULE__{
-      bus: bus,
+  @spec reset(Subscription.t()) :: Subscription.t()
+  def reset(%Subscription{} = subscription) do
+    %Subscription{
+      application: application,
+      subscribe_persistent: subscribe_persistent,
+      subscription_name: subscription_name,
       subscription_pid: subscription_pid,
       subscription_ref: subscription_ref
     } = subscription
 
     Process.demonitor(subscription_ref)
 
-    :ok = Bus.unsubscribe(bus, subscription_pid)
+    :ok = Bus.unsubscribe(application, subscription_pid)
+    :ok = Bus.unsubscribe(application, subscribe_persistent, subscription_name)
 
-    %__MODULE__{
+    %Subscription{
       subscription
       | backoff: init_backoff(),
         subscription_pid: nil,
@@ -84,12 +109,12 @@ defmodule Jido.Bus.Subscription do
     }
   end
 
-  defp subscribe_to(%__MODULE__{} = subscription, pid) do
-    %__MODULE__{
-      bus: bus,
+  defp subscribe_persistent(%Subscription{} = subscription, pid) do
+    %Subscription{
+      application: application,
       concurrency: concurrency,
       partition_by: partition_by,
-      subscribe_to: subscribe_to,
+      subscribe_persistent: subscribe_persistent,
       subscription_name: subscription_name,
       subscription_opts: subscription_opts,
       subscribe_from: subscribe_from
@@ -101,8 +126,8 @@ defmodule Jido.Bus.Subscription do
       |> Keyword.put(:partition_by, partition_by)
 
     Bus.subscribe_persistent(
-      bus,
-      subscribe_to,
+      application,
+      subscribe_persistent,
       subscription_name,
       pid,
       subscribe_from,
@@ -133,8 +158,8 @@ defmodule Jido.Bus.Subscription do
     end
   end
 
-  defp parse_subscribe_to(opts) do
-    case opts[:subscribe_to] || :all do
+  defp parse_subscribe_persistent(opts) do
+    case opts[:subscribe_persistent] || :all do
       :all ->
         :all
 
@@ -142,7 +167,8 @@ defmodule Jido.Bus.Subscription do
         stream
 
       invalid ->
-        raise ArgumentError, message: "invalid `subscribe_to` option: " <> inspect(invalid)
+        raise ArgumentError,
+          message: "invalid `subscribe_persistent` option: " <> inspect(invalid)
     end
   end
 

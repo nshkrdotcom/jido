@@ -1,296 +1,295 @@
 defmodule Jido.Bus do
   @moduledoc """
-  A simple message bus implementation for Jido.
+  Use the signal store configured for a Commanded application.
 
-  The Bus module provides a high-level interface for publishing, subscribing to, and replaying signals
-  (events/commands) through a message bus. It delegates the actual implementation to an adapter module
-  while providing consistent telemetry instrumentation.
+  ### Telemetry Signals
 
-  ## Features
+  Adds telemetry signals for the following functions. Signals are emitted in the form
 
-  - Publish signals to streams
-  - Subscribe to streams (persistent and transient)
-  - Replay signals from a stream
-  - Snapshot management
-  - Built-in telemetry instrumentation
-  - Pluggable adapter architecture supporting:
-    - Ephemeral adapters (Phoenix.PubSub) for in-memory pub/sub
-    - Durable adapters (EventStore) for persistent event storage
-    - In-memory durable adapter for testing and development
+  `[:commanded, :signal_store, signal]` with their spannable postfixes (`start`, `stop`, `exception`)
 
-  ## Adapters
+    * ack/3
+    * adapter/2
+    * publish/4
+    * delete_snapshot/2
+    * unsubscribe/3
+    * read_snapshot/2
+    * record_snapshot/2
+    * replay/2
+    * replay/3
+    * replay/4
+    * subscribe/2
+    * subscribe_persistent/5
+    * subscribe_persistent/6
+    * unsubscribe/2
 
-  The bus supports two main types of adapters:
-
-  ### Ephemeral Adapters
-  - Phoenix.PubSub based adapter for in-memory pub/sub
-  - No persistence, messages are lost on restart
-  - Ideal for transient subscriptions and real-time updates
-
-  ### Durable Adapters
-  - EventStore adapter for persistent event storage
-  - In-memory durable adapter for testing/development
-  - Full event history and replay capabilities
-  - Support for persistent subscriptions
-
-  ## Usage
-
-  ```elixir
-  # Create a bus with ephemeral PubSub adapter
-  bus = %Jido.Bus{
-    id: "pubsub_bus",
-    adapter: Jido.Bus.Adapters.PubSub,
-    config: [pubsub: MyApp.PubSub]
-  }
-
-  # Create a bus with durable InMemory adapter
-  bus = %Jido.Bus{
-    id: "event_bus",
-    adapter: Jido.Bus.Adapters.DurableInMemory,
-    config: [event_store: MyApp.EventStore]
-  }
-
-  # Publish signals
-  {:ok, _} = Jido.Bus.publish(bus, "stream-123", 0, [signal1, signal2])
-
-  # Subscribe to a stream
-  {:ok, subscription} = Jido.Bus.subscribe(bus, "stream-123")
-
-  # Create persistent subscription (durable adapters only)
-  {:ok, _} = Jido.Bus.subscribe_persistent(bus, "stream-123", "my-sub", self(), :origin)
-  ```
   """
-  use TypedStruct
+  alias Commanded.Application
+  alias Commanded.Signal.Upcast
 
-  typedstruct do
-    field(:id, String.t(), enforce: true)
-    field(:adapter, module(), enforce: true)
-    field(:config, Keyword.t(), default: [])
-  end
+  @type application :: Application.t()
+  @type config :: Keyword.t()
 
   @doc """
-  Publishes signals to a stream.
-
-  ## Parameters
-
-  - `bus` - The bus instance
-  - `stream_id` - The target stream identifier
-  - `expected_version` - Expected version of the stream (for optimistic concurrency)
-  - `signals` - List of signals to publish
-  - `opts` - Optional parameters passed to the adapter
-
-  ## Returns
-
-  Returns `{:ok, result}` on success or `{:error, reason}` on failure.
+  Append one or more signals to a stream atomically.
   """
-  def publish(bus, stream_id, expected_version, signals, opts \\ []) do
-    meta =
-      build_meta(bus, stream_id,
-        expected_version: expected_version,
-        signals: signals,
-        opts: opts
-      )
+  def publish(application, stream_uuid, expected_version, signals, opts \\ []) do
+    meta = %{
+      application: application,
+      stream_uuid: stream_uuid,
+      expected_version: expected_version
+    }
 
     span(:publish, meta, fn ->
-      bus.adapter.publish(bus, stream_id, expected_version, signals, opts)
+      {adapter, bus} = Application.signal_store_adapter(application)
+
+      if function_exported?(adapter, :publish, 5) do
+        adapter.publish(bus, stream_uuid, expected_version, signals, opts)
+      else
+        adapter.publish(
+          bus,
+          stream_uuid,
+          expected_version,
+          signals
+        )
+      end
     end)
   end
 
   @doc """
-  Replays signals from a stream starting at a specific version.
-
-  ## Parameters
-
-  - `bus` - The bus instance
-  - `stream_id` - The stream to replay from
-  - `start_version` - Version to start replaying from
-  - `batch_size` - Number of signals to read per batch
-
-  ## Returns
-
-  Returns `{:ok, signals}` on success or `{:error, reason}` on failure.
+  Streams signals from the given stream, in the order in which they were originally written.
   """
-  def replay(bus, stream_id, start_version, batch_size) do
-    meta =
-      build_meta(bus, stream_id,
-        start_version: start_version,
-        batch_size: batch_size
-      )
+  def replay(application, stream_uuid, start_version \\ 0, read_batch_size \\ 1_000) do
+    meta = %{
+      application: application,
+      stream_uuid: stream_uuid,
+      start_version: start_version,
+      read_batch_size: read_batch_size
+    }
 
     span(:replay, meta, fn ->
-      bus.adapter.replay(bus, stream_id, start_version, batch_size)
+      {adapter, bus} = Application.signal_store_adapter(application)
+
+      case adapter.replay(
+             bus,
+             stream_uuid,
+             start_version,
+             read_batch_size
+           ) do
+        {:error, _error} = error ->
+          error
+
+        stream ->
+          Upcast.upcast_signal_stream(stream, additional_metadata: %{application: application})
+      end
     end)
   end
 
   @doc """
-  Creates a transient subscription to a stream.
+  Create a transient subscription to a single signal stream.
 
-  ## Parameters
+  The signal store will publish any signals appended to the given stream to the
+  `subscriber` process as an `{:signals, signals}` message.
 
-  - `bus` - The bus instance
-  - `stream_id` - The stream to subscribe to
-
-  ## Returns
-
-  Returns `{:ok, subscription}` on success or `{:error, reason}` on failure.
+  The subscriber does not need to acknowledge receipt of the signals.
   """
-  def subscribe(bus, stream_id) do
-    meta = build_meta(bus, stream_id)
+  def subscribe(application, stream_uuid) do
+    span(:subscribe, %{application: application, stream_uuid: stream_uuid}, fn ->
+      {adapter, bus} = Application.signal_store_adapter(application)
 
-    span(:subscribe, meta, fn ->
-      bus.adapter.subscribe(bus, stream_id)
+      adapter.subscribe(bus, stream_uuid)
     end)
   end
 
   @doc """
-  Creates a persistent subscription to a stream.
+  Create a persistent subscription to an signal stream.
 
-  ## Parameters
+  To subscribe to all signals appended to any stream use `:all` as the stream
+  when subscribing.
 
-  - `bus` - The bus instance
-  - `stream_id` - The stream to subscribe to
-  - `subscription_name` - Unique name for the subscription
-  - `subscriber` - PID of the subscriber process
-  - `start_from` - Starting position (:origin, :current, or version number)
-  - `opts` - Optional parameters passed to the adapter
+  The signal store will remember the subscribers last acknowledged signal.
+  Restarting the named subscription will resume from the next signal following
+  the last seen.
 
-  ## Returns
+  Once subscribed, the subscriber process should be sent a
+  `{:subscribed, subscription}` message to allow it to defer initialisation
+  until the subscription has started.
 
-  Returns `{:ok, subscription}` on success or `{:error, reason}` on failure.
+  The subscriber process will be sent all signals persisted to the stream. It
+  will receive a `{:signals, signals}` message for each batch of signals persisted
+  for a single aggregate.
+
+  The subscriber must ack each received, and successfully processed signal, using
+  `Jido.Bus.ack/3`.
+
+  ## Examples
+
+  Subscribe to all streams:
+
+      {:ok, subscription} =
+        Jido.Bus.subscribe_persistent(MyApp, :all, "Example", self(), :current)
+
+  Subscribe to a single stream:
+
+      {:ok, subscription} =
+        Jido.Bus.subscribe_persistent(MyApp, "stream1", "Example", self(), :origin)
+
   """
-  def subscribe_persistent(bus, stream_id, subscription_name, subscriber, start_from, opts \\ []) do
-    meta =
-      build_meta(bus, stream_id,
-        subscription_name: subscription_name,
-        subscriber: subscriber,
-        start_from: start_from,
-        opts: opts
-      )
-
-    span(:subscribe_persistent, meta, fn ->
-      bus.adapter.subscribe_persistent(
-        bus,
-        stream_id,
+  def subscribe_persistent(
+        application,
+        stream_uuid,
         subscription_name,
         subscriber,
         start_from,
-        opts
-      )
+        opts \\ []
+      ) do
+    meta = %{
+      application: application,
+      stream_uuid: stream_uuid,
+      subscription_name: subscription_name,
+      subscriber: subscriber,
+      start_from: start_from
+    }
+
+    span(:subscribe_persistent, meta, fn ->
+      {adapter, bus} = Application.signal_store_adapter(application)
+
+      if function_exported?(adapter, :subscribe_persistent, 6) do
+        adapter.subscribe_persistent(
+          bus,
+          stream_uuid,
+          subscription_name,
+          subscriber,
+          start_from,
+          opts
+        )
+      else
+        adapter.subscribe_persistent(
+          bus,
+          stream_uuid,
+          subscription_name,
+          subscriber,
+          start_from
+        )
+      end
     end)
   end
 
   @doc """
-  Acknowledges processing of a signal by a subscriber.
-
-  ## Parameters
-
-  - `bus` - The bus instance
-  - `pid` - PID of the subscriber
-  - `recorded_signal` - The signal being acknowledged
-
-  ## Returns
-
-  Returns `:ok` on success or `{:error, reason}` on failure.
+  Acknowledge receipt and successful processing of the given signal received from
+  a subscription to an signal stream.
   """
-  def ack(bus, pid, recorded_signal) do
-    meta = build_meta(bus, nil, pid: pid, recorded_signal: recorded_signal)
+  def ack(application, subscription, signal) do
+    meta = %{application: application, subscription: subscription, signal: signal}
 
     span(:ack, meta, fn ->
-      bus.adapter.ack(bus, pid, recorded_signal)
+      {adapter, bus} = Application.signal_store_adapter(application)
+
+      adapter.ack(bus, subscription, signal)
     end)
   end
 
   @doc """
-  Removes a subscription.
+  Unsubscribe an existing subscriber from signal notifications.
 
-  ## Parameters
+  This will not delete the subscription.
 
-  - `bus` - The bus instance
-  - `subscription` - The subscription to remove
+  ## Example
 
-  ## Returns
+      :ok = Jido.Bus.unsubscribe(MyApp, subscription)
 
-  Returns `:ok` on success or `{:error, reason}` on failure.
   """
-  def unsubscribe(bus, subscription) do
-    meta = build_meta(bus, nil, subscription: subscription)
+  def unsubscribe(application, subscription) do
+    span(:unsubscribe, %{application: application, subscription: subscription}, fn ->
+      {adapter, bus} = Application.signal_store_adapter(application)
+
+      adapter.unsubscribe(bus, subscription)
+    end)
+  end
+
+  @doc """
+  Delete an existing subscription.
+
+  ## Example
+
+      :ok = Jido.Bus.unsubscribe(MyApp, :all, "Example")
+
+  """
+  def unsubscribe(application, subscribe_persistent, handler_name) do
+    meta = %{
+      application: application,
+      subscribe_persistent: subscribe_persistent,
+      handler_name: handler_name
+    }
 
     span(:unsubscribe, meta, fn ->
-      bus.adapter.unsubscribe(bus, subscription)
+      {adapter, bus} = Application.signal_store_adapter(application)
+
+      adapter.unsubscribe(bus, subscribe_persistent, handler_name)
     end)
   end
 
   @doc """
-  Reads the latest snapshot for a source.
-
-  ## Parameters
-
-  - `bus` - The bus instance
-  - `source_id` - ID of the source to read snapshot for
-
-  ## Returns
-
-  Returns `{:ok, snapshot}` if found, `{:error, :not_found}` if no snapshot exists,
-  or `{:error, reason}` on other failures.
+  Read a snapshot, if available, for a given source.
   """
-  def read_snapshot(bus, source_id) do
-    meta = build_meta(bus, nil, source_id: source_id)
+  def read_snapshot(application, source_id) do
+    {adapter, bus} = Application.signal_store_adapter(application)
 
-    span(:read_snapshot, meta, fn ->
-      bus.adapter.read_snapshot(bus, source_id)
+    span(:read_snapshot, %{application: application, source_id: source_id}, fn ->
+      adapter.read_snapshot(bus, source_id)
     end)
   end
 
   @doc """
-  Records a new snapshot for a source.
-
-  ## Parameters
-
-  - `bus` - The bus instance
-  - `snapshot` - The snapshot to record
-
-  ## Returns
-
-  Returns `:ok` on success or `{:error, reason}` on failure.
+  Record a snapshot of the data and metadata for a given source
   """
-  def record_snapshot(bus, snapshot) do
-    meta = build_meta(bus, nil, snapshot: snapshot)
+  def record_snapshot(application, snapshot) do
+    {adapter, bus} = Application.signal_store_adapter(application)
 
-    span(:record_snapshot, meta, fn ->
-      bus.adapter.record_snapshot(bus, snapshot)
+    span(:record_snapshot, %{application: application, snapshot: snapshot}, fn ->
+      adapter.record_snapshot(bus, snapshot)
     end)
   end
 
   @doc """
-  Deletes the snapshot for a source.
-
-  ## Parameters
-
-  - `bus` - The bus instance
-  - `source_id` - ID of the source whose snapshot should be deleted
-
-  ## Returns
-
-  Returns `:ok` on success or `{:error, reason}` on failure.
+  Delete a previously recorded snapshot for a given source
   """
-  def delete_snapshot(bus, source_id) do
-    meta = build_meta(bus, nil, source_id: source_id)
+  def delete_snapshot(application, source_id) do
+    {adapter, bus} = Application.signal_store_adapter(application)
 
-    span(:delete_snapshot, meta, fn ->
-      bus.adapter.delete_snapshot(bus, source_id)
+    span(:delete_snapshot, %{application: application, source_id: source_id}, fn ->
+      adapter.delete_snapshot(bus, source_id)
     end)
   end
 
-  defp build_meta(bus, stream_id, opts \\ []) do
-    Map.new(opts)
-    |> Map.merge(%{
-      bus: bus,
-      stream_id: stream_id
-    })
+  @doc """
+  Get the configured signal store adapter for the given application.
+  """
+  @spec adapter(application, config) :: {module, config}
+  def adapter(application, config)
+
+  def adapter(application, nil) do
+    raise ArgumentError, "missing :signal_store config for application " <> inspect(application)
   end
 
-  defp span(event, meta, func) do
-    :telemetry.span([:jido, :bus, event], meta, fn ->
+  def adapter(application, config) do
+    {adapter, config} = Keyword.pop(config, :adapter)
+
+    unless Code.ensure_loaded?(adapter) do
+      raise ArgumentError,
+            "signal store adapter " <>
+              inspect(adapter) <>
+              " used by application " <>
+              inspect(application) <>
+              " was not compiled, ensure it is correct and it is included as a project dependency"
+    end
+
+    {adapter, config}
+  end
+
+  # TODO convert to macro
+  defp span(signal, meta, func) do
+    :telemetry.span([:commanded, :signal_store, signal], meta, fn ->
       {func.(), meta}
     end)
   end

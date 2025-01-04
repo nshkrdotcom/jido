@@ -1,16 +1,10 @@
-defmodule Jido.Bus.Adapters.DurableInMemory.Subscriber do
+defmodule Jido.Bus.Adapters.InMemory.Subscriber do
   @moduledoc false
 
   alias Jido.Bus.RecordedSignal
   alias __MODULE__
 
-  use TypedStruct
-
-  typedstruct do
-    field(:pid, pid(), enforce: true)
-    field(:in_flight_signals, [RecordedSignal.t()], default: [])
-    field(:pending_signals, [RecordedSignal.t()], default: [])
-  end
+  defstruct [:pid, in_flight_signals: [], pending_signals: []]
 
   def new(pid), do: %Subscriber{pid: pid}
 

@@ -1,4 +1,4 @@
-defmodule Jido.Bus.Adapters.DurableInMemory.Subscription do
+defmodule Jido.Bus.Adapters.InMemory.Subscription do
   @moduledoc false
 
   use GenServer

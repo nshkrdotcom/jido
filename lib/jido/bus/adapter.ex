@@ -1,89 +1,120 @@
 defmodule Jido.Bus.Adapter do
   @moduledoc """
-  An adapter for the Jido Bus - providing signal distribution with optional persistence
-  and replay capabilities.
+  Defines the behaviour to be implemented by an signal store adapter to be used by Commanded.
   """
 
-  @type bus :: pid | Jido.Bus.t()
-  @type signal :: Jido.Signal.t()
-  @type context :: map()
+  alias Jido.Bus.{Signal, RecordedSignal, Snapshot}
+
+  @type bus :: map
+  @type application :: Commanded.Application.t()
   @type config :: Keyword.t()
-  @type adapter_meta :: map()
-  @type stream_id :: String.t()
+  @type stream_uuid :: String.t()
   @type start_from :: :origin | :current | integer
   @type expected_version :: :any_version | :no_stream | :stream_exists | non_neg_integer
   @type subscription_name :: String.t()
-  @type subscription :: any()
-  @type subscriber :: pid()
+  @type subscription :: any
+  @type subscriber :: pid
   @type source_id :: String.t()
-  @type error :: term()
+  @type error :: term
 
-  @callback child_spec(context, opts :: Keyword.t()) ::
+  @doc """
+  Return a child spec defining all processes required by the signal store.
+  """
+  @callback child_spec(application, config) ::
               {:ok, [:supervisor.child_spec() | {module, term} | module], bus}
-              | {:error, :not_implemented}
 
+  @doc """
+  Append one or more signals to a stream atomically.
+  """
   @callback publish(
               bus,
-              stream_id,
+              stream_uuid,
               expected_version,
               signals :: list(Signal.t()),
               opts :: Keyword.t()
             ) ::
               :ok
-              | {:error, :wrong_version}
-              | {:error, :not_implemented}
+              | {:error, :wrong_expected_version}
               | {:error, error}
 
+  @doc """
+  Streams signals from the given stream, in the order in which they were
+  originally written.
+  """
   @callback replay(
               bus,
-              stream_id,
+              stream_uuid,
               start_version :: non_neg_integer,
-              batch_size :: non_neg_integer
+              read_batch_size :: non_neg_integer
             ) ::
-              {:ok, Enumerable.t()}
+              Enumerable.t()
               | {:error, :stream_not_found}
-              | {:error, :not_implemented}
               | {:error, error}
 
-  @callback subscribe(bus, stream_id | :all) ::
-              :ok
-              | {:error, :not_implemented}
-              | {:error, error}
+  @doc """
+  Create a transient subscription to a single signal stream.
 
+  The signal store will publish any signals appended to the given stream to the
+  `subscriber` process as an `{:signals, signals}` message.
+
+  The subscriber does not need to acknowledge receipt of the signals.
+  """
+  @callback subscribe(bus, stream_uuid | :all) ::
+              :ok | {:error, error}
+
+  @doc """
+  Create a persistent subscription to an signal stream.
+  """
   @callback subscribe_persistent(
               bus,
-              stream_id | :all,
+              stream_uuid | :all,
               subscription_name,
               subscriber,
               start_from,
               opts :: Keyword.t()
             ) ::
               {:ok, subscription}
-              | {:error, :subscription_exists}
-              | {:error, :not_implemented}
+              | {:error, :subscription_already_exists}
               | {:error, error}
 
-  @callback ack(bus, pid, RecordedSignal.t()) ::
-              :ok
-              | {:error, :not_implemented}
+  @doc """
+  Acknowledge receipt and successful processing of the given signal received from
+  a subscription to an signal stream.
+  """
+  @callback ack(bus, pid, RecordedSignal.t()) :: :ok
 
-  @callback unsubscribe(bus, subscription) ::
-              :ok
-              | {:error, :not_implemented}
-              | {:error, error}
+  @doc """
+  Unsubscribe an existing subscriber from signal notifications.
 
+  This should not delete the subscription.
+  """
+  @callback unsubscribe(bus, subscription) :: :ok
+
+  @doc """
+  Delete an existing subscription.
+  """
+  @callback unsubscribe(
+              bus,
+              stream_uuid | :all,
+              subscription_name
+            ) ::
+              :ok | {:error, :subscription_not_found} | {:error, error}
+
+  @doc """
+  Read a snapshot, if available, for a given source.
+  """
   @callback read_snapshot(bus, source_id) ::
-              {:ok, Snapshot.t()}
-              | {:error, :snapshot_not_found}
-              | {:error, :not_implemented}
+              {:ok, Snapshot.t()} | {:error, :snapshot_not_found}
 
+  @doc """
+  Record a snapshot of the data and metadata for a given source
+  """
   @callback record_snapshot(bus, Snapshot.t()) ::
-              :ok
-              | {:error, :not_implemented}
-              | {:error, error}
+              :ok | {:error, error}
 
+  @doc """
+  Delete a previously recorded snapshot for a given source
+  """
   @callback delete_snapshot(bus, source_id) ::
-              :ok
-              | {:error, :not_implemented}
-              | {:error, error}
+              :ok | {:error, error}
 end

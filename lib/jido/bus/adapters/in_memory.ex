@@ -48,42 +48,42 @@ defmodule Jido.Bus.Adapters.InMemory do
 
   @impl Jido.Bus.Adapter
   def child_spec(application, config) do
-    {signal_store_name, config} = parse_config(application, config)
+    {bus_name, config} = parse_config(application, config)
 
-    supervisor_name = subscriptions_supervisor_name(signal_store_name)
+    supervisor_name = subscriptions_supervisor_name(bus_name)
 
     child_spec = [
       {DynamicSupervisor, strategy: :one_for_one, name: supervisor_name},
       %{
-        id: signal_store_name,
+        id: bus_name,
         start: {__MODULE__, :start_link, [config]}
       }
     ]
 
-    {:ok, child_spec, %{name: signal_store_name}}
+    {:ok, child_spec, %{name: bus_name}}
   end
 
   @impl Jido.Bus.Adapter
   def publish(bus, stream_id, expected_version, signals, _opts \\ []) do
-    signal_store = signal_store_name(bus)
+    bus = bus_name(bus)
 
-    GenServer.call(signal_store, {:append, stream_id, expected_version, signals})
+    GenServer.call(bus, {:append, stream_id, expected_version, signals})
   end
 
   @impl Jido.Bus.Adapter
   def replay(bus, stream_id, start_version \\ 0, read_batch_size \\ 1_000)
 
   def replay(bus, stream_id, start_version, _read_batch_size) do
-    signal_store = signal_store_name(bus)
+    bus = bus_name(bus)
 
-    GenServer.call(signal_store, {:replay, stream_id, start_version})
+    GenServer.call(bus, {:replay, stream_id, start_version})
   end
 
   @impl Jido.Bus.Adapter
   def subscribe(bus, stream_id) do
-    signal_store = signal_store_name(bus)
+    bus = bus_name(bus)
 
-    GenServer.call(signal_store, {:subscribe, stream_id, self()})
+    GenServer.call(bus, {:subscribe, stream_id, self()})
   end
 
   @impl Jido.Bus.Adapter
@@ -95,7 +95,7 @@ defmodule Jido.Bus.Adapters.InMemory do
         start_from,
         opts
       ) do
-    signal_store = signal_store_name(bus)
+    bus = bus_name(bus)
 
     subscription = %PersistentSubscription{
       concurrency_limit: Keyword.get(opts, :concurrency_limit),
@@ -105,55 +105,55 @@ defmodule Jido.Bus.Adapters.InMemory do
       stream_id: stream_id
     }
 
-    GenServer.call(signal_store, {:subscribe_persistent, subscription, subscriber})
+    GenServer.call(bus, {:subscribe_persistent, subscription, subscriber})
   end
 
   @impl Jido.Bus.Adapter
   def ack(bus, subscription, %RecordedSignal{} = signal) when is_pid(subscription) do
-    signal_store = signal_store_name(bus)
+    bus = bus_name(bus)
 
-    GenServer.call(signal_store, {:ack, signal, subscription})
+    GenServer.call(bus, {:ack, signal, subscription})
   end
 
   @impl Jido.Bus.Adapter
   def unsubscribe(bus, subscription) when is_pid(subscription) do
-    signal_store = signal_store_name(bus)
+    bus = bus_name(bus)
 
-    GenServer.call(signal_store, {:unsubscribe, subscription})
+    GenServer.call(bus, {:unsubscribe, subscription})
   end
 
   @impl Jido.Bus.Adapter
   def unsubscribe(bus, stream_id, subscription_name) do
-    signal_store = signal_store_name(bus)
+    bus = bus_name(bus)
 
-    GenServer.call(signal_store, {:unsubscribe, stream_id, subscription_name})
+    GenServer.call(bus, {:unsubscribe, stream_id, subscription_name})
   end
 
   @impl Jido.Bus.Adapter
   def read_snapshot(bus, source_id) do
-    signal_store = signal_store_name(bus)
+    bus = bus_name(bus)
 
-    GenServer.call(signal_store, {:read_snapshot, source_id})
+    GenServer.call(bus, {:read_snapshot, source_id})
   end
 
   @impl Jido.Bus.Adapter
   def record_snapshot(bus, snapshot) do
-    signal_store = signal_store_name(bus)
+    bus = bus_name(bus)
 
-    GenServer.call(signal_store, {:record_snapshot, snapshot})
+    GenServer.call(bus, {:record_snapshot, snapshot})
   end
 
   @impl Jido.Bus.Adapter
   def delete_snapshot(bus, source_id) do
-    signal_store = signal_store_name(bus)
+    bus = bus_name(bus)
 
-    GenServer.call(signal_store, {:delete_snapshot, source_id})
+    GenServer.call(bus, {:delete_snapshot, source_id})
   end
 
   def reset!(application, config \\ []) do
-    {signal_store, _config} = parse_config(application, config)
+    {bus, _config} = parse_config(application, config)
 
-    GenServer.call(signal_store, :reset!)
+    GenServer.call(bus, :reset!)
   end
 
   @impl GenServer
@@ -458,10 +458,10 @@ defmodule Jido.Bus.Adapters.InMemory do
   end
 
   defp start_persistent_subscription(%State{} = state, subscription, subscriber) do
-    %State{name: signal_store_name, persistent_subscriptions: persistent_subscriptions} = state
+    %State{name: bus_name, persistent_subscriptions: persistent_subscriptions} = state
     %PersistentSubscription{name: subscription_name, checkpoint: checkpoint} = subscription
 
-    supervisor_name = subscriptions_supervisor_name(signal_store_name)
+    supervisor_name = subscriptions_supervisor_name(bus_name)
     subscription_spec = Subscription.child_spec(subscriber) |> Map.put(:restart, :temporary)
 
     {:ok, pid} = DynamicSupervisor.start_child(supervisor_name, subscription_spec)
@@ -665,9 +665,9 @@ defmodule Jido.Bus.Adapters.InMemory do
     end
   end
 
-  defp signal_store_name(bus) when is_map(bus),
+  defp bus_name(bus) when is_map(bus),
     do: Map.get(bus, :name)
 
-  defp subscriptions_supervisor_name(signal_store),
-    do: Module.concat([signal_store, SubscriptionsSupervisor])
+  defp subscriptions_supervisor_name(bus),
+    do: Module.concat([bus, SubscriptionsSupervisor])
 end

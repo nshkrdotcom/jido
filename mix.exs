@@ -155,6 +155,7 @@ defmodule Jido.MixProject do
 
   defp deps do
     [
+      {:backoff, "~> 1.1"},
       {:deep_merge, "~> 1.0"},
       {:elixir_uuid, "~> 1.2"},
       {:jason, "~> 1.4"},

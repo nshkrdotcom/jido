@@ -1025,11 +1025,7 @@ defmodule Jido.Agent do
             else
               {:error, reason} = error ->
                 agent_with_error = %{agent | result: reason}
-
-                case on_error(agent_with_error, reason) do
-                  {:ok, recovered_agent} -> {:ok, recovered_agent}
-                  {:error, _} -> {:error, agent_with_error}
-                end
+                on_error(agent_with_error, reason)
             end
           end
 
@@ -1152,11 +1148,8 @@ defmodule Jido.Agent do
                  {:ok, agent} <- run(agent, opts) do
               {:ok, agent}
             else
-              {:error, reason} = error ->
-                case on_error(agent, reason) do
-                  {:ok, agent} -> {:ok, agent}
-                  _ -> error
-                end
+              {:error, reason} ->
+                on_error(agent, reason)
             end
           end
 
@@ -1214,7 +1207,7 @@ defmodule Jido.Agent do
           def on_after_directives(agent, _result), do: {:ok, agent}
 
           @spec on_error(t(), any()) :: agent_result()
-          def on_error(agent, reason), do: {:error, agent}
+          def on_error(agent, reason), do: {:error, reason}
 
           defoverridable on_before_validate_state: 1,
                          on_after_validate_state: 1,
@@ -1273,7 +1266,7 @@ defmodule Jido.Agent do
   Called when any error occurs during the agent lifecycle.
   Provides error handling and recovery strategies.
   """
-  @callback on_error(agent :: t(), reason :: any()) :: agent_result()
+  @callback on_error(agent :: t(), reason :: any()) :: {:ok, t()} | {:error, t()}
 
   @optional_callbacks [
     on_before_validate_state: 1,

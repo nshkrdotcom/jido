@@ -13,7 +13,7 @@ defmodule JidoTest.TestStructs do
   defimpl Jido.Serialization.JsonDecoder, for: CustomDecodedStruct do
     def decode(%CustomDecodedStruct{value: nil} = data), do: data
 
-    def decode(%CustomDecodedStruct{value: value} = data) when is_number(value) do
+    def decode(%CustomDecodedStruct{value: value}) when is_number(value) do
       %CustomDecodedStruct{value: value * 2}
     end
 

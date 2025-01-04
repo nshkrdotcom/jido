@@ -22,9 +22,10 @@ defmodule Jido.Actions.Simplebot do
       ]
 
     @spec run(map(), map()) :: {:ok, map()}
-    def run(params, _ctx) do
-      # Simulate movement taking between 300-500ms
-      Process.sleep(Enum.random(300..500))
+    def run(params, ctx) do
+      # Use context sleep if provided, otherwise random 300-500ms
+      sleep_time = Map.get(ctx, :sleep, Enum.random(300..500))
+      Process.sleep(sleep_time)
       destination = Map.get(params, :destination)
       new_params = Map.put(params, :location, destination)
       {:ok, new_params}
@@ -38,9 +39,10 @@ defmodule Jido.Actions.Simplebot do
       description: "Simulates the robot doing nothing"
 
     @spec run(map(), map()) :: {:ok, map()}
-    def run(params, _ctx) do
-      # Simulate idling for 100-200ms
-      Process.sleep(Enum.random(100..200))
+    def run(params, ctx) do
+      # Use context sleep if provided, otherwise random 100-200ms
+      sleep_time = Map.get(ctx, :sleep, Enum.random(100..200))
+      Process.sleep(sleep_time)
       {:ok, params}
     end
   end
@@ -52,9 +54,10 @@ defmodule Jido.Actions.Simplebot do
       description: "Simulates the robot performing work tasks"
 
     @spec run(map(), map()) :: {:ok, map()}
-    def run(params, _ctx) do
-      # Simulate work taking 1-2 seconds
-      Process.sleep(Enum.random(500..1500))
+    def run(params, ctx) do
+      # Use context sleep if provided, otherwise random 500-1500ms
+      sleep_time = Map.get(ctx, :sleep, Enum.random(500..1500))
+      Process.sleep(sleep_time)
       # Simulating work by decreasing battery level
       decrease = Enum.random(15..25)
       new_params = Map.update(params, :battery_level, 0, &max(0, &1 - decrease))
@@ -69,9 +72,10 @@ defmodule Jido.Actions.Simplebot do
       description: "Simulates the robot reporting its status"
 
     @spec run(map(), map()) :: {:ok, map()}
-    def run(params, _ctx) do
-      # Simulate reporting taking 200ms
-      Process.sleep(200)
+    def run(params, ctx) do
+      # Use context sleep if provided, otherwise 200ms
+      sleep_time = Map.get(ctx, :sleep, 200)
+      Process.sleep(sleep_time)
       new_params = Map.put(params, :has_reported, true)
       {:ok, new_params}
     end
@@ -84,10 +88,10 @@ defmodule Jido.Actions.Simplebot do
       description: "Simulates recharging the robot's battery"
 
     @spec run(map(), map()) :: {:ok, map()}
-    def run(params, _ctx) do
-      # Randomize recharge time between 400ms-1s for simulation
-      recharge_time = Enum.random(400..1000)
-      Process.sleep(recharge_time)
+    def run(params, ctx) do
+      # Use context sleep if provided, otherwise random 400-1000ms
+      sleep_time = Map.get(ctx, :sleep, Enum.random(400..1000))
+      Process.sleep(sleep_time)
       # Always recharge to 100% for predictable behavior
       new_params = Map.put(params, :battery_level, 100)
       {:ok, new_params}

@@ -61,7 +61,7 @@ defmodule Jido.Workflow do
 
   @default_timeout 5000
   @default_max_retries 1
-  @initial_backoff 1000
+  @initial_backoff 250
 
   @type action :: module()
   @type params :: map()
@@ -396,7 +396,7 @@ defmodule Jido.Workflow do
       case result do
         {:ok, _} = success -> success
         {:error, %Error{type: :timeout}} = timeout_err -> timeout_err
-        {:error, error} -> handle_action_error(action, params, context, error)
+        {:error, error} -> handle_action_error(action, params, context, error, opts)
       end
     end
 
@@ -464,17 +464,18 @@ defmodule Jido.Workflow do
     # In handle_action_error:
     @spec handle_action_error(action(), params(), context(), Error.t()) ::
             {:error, Error.t() | map()}
-    defp handle_action_error(action, params, context, error) do
+    defp handle_action_error(action, params, context, error, opts \\ []) do
       if compensation_enabled?(action) do
         metadata = action.__action_metadata__()
         compensation_opts = metadata[:compensation] || []
 
         timeout =
-          case compensation_opts do
-            opts when is_list(opts) -> Keyword.get(opts, :timeout, 5_000)
-            %{timeout: timeout} -> timeout
-            _ -> 5_000
-          end
+          Keyword.get(opts, :timeout) ||
+            case compensation_opts do
+              opts when is_list(opts) -> Keyword.get(opts, :timeout, 5_000)
+              %{timeout: timeout} -> timeout
+              _ -> 5_000
+            end
 
         task =
           Task.async(fn ->

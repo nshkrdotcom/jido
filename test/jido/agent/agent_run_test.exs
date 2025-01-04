@@ -84,10 +84,10 @@ defmodule JidoTest.AgentRunTest do
       agent = ErrorHandlingAgent.new()
       {:ok, agent} = ErrorHandlingAgent.set(agent, %{should_recover?: false})
       {:ok, planned} = ErrorHandlingAgent.plan(agent, {TestActions.ErrorAction, %{}})
-      {:error, agent_with_error} = ErrorHandlingAgent.run(planned)
+      {:error, result} = ErrorHandlingAgent.run(planned)
 
-      assert agent_with_error.result.error.type == :execution_error
-      assert agent_with_error.result.error.message == "Workflow failed"
+      assert result.error.type == :execution_error
+      assert result.error.message == "Workflow failed"
     end
 
     test "tracks callbacks in correct order" do
@@ -107,13 +107,11 @@ defmodule JidoTest.AgentRunTest do
       {:ok, agent} = ErrorHandlingAgent.set(agent, %{battery_level: 100, should_recover?: false})
 
       {:ok, planned} = ErrorHandlingAgent.plan(agent, {TestActions.ErrorAction, %{}})
-      {:error, agent_with_error} = ErrorHandlingAgent.run(planned, apply_state: true)
+      {:error, result} = ErrorHandlingAgent.run(planned, apply_state: true)
 
-      # Original state should be preserved
-      assert agent_with_error.state.battery_level == 100
       # Error result should be stored
-      assert agent_with_error.result.error.type == :execution_error
-      assert agent_with_error.result.error.message == "Workflow failed"
+      assert result.error.type == :execution_error
+      assert result.error.message == "Workflow failed"
     end
 
     test "attempts recovery on error" do
@@ -142,15 +140,15 @@ defmodule JidoTest.AgentRunTest do
     test "validates runner module existence" do
       agent = BasicAgent.new()
       {:ok, planned} = BasicAgent.plan(agent, TestActions.BasicAction)
-      {:error, agent_with_error} = BasicAgent.run(planned, runner: NonExistentRunner)
+      {:error, error} = BasicAgent.run(planned, runner: NonExistentRunner)
 
-      assert agent_with_error.result.type == :validation_error
+      assert error.type == :validation_error
 
-      assert agent_with_error.result.message =~
+      assert error.message =~
                "Runner module #{inspect(NonExistentRunner)} must exist and implement run/2"
     end
 
-    test "handles empty instruction queue gracefully", %{agent: agent} do
+    test "handles empty instruction queue gracefully", %{agent: _agent} do
       agent = BasicAgent.new()
       {:ok, result} = BasicAgent.run(agent)
       assert result.state == agent.state

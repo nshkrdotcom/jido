@@ -198,7 +198,7 @@ defmodule JidoTest.DirectiveTest do
 
       # Should only have the new instruction after removing current one
       assert :queue.len(updated_agent.pending_instructions) == 2
-      {{:value, first}, q1} = :queue.out(updated_agent.pending_instructions)
+      {{:value, first}, _q1} = :queue.out(updated_agent.pending_instructions)
       assert first.action == EnqueueAction
       assert first.params.value == 2
     end

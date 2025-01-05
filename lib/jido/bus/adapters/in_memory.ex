@@ -50,12 +50,13 @@ defmodule Jido.Bus.Adapters.InMemory do
   def child_spec(application, config) do
     {bus_name, config} = parse_config(application, config)
 
-    supervisor_name = subscriptions_supervisor_name(bus_name)
+    supervisor_name = Module.concat([bus_name, "SubscriptionsSupervisor"])
+    adapter_name = Module.concat([bus_name, "Bus"])
 
     child_spec = [
       {DynamicSupervisor, strategy: :one_for_one, name: supervisor_name},
       %{
-        id: bus_name,
+        id: adapter_name,
         start: {__MODULE__, :start_link, [config]}
       }
     ]
@@ -434,8 +435,6 @@ defmodule Jido.Bus.Adapters.InMemory do
          %Signal{} = signal
        ) do
     %Signal{
-      id: id,
-      source: source,
       jido_causation_id: jido_causation_id,
       jido_correlation_id: jido_correlation_id,
       type: type,
@@ -651,7 +650,6 @@ defmodule Jido.Bus.Adapters.InMemory do
     case Keyword.get(config, :name) do
       nil ->
         name = Module.concat([application, Bus])
-
         {name, Keyword.put(config, :name, name)}
 
       name when is_atom(name) ->

@@ -1,5 +1,5 @@
-defmodule JidoTest.TestAgentServer do
-  defmodule BasicServerAgent do
+defmodule JidoTest.TestServer do
+  defmodule BasicServer do
     @moduledoc "Basic agent with simple schema and actions"
     use Jido.Agent,
       name: "basic_agent",

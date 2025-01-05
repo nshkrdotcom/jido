@@ -7,6 +7,9 @@ defmodule Jido.Application do
       # Workflow Async Actions Task Supervisor
       {Task.Supervisor, name: Jido.Workflow.TaskSupervisor},
 
+      # Default PubSub
+      {Phoenix.PubSub, name: Jido.PubSub},
+
       # Agent Registry & Default Supervisor
       {Registry, keys: :unique, name: Jido.AgentRegistry},
       {DynamicSupervisor, strategy: :one_for_one, name: Jido.AgentSupervisor},
@@ -14,6 +17,9 @@ defmodule Jido.Application do
       # Bus Registry & Default Supervisor
       {Registry, keys: :unique, name: Jido.BusRegistry},
       {DynamicSupervisor, strategy: :one_for_one, name: Jido.BusSupervisor}
+
+      # Default Agent Server
+      # BasicServer
     ]
 
     # Initialize discovery cache asynchronously

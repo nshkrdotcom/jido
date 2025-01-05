@@ -13,6 +13,7 @@ defmodule Jido.Agent.Directive do
     * `EnqueueDirective` - Adds a new instruction to the agent's pending queue
         - Requires an action atom
         - Supports optional params and context maps
+        - Supports optional opts keyword list
         - Example: `%EnqueueDirective{action: :move, params: %{location: :kitchen}}`
 
     * `RegisterActionDirective` - Registers a new action module with the agent
@@ -102,7 +103,7 @@ defmodule Jido.Agent.Directive do
   alias Jido.Instruction
 
   typedstruct module: EnqueueDirective do
-    @typedoc "Directive to enqueue a new instruction"
+    @moduledoc "Directive to enqueue a new instruction"
     field(:action, atom(), enforce: true)
     field(:params, map(), default: %{})
     field(:context, map(), default: %{})
@@ -110,40 +111,40 @@ defmodule Jido.Agent.Directive do
   end
 
   typedstruct module: RegisterActionDirective do
-    @typedoc "Directive to register a new action module"
+    @moduledoc "Directive to register a new action module"
     field(:action_module, module(), enforce: true)
   end
 
   typedstruct module: DeregisterActionDirective do
-    @typedoc "Directive to deregister an existing action module"
+    @moduledoc "Directive to deregister an existing action module"
     field(:action_module, module(), enforce: true)
   end
 
   typedstruct module: SpawnDirective do
-    @typedoc "Directive to spawn a child process"
+    @moduledoc "Directive to spawn a child process"
     field(:module, module(), enforce: true)
     field(:args, term(), enforce: true)
   end
 
   typedstruct module: KillDirective do
-    @typedoc "Directive to terminate a child process"
+    @moduledoc "Directive to terminate a child process"
     field(:pid, pid(), enforce: true)
   end
 
   typedstruct module: PublishDirective do
-    @typedoc "Directive to broadcast a message"
-    field(:topic, String.t(), enforce: true)
-    field(:message, term(), enforce: true)
+    @moduledoc "Directive to broadcast a message"
+    field(:stream_id, String.t(), enforce: true)
+    field(:signal, term(), enforce: true)
   end
 
   typedstruct module: SubscribeDirective do
-    @typedoc "Directive to subscribe to a topic"
-    field(:topic, String.t(), enforce: true)
+    @moduledoc "Directive to subscribe to a topic"
+    field(:stream_id, String.t(), enforce: true)
   end
 
   typedstruct module: UnsubscribeDirective do
-    @typedoc "Directive to unsubscribe from a topic"
-    field(:topic, String.t(), enforce: true)
+    @moduledoc "Directive to unsubscribe from a topic"
+    field(:stream_id, String.t(), enforce: true)
   end
 
   @type t ::
@@ -361,14 +362,20 @@ defmodule Jido.Agent.Directive do
   def validate_syscall(%KillDirective{pid: pid}) when is_pid(pid), do: :ok
   def validate_syscall(%KillDirective{}), do: {:error, :invalid_pid}
 
-  def validate_syscall(%PublishDirective{topic: topic}) when is_binary(topic), do: :ok
-  def validate_syscall(%PublishDirective{}), do: {:error, :invalid_topic}
+  def validate_syscall(%PublishDirective{stream_id: stream_id}) when is_binary(stream_id),
+    do: :ok
 
-  def validate_syscall(%SubscribeDirective{topic: topic}) when is_binary(topic), do: :ok
-  def validate_syscall(%SubscribeDirective{}), do: {:error, :invalid_topic}
+  def validate_syscall(%PublishDirective{}), do: {:error, :invalid_stream_id}
 
-  def validate_syscall(%UnsubscribeDirective{topic: topic}) when is_binary(topic), do: :ok
-  def validate_syscall(%UnsubscribeDirective{}), do: {:error, :invalid_topic}
+  def validate_syscall(%SubscribeDirective{stream_id: stream_id}) when is_binary(stream_id),
+    do: :ok
+
+  def validate_syscall(%SubscribeDirective{}), do: {:error, :invalid_stream_id}
+
+  def validate_syscall(%UnsubscribeDirective{stream_id: stream_id}) when is_binary(stream_id),
+    do: :ok
+
+  def validate_syscall(%UnsubscribeDirective{}), do: {:error, :invalid_stream_id}
 
   def validate_syscall(_), do: {:error, :invalid_syscall}
   defp validate_enqueue_directive(%EnqueueDirective{action: nil}), do: {:error, :invalid_action}

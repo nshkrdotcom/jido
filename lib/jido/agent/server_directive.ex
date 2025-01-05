@@ -53,40 +53,43 @@ defmodule Jido.Agent.Server.Directive do
     end
   end
 
-  def execute(%ServerState{} = state, %PublishDirective{topic: topic, message: message}) do
-    if is_nil(state.pubsub) do
-      {:error, Error.execution_error("PubSub not configured", %{})}
-    else
-      case Phoenix.PubSub.broadcast(state.pubsub, topic, message) do
-        :ok ->
-          {:ok, state}
+  # def execute(%ServerState{} = state, %PublishDirective{stream_id: stream_id, signal: signal}) do
+  #   if is_nil(state.pubsub) do
+  #     {:error, Error.execution_error("PubSub not configured", %{})}
+  #   else
+  #     case Phoenix.PubSub.broadcast(state.pubsub, stream_id, signal) do
+  #       :ok ->
+  #         {:ok, state}
 
-        {:error, reason} ->
-          {:error,
-           Error.execution_error("Failed to broadcast message", %{reason: reason, topic: topic})}
-      end
-    end
-  end
+  #       {:error, reason} ->
+  #         {:error,
+  #          Error.execution_error("Failed to broadcast message", %{
+  #            reason: reason,
+  #            stream_id: stream_id
+  #          })}
+  #     end
+  #   end
+  # end
 
-  def execute(%ServerState{} = state, %SubscribeDirective{topic: topic}) do
-    case PubSub.subscribe(state, topic) do
-      {:ok, new_state} ->
-        {:ok, new_state}
+  # def execute(%ServerState{} = state, %SubscribeDirective{topic: topic}) do
+  #   case PubSub.subscribe(state, topic) do
+  #     {:ok, new_state} ->
+  #       {:ok, new_state}
 
-      {:error, reason} ->
-        {:error, Error.execution_error("Failed to subscribe", %{reason: reason, topic: topic})}
-    end
-  end
+  #     {:error, reason} ->
+  #       {:error, Error.execution_error("Failed to subscribe", %{reason: reason, topic: topic})}
+  #   end
+  # end
 
-  def execute(%ServerState{} = state, %UnsubscribeDirective{topic: topic}) do
-    case PubSub.unsubscribe(state, topic) do
-      {:ok, new_state} ->
-        {:ok, new_state}
+  # def execute(%ServerState{} = state, %UnsubscribeDirective{topic: topic}) do
+  #   case PubSub.unsubscribe(state, topic) do
+  #     {:ok, new_state} ->
+  #       {:ok, new_state}
 
-      {:error, reason} ->
-        {:error, Error.execution_error("Failed to unsubscribe", %{reason: reason, topic: topic})}
-    end
-  end
+  #     {:error, reason} ->
+  #       {:error, Error.execution_error("Failed to unsubscribe", %{reason: reason, topic: topic})}
+  #   end
+  # end
 
   def execute(_state, invalid_directive) do
     {:error, Error.validation_error("Invalid directive", %{directive: invalid_directive})}

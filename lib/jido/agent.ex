@@ -1274,7 +1274,10 @@ defmodule Jido.Agent do
           {:ok, t()} | {:error, Jido.Error.t()}
   def register_action(agent, action_modules)
       when is_list(action_modules) do
-    case Jido.Util.validate_actions(action_modules) do
+    # Filter out any modules that are already registered
+    new_modules = Enum.reject(action_modules, &(&1 in agent.actions))
+
+    case Jido.Util.validate_actions(new_modules) do
       {:ok, validated_modules} ->
         new_actions = validated_modules ++ agent.actions
         {:ok, %{agent | actions: new_actions}}

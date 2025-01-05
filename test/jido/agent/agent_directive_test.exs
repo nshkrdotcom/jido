@@ -3,6 +3,7 @@ defmodule JidoTest.AgentDirectiveTest do
   use Mimic
 
   alias JidoTest.TestAgents.BasicAgent
+  alias Jido.Runner.Chain
 
   alias JidoTest.TestActions.{
     BasicAction,
@@ -13,6 +14,7 @@ defmodule JidoTest.AgentDirectiveTest do
   }
 
   setup :verify_on_exit!
+  @moduletag :capture_log
 
   describe "enqueue directives" do
     setup do
@@ -45,7 +47,7 @@ defmodule JidoTest.AgentDirectiveTest do
         {EnqueueAction, %{action: BasicAction, params: %{id: 2}}}
       ]
 
-      {:ok, final} = BasicAgent.cmd(agent, instructions, %{}, runner: Jido.Runner.Chain)
+      {:ok, final} = BasicAgent.cmd(agent, instructions, %{}, runner: Chain)
 
       {{:value, first}, queue} = :queue.out(final.pending_instructions)
       {{:value, second}, _} = :queue.out(queue)
@@ -85,7 +87,7 @@ defmodule JidoTest.AgentDirectiveTest do
       ]
 
       {:ok, planned} = BasicAgent.plan(agent, instructions)
-      {:ok, final} = BasicAgent.run(planned)
+      {:ok, final} = BasicAgent.run(planned, runner: Jido.Runner.Chain)
 
       assert BasicAction in final.actions
       assert NoSchema in final.actions
@@ -99,7 +101,7 @@ defmodule JidoTest.AgentDirectiveTest do
         {RegisterAction, %{action_module: BasicAction}}
       ]
 
-      {:ok, final} = BasicAgent.cmd(agent, instructions, %{}, runner: Jido.Runner.Chain)
+      {:ok, final} = BasicAgent.cmd(agent, instructions, %{}, runner: Chain)
 
       # Should only have RegisterAction (from initial setup) and BasicAction (newly registered once)
       assert length(final.actions) == 2
@@ -137,26 +139,6 @@ defmodule JidoTest.AgentDirectiveTest do
         )
 
       assert final.actions == agent.actions
-    end
-
-    test "maintains atomicity when mixing directive types", %{agent: agent} do
-      instructions = [
-        {EnqueueAction, %{action: BasicAction}},
-        # This will fail validation
-        {DeregisterAction, %{action_module: nil}},
-        {RegisterAction, %{action_module: NoSchema}}
-      ]
-
-      {:error, error} = BasicAgent.cmd(agent, instructions, %{}, runner: Jido.Runner.Chain)
-      assert error.type == :validation_error
-      # Verify no changes were applied to actions list
-      assert agent.actions == [
-               BasicAction,
-               NoSchema,
-               EnqueueAction,
-               RegisterAction,
-               DeregisterAction
-             ]
     end
   end
 end

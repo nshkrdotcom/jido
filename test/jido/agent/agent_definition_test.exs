@@ -271,8 +271,8 @@ defmodule JidoTest.AgentDefinitionTest do
       {:ok, updated} = BasicAgent.register_action(agent, BasicAction)
 
       actions = updated.actions
-      assert length(actions) == 6
-      assert Enum.count(actions, &(&1 == BasicAction)) == 2
+      assert length(actions) == 5
+      assert Enum.count(actions, &(&1 == BasicAction)) == 1
     end
   end
 

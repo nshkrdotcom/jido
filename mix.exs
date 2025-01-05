@@ -24,7 +24,12 @@ defmodule Jido.MixProject do
       docs: docs(),
 
       # Coverage
-      test_coverage: [tool: ExCoveralls, export: "cov"],
+      test_coverage: [
+        tool: ExCoveralls,
+        summary: [threshold: 90],
+        export: "cov",
+        ignore_modules: [~r/^JidoTest\./]
+      ],
       preferred_cli_env: [
         coveralls: :test,
         "coveralls.github": :test,
@@ -61,6 +66,8 @@ defmodule Jido.MixProject do
         {"guides/actions.md", title: "Actions & Workflows"},
         {"guides/agents.md", title: "Agents"},
         {"guides/sensors.md", title: "Sensors"},
+        {"guides/bus.md", title: "Signals & Bus"},
+        {"guides/instructions.md", title: "Instructions"},
         {"guides/directives.md", title: "Agent Directives"}
       ],
       groups_for_modules: [

@@ -57,5 +57,10 @@ defmodule Jido.Bus.RecordedSignalTest do
                application: ExampleApplication
              }
     end
+
+    test "map_from_recorded_signal/1 extracts the data from a recorded signal", %{signal: signal} do
+      expected_data = %BankAccountOpened{account_number: "123", initial_balance: 1_000}
+      assert RecordedSignal.map_from_recorded_signal(signal) == expected_data
+    end
   end
 end

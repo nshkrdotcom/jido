@@ -22,7 +22,10 @@ defmodule Jido.Actions.Directives do
         params: [type: :map, default: %{}]
       ]
 
-    def run(%{action: action, params: params, opts: opts} = input, context) do
+    def run(%{action: action} = input, context \\ %{}) do
+      params = Map.get(input, :params, %{})
+      opts = Map.get(input, :opts, [])
+
       directive = %Jido.Agent.Directive.EnqueueDirective{
         action: action,
         params: params,

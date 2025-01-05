@@ -138,9 +138,10 @@ defmodule Jido.Agent do
   """
   use TypedStruct
   alias Jido.Error
+  alias Jido.Instruction
   require OK
 
-  @type instruction :: module() | {module(), map()}
+  @type instruction :: Instruction.t() | module() | {module(), map()}
   @type instructions :: instruction() | [instruction()]
   @type agent_result :: {:ok, t()} | {:error, Error.t()}
   @type map_result :: {:ok, map()} | {:error, Error.t()}
@@ -359,7 +360,7 @@ defmodule Jido.Agent do
           def registered_actions(agent), do: Agent.registered_actions(agent)
 
           @doc """
-          Creates a new agent instance with an optional ID.
+          Creates a new agent instance with an optional ID and initial state.
 
           ## Initialization
           The new agent is initialized with:
@@ -383,6 +384,7 @@ defmodule Jido.Agent do
             * Required fields without defaults are initialized as nil
             * Optional fields without defaults are omitted
             * Unknown fields are ignored
+            * Initial state map is merged and validated if provided
 
           ## Parameters
             * `id` - Optional string ID for the agent. When provided:
@@ -390,11 +392,12 @@ defmodule Jido.Agent do
               * Should be URL-safe
               * Should not exceed 255 characters
               * Is used as-is without validation
+            * `initial_state` - Optional map of initial state values to merge with defaults
 
           ## Returns
             * `t()` - A new agent struct containing:
               * `:id` - String, provided or generated identifier
-              * `:state` - Map, initialized with schema defaults
+              * `:state` - Map, initialized with schema defaults and initial_state
               * `:dirty_state?` - Boolean, set to false
               * `:pending_instructions` - Queue, empty :queue.queue()
               * `:actions` - List, configured action modules from compile-time
@@ -407,9 +410,10 @@ defmodule Jido.Agent do
               agent.id #=> "c4b3f-..." (UUID format)
               agent.dirty_state? #=> false
 
-              # Create with custom ID
-              agent = MyAgent.new("custom_id_123")
+              # Create with custom ID and initial state
+              agent = MyAgent.new("custom_id_123", %{status: :ready})
               agent.id #=> "custom_id_123"
+              agent.state.status #=> :ready
 
               # Schema defaults are applied
               defmodule AgentWithDefaults do
@@ -436,12 +440,13 @@ defmodule Jido.Agent do
 
           See `Jido.Util.generate_id/0` for details on ID generation.
           """
-          @spec new(id :: String.t() | nil) :: t()
-          def new(id \\ nil) do
+          @spec new(id :: String.t() | nil, initial_state :: map()) :: t()
+          def new(id \\ nil, initial_state \\ %{}) do
             dbug("Creating new #{__MODULE__.name()} agent",
               id: id,
               schema: @validated_opts[:schema],
-              actions: @validated_opts[:actions]
+              actions: @validated_opts[:actions],
+              initial_state: initial_state
             )
 
             generated_id = id || Util.generate_id()
@@ -454,15 +459,22 @@ defmodule Jido.Agent do
               end)
               |> Map.new()
 
-            # Create new agent struct with initialized values
-            struct(__MODULE__, %{
-              id: generated_id,
-              state: state_defaults,
-              dirty_state?: false,
-              pending_instructions: :queue.new(),
-              actions: @validated_opts[:actions] || [],
-              result: nil
-            })
+            # Create base agent struct with initialized values
+            base_agent =
+              struct(__MODULE__, %{
+                id: generated_id,
+                state: state_defaults,
+                dirty_state?: false,
+                pending_instructions: :queue.new(),
+                actions: @validated_opts[:actions] || [],
+                result: nil
+              })
+
+            # Apply and validate initial state if provided
+            case set(base_agent, initial_state) do
+              {:ok, agent} -> agent
+              {:error, _} -> base_agent
+            end
           end
 
           @doc """

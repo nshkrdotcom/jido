@@ -109,7 +109,7 @@ defmodule JidoTest.AgentCmdTest do
       assert {:error, error} =
                FullFeaturedAgent.cmd(agent, UnregisteredAction, %{}, runner: Chain)
 
-      assert error.type == :execution_error
+      assert error.type == :config_error
       assert error.message =~ "Action not registered"
     end
 

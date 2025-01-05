@@ -30,8 +30,8 @@ defmodule JidoTest.SignalTest do
         "datacontenttype" => "application/json",
         "dataschema" => "https://example.com/schema",
         "data" => %{"key" => "value"},
-        "jidoinstructions" => [{:action1, %{param1: "value1"}}],
-        "jidoopts" => %{"opt1" => "value1"}
+        "jido_instructions" => [{:action1, %{param1: "value1"}}],
+        "jido_opts" => %{"opt1" => "value1"}
       }
 
       assert {:ok, signal} = Signal.from_map(map)
@@ -41,8 +41,8 @@ defmodule JidoTest.SignalTest do
       assert signal.datacontenttype == "application/json"
       assert signal.dataschema == "https://example.com/schema"
       assert signal.data == %{"key" => "value"}
-      assert signal.jidoinstructions == [{:action1, %{param1: "value1"}}]
-      assert signal.jidoopts == %{"opt1" => "value1"}
+      assert signal.jido_instructions == [{:action1, %{param1: "value1"}}]
+      assert signal.jido_opts == %{"opt1" => "value1"}
     end
 
     test "returns error for invalid specversion" do
@@ -89,44 +89,44 @@ defmodule JidoTest.SignalTest do
       assert signal.datacontenttype == "application/json"
     end
 
-    test "handles jidoinstructions and jidoopts fields" do
+    test "handles jido_instructions and jido_opts fields" do
       map = %{
         "specversion" => "1.0.2",
         "type" => "example.event",
         "source" => "/example",
         "id" => "123",
-        "jidoinstructions" => [{:action1, %{param1: "value1"}}],
-        "jidoopts" => %{"opt1" => "value1"}
+        "jido_instructions" => [{:action1, %{param1: "value1"}}],
+        "jido_opts" => %{"opt1" => "value1"}
       }
 
       assert {:ok, signal} = Signal.from_map(map)
-      assert signal.jidoinstructions == [{:action1, %{param1: "value1"}}]
-      assert signal.jidoopts == %{"opt1" => "value1"}
+      assert signal.jido_instructions == [{:action1, %{param1: "value1"}}]
+      assert signal.jido_opts == %{"opt1" => "value1"}
     end
 
-    test "returns error for invalid jidoinstructions format" do
+    test "returns error for invalid jido_instructions format" do
       map = %{
         "specversion" => "1.0.2",
         "type" => "example.event",
         "source" => "/example",
         "id" => "123",
-        "jidoinstructions" => "invalid_format"
+        "jido_instructions" => "invalid_format"
       }
 
-      assert {:error, "parse error: jidoinstructions must be a list of instructions"} =
+      assert {:error, "parse error: jido_instructions must be a list of instructions"} =
                Signal.from_map(map)
     end
 
-    test "returns error for invalid jidoopts format" do
+    test "returns error for invalid jido_opts format" do
       map = %{
         "specversion" => "1.0.2",
         "type" => "example.event",
         "source" => "/example",
         "id" => "123",
-        "jidoopts" => "invalid_format"
+        "jido_opts" => "invalid_format"
       }
 
-      assert {:error, "parse error: jidoopts must be a map"} = Signal.from_map(map)
+      assert {:error, "parse error: jido_opts must be a map"} = Signal.from_map(map)
     end
   end
 end

@@ -711,7 +711,7 @@ defmodule Jido.Agent do
 
           ## Parameters
           * `agent` - The agent struct to plan actions for
-          * `instructions` - One of:
+          * `instructions` - One of (see `Instruction.normalize/2` for details):
             * Single action module
             * Single action tuple {module, params}
             * List of action modules
@@ -722,8 +722,8 @@ defmodule Jido.Agent do
           ## Planning Process
           1. Normalizes instructions into consistent [{module, params}] format
           2. Validates action registration
-          3. Creates instructions with params and provided context
-          4. Executes on_before_plan callback for each instruction
+          3. Builds `Instruction` structs with params and provided context
+          4. Executes on_before_plan callback
           5. Adds instructions to pending queue
           6. Sets dirty_state? flag
 
@@ -769,11 +769,22 @@ defmodule Jido.Agent do
               context: context
             )
 
-            with {:ok, normalized} <- normalize_instructions(instructions),
-                 :ok <- validate_actions_registered(agent, normalized),
-                 {:ok, instruction_structs} <- create_instructions(normalized, context),
-                 {:ok, updated_agent} <- add_instructions(agent, instruction_structs) do
-              {:ok, %{updated_agent | dirty_state?: true}}
+            with {:ok, instruction_structs} <- Instruction.normalize(instructions, context),
+                 :ok <- Instruction.validate_allowed_actions(instruction_structs, agent.actions),
+                 {:ok, agent} <- on_before_plan(agent, nil, %{}),
+                 {:ok, agent} <- enqueue_instructions(agent, instruction_structs) do
+              {:ok, %{agent | dirty_state?: true}}
+            else
+              {:error, %Error{type: :config_error} = error} ->
+                {:error,
+                 %{
+                   error
+                   | message:
+                       "Action: #{error.details.actions |> Enum.join(", ")} not registered with agent #{__MODULE__.name()}"
+                 }}
+
+              {:error, reason} ->
+                {:error, reason}
             end
           end
 
@@ -784,143 +795,13 @@ defmodule Jido.Agent do
              )}
           end
 
-          defp normalize_instructions(instructions) when is_atom(instructions),
-            do: normalize_instructions({instructions, nil})
-
-          defp normalize_instructions({action, params}) when is_atom(action) do
-            case normalize_params(params) do
-              {:error, reason} -> {:error, reason}
-              normalized_params -> {:ok, [{action, normalized_params}]}
-            end
-          end
-
-          defp normalize_instructions(instructions) when is_list(instructions) do
-            dbug("Normalizing instruction list", instructions: instructions)
-
-            normalized =
-              Enum.reduce_while(instructions, {:ok, []}, fn
-                action, {:ok, acc} when is_atom(action) ->
-                  {:cont, {:ok, [{action, %{}} | acc]}}
-
-                {action, params}, {:ok, acc} when is_atom(action) ->
-                  case normalize_params(params) do
-                    {:error, reason} -> {:halt, {:error, reason}}
-                    normalized_params -> {:cont, {:ok, [{action, normalized_params} | acc]}}
-                  end
-
-                invalid, {:ok, _acc} ->
-                  dbug("Invalid instruction format", instruction: invalid)
-
-                  {:halt,
-                   {:error,
-                    Error.execution_error(
-                      "Invalid instruction format. Instructions must be either an action module or a tuple of {action_module, params_map}",
-                      %{
-                        instruction: invalid,
-                        expected_format: "{action_module, %{params}}"
-                      }
-                    )}}
+          def enqueue_instructions(agent, instructions) do
+            new_queue =
+              Enum.reduce(instructions, agent.pending_instructions, fn instruction, queue ->
+                :queue.in(instruction, queue)
               end)
 
-            case normalized do
-              {:ok, list} -> {:ok, Enum.reverse(list)}
-              error -> error
-            end
-          end
-
-          defp normalize_params(nil), do: %{}
-          defp normalize_params(params) when is_map(params), do: params
-
-          defp normalize_params(invalid) do
-            dbug("Invalid params format", params: invalid)
-
-            {:error,
-             Error.execution_error(
-               "Invalid instruction format. Instructions must be either an action module or a tuple of {action_module, params_map}",
-               %{
-                 params: invalid,
-                 expected_format: "{action_module, %{params}}"
-               }
-             )}
-          end
-
-          defp validate_actions_registered(agent, normalized_instructions) do
-            dbug("Validating registered actions",
-              agent_id: agent.id,
-              instructions: normalized_instructions
-            )
-
-            unregistered =
-              normalized_instructions
-              |> Enum.map(fn {action, _params} -> action end)
-              |> Enum.reject(&(&1 in agent.actions))
-
-            if Enum.empty?(unregistered) do
-              :ok
-            else
-              unregistered_str = Enum.join(unregistered, ", ")
-              agent_name = __MODULE__.name()
-
-              dbug("Found unregistered actions", agent_id: agent.id, unregistered: unregistered)
-
-              {:error,
-               Error.execution_error(
-                 "Action: #{unregistered_str} not registered with agent #{agent_name}",
-                 %{
-                   actions: unregistered,
-                   agent_id: agent.id
-                 }
-               )}
-            end
-          end
-
-          defp create_instructions(normalized_instructions, context) do
-            dbug("Creating instruction structs",
-              instructions: normalized_instructions,
-              context: context
-            )
-
-            instructions =
-              Enum.map(normalized_instructions, fn {action, params} ->
-                %Instruction{
-                  action: action,
-                  params: params || %{},
-                  context: context || %{}
-                }
-              end)
-
-            {:ok, instructions}
-          end
-
-          defp add_instructions(agent, instructions) do
-            dbug("Adding instructions to queue",
-              agent_id: agent.id,
-              instruction_count: length(instructions)
-            )
-
-            Enum.reduce_while(instructions, {:ok, agent}, fn instruction, {:ok, updated_agent} ->
-              with {:ok, agent_after_callback} <-
-                     on_before_plan(updated_agent, instruction.action, instruction.params),
-                   new_queue = :queue.in(instruction, agent_after_callback.pending_instructions) do
-                {:cont, {:ok, %{agent_after_callback | pending_instructions: new_queue}}}
-              else
-                {:error, reason} ->
-                  dbug("Failed to add instruction",
-                    agent_id: agent.id,
-                    action: instruction.action,
-                    reason: reason
-                  )
-
-                  {:halt,
-                   {:error,
-                    Error.execution_error("Failed to plan instruction", %{
-                      action: instruction.action,
-                      agent_id: agent.id,
-                      params: instruction.params,
-                      reason: reason
-                    })}}
-              end
-            end)
+            {:ok, %{agent | pending_instructions: new_queue, dirty_state?: true}}
           end
 
           @doc """
@@ -1006,24 +887,52 @@ defmodule Jido.Agent do
             runner = Keyword.get(opts, :runner, runner())
 
             dbug("Starting agent run",
-              agent: agent,
+              agent_id: agent.id,
               runner: runner,
-              apply_state: apply_state
+              apply_state: apply_state,
+              current_state: agent.state,
+              pending_count: pending?(agent)
             )
 
             with {:ok, validated_runner} <- Jido.Util.validate_runner(runner),
                  {:ok, agent} <- on_before_run(agent),
-                 {:ok, result} <- validated_runner.run(agent, opts),
-                 {:ok, agent} <- apply_result_instructions(agent, result),
-                 {:ok, agent} <- on_after_run(agent, result),
-                 {:ok, agent} <- handle_directives(agent, result, opts),
-                 {:ok, agent} <- on_after_directives(agent, result),
-                 {:ok, agent} <- reset(agent),
-                 {:ok, agent} <- maybe_apply_state(agent, result, apply_state) do
-              dbug("Run completed successfully", agent: agent)
-              {:ok, agent}
+                 {:ok, result} <- validated_runner.run(agent, opts) do
+              dbug("Runner execution completed",
+                agent_id: agent.id,
+                result_state: result.result_state,
+                directives: result.directives,
+                status: result.status
+              )
+
+              with {:ok, agent} <- apply_result_instructions(agent, result),
+                   {:ok, agent} <- on_after_run(agent, result),
+                   {:ok, agent} <- handle_directives(agent, result, opts) do
+                dbug("Directives applied successfully",
+                  agent_id: agent.id,
+                  current_state: agent.state,
+                  pending_count: pending?(agent)
+                )
+
+                with {:ok, agent} <- on_after_directives(agent, result),
+                     {:ok, agent} <- reset(agent),
+                     {:ok, agent} <- maybe_apply_state(agent, result, apply_state) do
+                  dbug("Run completed successfully",
+                    agent_id: agent.id,
+                    final_state: agent.state,
+                    result: agent.result
+                  )
+
+                  {:ok, agent}
+                end
+              end
             else
               {:error, reason} = error ->
+                dbug("Run failed",
+                  agent_id: agent.id,
+                  error: reason,
+                  current_state: agent.state
+                )
+
                 agent_with_error = %{agent | result: reason}
                 on_error(agent_with_error, reason)
             end
@@ -1043,7 +952,7 @@ defmodule Jido.Agent do
           defp handle_directives(agent, result, opts) do
             dbug("Handling directives", agent: agent)
 
-            case Directive.apply_directives(agent, result, opts) do
+            case Directive.apply_agent_directives(agent, result, opts) do
               {:ok, agent} = success ->
                 success
 
@@ -1143,12 +1052,33 @@ defmodule Jido.Agent do
             runner = Keyword.get(opts, :runner, runner())
             context = Keyword.get(opts, :context, %{})
 
+            dbug("Starting cmd execution",
+              agent_id: agent.id,
+              instructions: instructions,
+              attrs: attrs,
+              opts: opts,
+              current_state: agent.state,
+              pending_count: pending?(agent)
+            )
+
             with {:ok, agent} <- set(agent, attrs, strict_validation: strict_validation),
                  {:ok, agent} <- plan(agent, instructions, context),
                  {:ok, agent} <- run(agent, opts) do
+              dbug("Cmd execution completed successfully",
+                agent_id: agent.id,
+                final_state: agent.state,
+                result: agent.result
+              )
+
               {:ok, agent}
             else
               {:error, reason} ->
+                dbug("Cmd execution failed",
+                  agent_id: agent.id,
+                  error: reason,
+                  current_state: agent.state
+                )
+
                 on_error(agent, reason)
             end
           end
@@ -1194,8 +1124,8 @@ defmodule Jido.Agent do
           @spec on_after_validate_state(t()) :: agent_result()
           def on_after_validate_state(agent), do: {:ok, agent}
 
-          @spec on_before_plan(t(), module(), map()) :: agent_result()
-          def on_before_plan(agent, _action, _params), do: {:ok, agent}
+          @spec on_before_plan(t(), Instruction.instruction_list(), map()) :: agent_result()
+          def on_before_plan(agent, _instructions, _context), do: {:ok, agent}
 
           @spec on_before_run(t()) :: agent_result()
           def on_before_run(agent), do: {:ok, agent}
@@ -1239,10 +1169,13 @@ defmodule Jido.Agent do
   @callback on_after_validate_state(agent :: t()) :: agent_result()
 
   @doc """
-  Called before planning actions, allows preprocessing of action parameters
-  and potential action routing/transformation.
+  Called before planning actions, allows preprocessing of instructions prior to appending to the agent's queue
   """
-  @callback on_before_plan(agent :: t(), action :: module(), params :: map()) :: agent_result()
+  @callback on_before_plan(
+              agent :: t(),
+              instructions :: Instruction.instruction_list(),
+              context :: map()
+            ) :: agent_result()
 
   @doc """
   Called after action planning but before execution.

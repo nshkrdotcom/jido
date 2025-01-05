@@ -1,9 +1,9 @@
-defmodule Jido.Actions.Calculator do
+defmodule Jido.Actions.Arithmetic do
   @moduledoc """
-  Provides basic calculator operations as actions. The operations defined here are obviously trivial.
+  Provides basic arithmetic operations as actions. The operations defined here are obviously trivial.
   This module is intended to be used as a reference for how to write your own actions.
 
-  This module defines a set of calculator actions that can be used in workflows:
+  This module defines a set of arithmetic actions that can be used in workflows:
   - Add: Adds two numbers together
   - Subtract: Subtracts one number from another
   - Multiply: Multiplies two numbers

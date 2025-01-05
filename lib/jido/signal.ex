@@ -17,8 +17,8 @@ defmodule Jido.Signal do
     field(:dataschema, String.t())
     field(:data, term())
     # Jido-specific fields
-    field(:jidoinstructions, Jido.Runner.Instruction.instruction_list())
-    field(:jidoopts, map())
+    field(:jido_instructions, Jido.Runner.Instruction.instruction_list())
+    field(:jido_opts, map())
     field(:jido_causation_id, String.t())
     field(:jido_correlation_id, String.t())
     field(:metadata, map())
@@ -83,8 +83,8 @@ defmodule Jido.Signal do
          {:ok, datacontenttype} <- parse_datacontenttype(map),
          {:ok, dataschema} <- parse_dataschema(map),
          {:ok, data} <- parse_data(map["data"]),
-         {:ok, jidoinstructions} <- parse_jidoinstructions(map["jidoinstructions"]),
-         {:ok, jidoopts} <- parse_jidoopts(map["jidoopts"]) do
+         {:ok, jido_instructions} <- parse_jido_instructions(map["jido_instructions"]),
+         {:ok, jido_opts} <- parse_jido_opts(map["jido_opts"]) do
       event = %__MODULE__{
         specversion: "1.0.2",
         type: type,
@@ -95,8 +95,8 @@ defmodule Jido.Signal do
         datacontenttype: datacontenttype || if(data, do: "application/json"),
         dataschema: dataschema,
         data: data,
-        jidoinstructions: jidoinstructions,
-        jidoopts: jidoopts
+        jido_instructions: jido_instructions,
+        jido_opts: jido_opts
       }
 
       {:ok, event}
@@ -163,19 +163,20 @@ defmodule Jido.Signal do
   defp parse_data(""), do: {:error, "data field given but empty"}
   defp parse_data(data), do: {:ok, data}
 
-  defp parse_jidoinstructions(nil), do: {:ok, nil}
+  defp parse_jido_instructions(nil), do: {:ok, nil}
 
-  defp parse_jidoinstructions(instructions) when is_list(instructions) do
+  defp parse_jido_instructions(instructions) when is_list(instructions) do
     if Enum.all?(instructions, &valid_instruction?/1),
       do: {:ok, instructions},
       else: {:error, "invalid instruction format"}
   end
 
-  defp parse_jidoinstructions(_), do: {:error, "jidoinstructions must be a list of instructions"}
+  defp parse_jido_instructions(_),
+    do: {:error, "jido_instructions must be a list of instructions"}
 
-  defp parse_jidoopts(nil), do: {:ok, %{}}
-  defp parse_jidoopts(opts) when is_map(opts), do: {:ok, opts}
-  defp parse_jidoopts(_), do: {:error, "jidoopts must be a map"}
+  defp parse_jido_opts(nil), do: {:ok, %{}}
+  defp parse_jido_opts(opts) when is_map(opts), do: {:ok, opts}
+  defp parse_jido_opts(_), do: {:error, "jido_opts must be a map"}
 
   defp valid_instruction?({action, params}) when is_atom(action) and is_map(params), do: true
   defp valid_instruction?(_), do: false

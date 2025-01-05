@@ -1,33 +1,33 @@
-defmodule Jido.Agent.Server.Syscall do
+defmodule Jido.Agent.Server.Directive do
   @moduledoc false
-  # Executes validated syscalls within an agent server context.
+  # Executes validated directives within an agent server context.
 
-  # This module handles applying syscall structs to modify server state and behavior.
-  # Only syscalls defined in Jido.Agent.Syscall are valid.
+  # This module handles applying directive structs to modify server state and behavior.
+  # Only directives defined in Jido.Agent.Directive are valid.
 
   alias Jido.Agent.Server.Process, as: ServerProcess
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Agent.Server.PubSub
 
-  alias Jido.Agent.Syscall.{
-    SpawnSyscall,
-    KillSyscall,
-    BroadcastSyscall,
-    SubscribeSyscall,
-    UnsubscribeSyscall
+  alias Jido.Agent.Directive.{
+    SpawnDirective,
+    KillDirective,
+    PublishDirective,
+    SubscribeDirective,
+    UnsubscribeDirective
   }
 
-  alias Jido.{Agent.Syscall, Error}
+  alias Jido.{Agent.Directive, Error}
   use ExDbug, enabled: false
 
   @doc """
-  Executes a validated syscall within a server context.
+  Executes a validated directive within a server context.
 
   Returns a tuple containing the result and updated server state.
   """
-  @spec execute(ServerState.t(), Syscall.t()) :: {:ok, ServerState.t()} | {:error, Error.t()}
+  @spec execute(ServerState.t(), Directive.t()) :: {:ok, ServerState.t()} | {:error, Error.t()}
 
-  def execute(%ServerState{} = state, %SpawnSyscall{module: module, args: args}) do
+  def execute(%ServerState{} = state, %SpawnDirective{module: module, args: args}) do
     child_spec = build_child_spec({module, args})
 
     case ServerProcess.start(state, child_spec) do
@@ -39,7 +39,7 @@ defmodule Jido.Agent.Server.Syscall do
     end
   end
 
-  def execute(%ServerState{} = state, %KillSyscall{pid: pid}) do
+  def execute(%ServerState{} = state, %KillDirective{pid: pid}) do
     case ServerProcess.terminate(state, pid) do
       :ok ->
         {:ok, state}
@@ -53,11 +53,11 @@ defmodule Jido.Agent.Server.Syscall do
     end
   end
 
-  def execute(%ServerState{} = state, %BroadcastSyscall{topic: topic, message: msg}) do
+  def execute(%ServerState{} = state, %PublishDirective{topic: topic, message: message}) do
     if is_nil(state.pubsub) do
       {:error, Error.execution_error("PubSub not configured", %{})}
     else
-      case Phoenix.PubSub.broadcast(state.pubsub, topic, msg) do
+      case Phoenix.PubSub.broadcast(state.pubsub, topic, message) do
         :ok ->
           {:ok, state}
 
@@ -68,7 +68,7 @@ defmodule Jido.Agent.Server.Syscall do
     end
   end
 
-  def execute(%ServerState{} = state, %SubscribeSyscall{topic: topic}) do
+  def execute(%ServerState{} = state, %SubscribeDirective{topic: topic}) do
     case PubSub.subscribe(state, topic) do
       {:ok, new_state} ->
         {:ok, new_state}
@@ -78,7 +78,7 @@ defmodule Jido.Agent.Server.Syscall do
     end
   end
 
-  def execute(%ServerState{} = state, %UnsubscribeSyscall{topic: topic}) do
+  def execute(%ServerState{} = state, %UnsubscribeDirective{topic: topic}) do
     case PubSub.unsubscribe(state, topic) do
       {:ok, new_state} ->
         {:ok, new_state}
@@ -88,8 +88,8 @@ defmodule Jido.Agent.Server.Syscall do
     end
   end
 
-  def execute(_state, invalid_syscall) do
-    {:error, Error.validation_error("Invalid syscall", %{syscall: invalid_syscall})}
+  def execute(_state, invalid_directive) do
+    {:error, Error.validation_error("Invalid directive", %{directive: invalid_directive})}
   end
 
   # Private helper to build child specs

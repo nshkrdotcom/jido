@@ -1,7 +1,7 @@
 defmodule Jido.Runner.Chain do
   @moduledoc """
-  A runner that executes instructions sequentially with support for result chaining,
-  directive-based interruption, and syscall handling.
+  A runner that executes instructions sequentially with support for result chaining
+  and directive-based interruption.
 
   ## Chain Execution
   Instructions are executed in sequence with the output of each instruction
@@ -13,12 +13,6 @@ defmodule Jido.Runner.Chain do
   * Directives can interrupt chain execution (default)
   * Directives can be collected while continuing execution
   * State changes and directives can be mixed in the chain
-
-  ## Syscall Handling
-  * Syscalls are special instructions that affect server behavior
-  * Syscalls are validated before execution
-  * Syscalls can be mixed with regular instructions
-  * Chain execution continues after syscall handling
 
   ## State Management
   * Initial state flows through the chain
@@ -32,21 +26,20 @@ defmodule Jido.Runner.Chain do
 
   alias Jido.Instruction
   alias Jido.Runner.Result
-  alias Jido.Agent.{Directive, Syscall}
+  alias Jido.Agent.Directive
   alias Jido.Error
 
   @type chain_result :: {:ok, Result.t()} | {:error, Error.t() | String.t()}
   @type chain_opts :: [continue_on_directive: boolean()]
 
   @doc """
-  Executes a chain of instructions, handling directives, syscalls and state transitions.
+  Executes a chain of instructions, handling directives and state transitions.
 
   ## Execution Flow
   1. Instructions are executed in sequence
   2. Results from each instruction feed into the next
   3. Directives can interrupt or continue the chain
-  4. Syscalls are validated and handled
-  5. State changes are accumulated through the chain
+  4. State changes are accumulated through the chain
 
   ## Parameters
     - agent: The agent struct containing pending instructions
@@ -58,7 +51,6 @@ defmodule Jido.Runner.Chain do
     - `{:ok, %Result{}}` - Chain completed successfully
       - result_state: Final accumulated state
       - directives: List of encountered directives
-      - syscalls: List of executed syscalls
       - status: Final execution status
     - `{:error, term()}` - Chain execution failed
       - Contains error details and partial results
@@ -91,7 +83,6 @@ defmodule Jido.Runner.Chain do
           instructions: [],
           result_state: agent.state,
           directives: [],
-          syscalls: [],
           status: :ok
         }
 
@@ -110,7 +101,6 @@ defmodule Jido.Runner.Chain do
       instructions: instructions_list,
       result_state: agent.state,
       directives: [],
-      syscalls: [],
       status: :ok
     }
 
@@ -130,31 +120,29 @@ defmodule Jido.Runner.Chain do
     dbug("Executing chain step",
       instruction: instruction,
       current_state: result.result_state,
-      instruction_params: instruction.params
+      instruction_params: instruction.params,
+      remaining_count: length(remaining)
     )
 
     case execute_instruction(instruction, result.result_state) do
       {:ok, maybe_directive} ->
+        dbug("Instruction executed successfully",
+          instruction: instruction,
+          result_type: if(Directive.is_directive?(maybe_directive), do: :directive, else: :state),
+          result: maybe_directive
+        )
+
         if Directive.is_directive?(maybe_directive) do
           handle_directive_result(maybe_directive, remaining, result, opts)
         else
-          case maybe_directive do
-            maybe_syscall when is_struct(maybe_syscall) ->
-              if Syscall.is_syscall?(maybe_syscall) do
-                handle_syscall_result(maybe_syscall, remaining, result, opts)
-              else
-                handle_state_result(maybe_directive, remaining, result, opts)
-              end
-
-            _ ->
-              handle_state_result(maybe_directive, remaining, result, opts)
-          end
+          handle_state_result(maybe_directive, remaining, result, opts)
         end
 
       {:error, error} ->
         dbug("Chain step failed",
           error: error,
-          instruction: instruction
+          instruction: instruction,
+          current_state: result.result_state
         )
 
         {:error, %{result | error: error, status: :error}}
@@ -162,7 +150,7 @@ defmodule Jido.Runner.Chain do
   end
 
   @spec execute_instruction(Instruction.t(), map()) ::
-          {:ok, map() | Directive.t() | Syscall.t()} | {:error, term()}
+          {:ok, map() | Directive.t()} | {:error, term()}
   defp execute_instruction(%Instruction{action: action, params: params, context: context}, state) do
     dbug("Executing workflow",
       action: action,
@@ -180,7 +168,17 @@ defmodule Jido.Runner.Chain do
     )
 
     context = Map.put(context, :state, state)
-    Jido.Workflow.run(action, merged_params, context)
+
+    case Jido.Workflow.run(action, merged_params, context) do
+      {:ok, result} ->
+        {:ok, result}
+
+      {:error, %Jido.Error{type: :validation_error} = error} ->
+        {:error, error}
+
+      {:error, reason} ->
+        {:error, Error.execution_error("Action execution failed", %{reason: reason})}
+    end
   end
 
   @spec handle_directive_result(Directive.t(), [Instruction.t()], Result.t(), keyword()) ::
@@ -188,36 +186,26 @@ defmodule Jido.Runner.Chain do
   defp handle_directive_result(directive, remaining, result, opts) do
     dbug("Handling directive in chain",
       directive: directive,
-      remaining_instructions: length(remaining)
+      remaining_instructions: length(remaining),
+      directive_type: directive.__struct__
     )
 
-    updated_result = %{result | directives: result.directives ++ [directive], status: :ok}
+    # Always continue for EnqueueDirectives, otherwise respect continue_on_directive option
+    should_continue =
+      case directive do
+        %Directive.EnqueueDirective{} -> true
+        %Directive.RegisterActionDirective{} -> true
+        %Directive.DeregisterActionDirective{} -> true
+        _ -> Keyword.get(opts, :continue_on_directive, false)
+      end
 
-    if Keyword.get(opts, :continue_on_directive, false) do
+    if should_continue do
       dbug("Continuing chain after directive")
+      updated_result = %{result | directives: result.directives ++ [directive]}
       execute_chain_step(remaining, updated_result, opts)
     else
       dbug("Interrupting chain due to directive")
-      {:ok, updated_result}
-    end
-  end
-
-  @spec handle_syscall_result(Syscall.t(), [Instruction.t()], Result.t(), keyword()) ::
-          chain_result()
-  defp handle_syscall_result(syscall, remaining, result, opts) do
-    dbug("Handling syscall in chain",
-      syscall: syscall,
-      remaining_instructions: length(remaining)
-    )
-
-    case Syscall.validate_syscall(syscall) do
-      :ok ->
-        updated_result = %{result | syscalls: result.syscalls ++ [syscall], status: :ok}
-        execute_chain_step(remaining, updated_result, opts)
-
-      {:error, reason} ->
-        dbug("Syscall validation failed", reason: reason)
-        {:error, %{result | error: {:invalid_syscall, reason}, status: :error}}
+      {:ok, %{result | directives: result.directives ++ [directive]}}
     end
   end
 

@@ -16,8 +16,19 @@ defmodule JidoTest.TestAgentServer do
       ]
 
     def start_link(opts \\ []) do
-      agent = BasicServerAgent.new("test")
-      Jido.Agent.Server.start_link(agent: agent, name: "test_agent_server")
+      agent_id = UUID.uuid4()
+      agent = BasicServerAgent.new(agent_id)
+
+      Jido.Agent.Server.start_link("test_#{agent_id}",
+        name: "test_agent_server",
+        agent: agent,
+        schedule: [
+          {"*/15 * * * *", fn -> System.cmd("rm", ["/tmp/tmp_"]) end}
+        ],
+        child_spec: [
+          {BusSensor, %{name: "test_bus_sensor", bus: "test_bus"}}
+        ]
+      )
     end
   end
 end

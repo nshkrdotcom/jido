@@ -5,8 +5,7 @@ defmodule JidoTest.AgentRunTest do
     BasicAgent,
     FullFeaturedAgent,
     ErrorHandlingAgent,
-    CallbackTrackingAgent,
-    SyscallAgent
+    CallbackTrackingAgent
   }
 
   alias JidoTest.TestActions
@@ -165,7 +164,7 @@ defmodule JidoTest.AgentRunTest do
     end
   end
 
-  describe "apply_directives/3" do
+  describe "apply_agent_directives/3" do
     test "applies directives from result" do
       agent = BasicAgent.new()
 
@@ -234,62 +233,6 @@ defmodule JidoTest.AgentRunTest do
       {:ok, final} = BasicAgent.run(planned_deregister)
       # Verify the action module was deregistered
       refute final.actions |> Enum.member?(TestActions.BasicAction)
-    end
-  end
-
-  describe "syscall actions" do
-    test "handles spawn syscall" do
-      agent = SyscallAgent.new()
-
-      {:ok, planned} =
-        SyscallAgent.plan(agent, {
-          Jido.Actions.Syscall.Spawn,
-          %{
-            module: Task,
-            args: [fn -> :ok end]
-          }
-        })
-
-      {:ok, final} = SyscallAgent.run(planned)
-
-      assert [syscall] = final.result.syscalls
-      assert syscall.module == Task
-      assert is_function(hd(syscall.args))
-    end
-
-    test "handles kill syscall" do
-      pid = spawn(fn -> :ok end)
-      agent = %{SyscallAgent.new() | state: %{processes: [pid]}}
-
-      {:ok, planned} =
-        SyscallAgent.plan(agent, {
-          Jido.Actions.Syscall.Kill,
-          %{pid: pid}
-        })
-
-      {:ok, final} = SyscallAgent.run(planned)
-
-      assert [syscall] = final.result.syscalls
-      assert syscall.pid == pid
-    end
-
-    test "handles broadcast syscall" do
-      agent = SyscallAgent.new()
-
-      {:ok, planned} =
-        SyscallAgent.plan(agent, {
-          Jido.Actions.Syscall.Broadcast,
-          %{
-            topic: "test_topic",
-            message: "hello world"
-          }
-        })
-
-      {:ok, final} = SyscallAgent.run(planned)
-
-      assert [syscall] = final.result.syscalls
-      assert syscall.topic == "test_topic"
-      assert syscall.message == "hello world"
     end
   end
 end

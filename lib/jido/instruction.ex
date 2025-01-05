@@ -61,7 +61,7 @@ defmodule Jido.Instruction do
   executed by a Runner module like `Jido.Runner.Simple` or `Jido.Runner.Chain`.
   """
   alias Jido.Error
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
   use TypedStruct
 
   @type action_module :: module()
@@ -74,6 +74,7 @@ defmodule Jido.Instruction do
     field(:action, module(), enforce: true)
     field(:params, map(), default: %{})
     field(:context, map(), default: %{})
+    field(:opts, keyword(), default: [])
     field(:result, term(), default: nil)
   end
 
@@ -89,6 +90,7 @@ defmodule Jido.Instruction do
       * Action tuple {module, params}
       * List of actions/tuples/instructions
     * `context` - Optional context map to merge into all instructions (default: %{})
+    * `opts` - Optional keyword list of options, see `Jido.Workflow.run/4` for supported options
 
   ## Returns
     * `{:ok, [%Instruction{}]}` - List of normalized instruction structs
@@ -111,36 +113,51 @@ defmodule Jido.Instruction do
         %Instruction{action: OtherAction, params: %{data: "test"}, context: %{request_id: "abc"}}
       ]}
   """
-  @spec normalize(instruction() | instruction_list(), map()) ::
+  @spec normalize(instruction() | instruction_list(), map(), keyword()) ::
           {:ok, [t()]} | {:error, term()}
-  def normalize(input, context \\ %{})
+  def normalize(input, context \\ %{}, opts \\ [])
+
+  # Normalize context and opts
+  def normalize(input, context, opts) when not is_map(context) or not is_list(opts) do
+    normalize(
+      input,
+      if(is_map(context), do: context, else: %{}),
+      if(is_list(opts), do: opts, else: [])
+    )
+  end
 
   # Already normalized instruction
-  def normalize(%__MODULE__{} = instruction, context) do
-    {:ok, [%{instruction | context: Map.merge(instruction.context, context)}]}
+  def normalize(%__MODULE__{} = instruction, context, opts) do
+    {:ok, [%{instruction | context: Map.merge(instruction.context, context), opts: opts}]}
   end
 
   # List containing instructions/actions
-  def normalize(instructions, context) when is_list(instructions) do
+  def normalize(instructions, context, opts) when is_list(instructions) do
     dbug("Normalizing instruction list", instructions: instructions)
 
     instructions
     |> Enum.reduce_while({:ok, []}, fn
       # Handle existing instruction struct
       %__MODULE__{} = inst, {:ok, acc} ->
-        merged = %{inst | context: Map.merge(inst.context, context)}
+        merged = %{inst | context: Map.merge(inst.context, context), opts: opts}
         {:cont, {:ok, [merged | acc]}}
 
       # Handle bare action module
       action, {:ok, acc} when is_atom(action) ->
-        instruction = %__MODULE__{action: action, params: %{}, context: context}
+        instruction = %__MODULE__{action: action, params: %{}, context: context, opts: opts}
         {:cont, {:ok, [instruction | acc]}}
 
       # Handle action tuple with params
       {action, params}, {:ok, acc} when is_atom(action) ->
         case normalize_params(params) do
           {:ok, normalized_params} ->
-            instruction = %__MODULE__{action: action, params: normalized_params, context: context}
+            instruction = %__MODULE__{
+              action: action,
+              params: normalized_params,
+              context: context,
+              opts: opts
+            }
+
             {:cont, {:ok, [instruction | acc]}}
 
           {:error, reason} ->
@@ -171,19 +188,20 @@ defmodule Jido.Instruction do
   end
 
   # Single action module
-  def normalize(action, context) when is_atom(action) do
-    {:ok, [%__MODULE__{action: action, params: %{}, context: context}]}
+  def normalize(action, context, opts) when is_atom(action) do
+    {:ok, [%__MODULE__{action: action, params: %{}, context: context, opts: opts}]}
   end
 
   # Action tuple
-  def normalize({action, params}, context) when is_atom(action) do
+  def normalize({action, params}, context, opts) when is_atom(action) do
     with {:ok, normalized_params} <- normalize_params(params) do
-      {:ok, [%__MODULE__{action: action, params: normalized_params, context: context}]}
+      {:ok,
+       [%__MODULE__{action: action, params: normalized_params, context: context, opts: opts}]}
     end
   end
 
   # Return an error for any other format
-  def normalize(invalid, _context) do
+  def normalize(invalid, _context, _opts) do
     {:error, Error.execution_error("Invalid instruction format", %{instruction: invalid})}
   end
 
@@ -225,7 +243,7 @@ defmodule Jido.Instruction do
       unregistered_str = Enum.join(unregistered, ", ")
 
       {:error,
-       Error.execution_error("Actions not allowed: #{unregistered_str}", %{
+       Error.config_error("Actions not allowed: #{unregistered_str}", %{
          actions: unregistered,
          allowed_actions: allowed_actions
        })}

@@ -73,8 +73,8 @@ defmodule Jido.Agent.Server.Signal do
     normalized_actions = normalize_actions(action)
 
     build_signal(cmd(), agent_id, args,
-      jidoinstructions: normalized_actions,
-      jidoopts: %{apply_state: Keyword.get(opts, :apply_state, true)}
+      jido_instructions: normalized_actions,
+      jido_opts: %{apply_state: Keyword.get(opts, :apply_state, true)}
     )
   end
 
@@ -82,7 +82,7 @@ defmodule Jido.Agent.Server.Signal do
   Extracts actions and options from a signal.
   """
   def extract_actions(%Signal{} = signal) do
-    case {signal.jidoinstructions, signal.jidoopts} do
+    case {signal.jido_instructions, signal.jido_opts} do
       {instructions, opts} when is_list(instructions) and is_map(opts) ->
         {:ok, {instructions, signal.data, [apply_state: Map.get(opts, :apply_state, true)]}}
 

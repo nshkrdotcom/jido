@@ -82,7 +82,7 @@ defmodule Jido.MixProject do
         ],
         Example_Actions: [
           Jido.Action.Directives,
-          Jido.Actions.Calculator,
+          Jido.Actions.Arithmetic,
           Jido.Actions.Basic,
           Jido.Actions.Files,
           Jido.Actions.Simplebot,
@@ -96,15 +96,12 @@ defmodule Jido.MixProject do
           Jido.Agent.Directive,
           Jido.Agent.Directive.DeregisterActionDirective,
           Jido.Agent.Directive.EnqueueDirective,
-          Jido.Agent.Directive.RegisterActionDirective
-        ],
-        Syscalls: [
-          Jido.Agent.Syscall,
-          Jido.Agent.Syscall.BroadcastSyscall,
-          Jido.Agent.Syscall.KillSyscall,
-          Jido.Agent.Syscall.SpawnSyscall,
-          Jido.Agent.Syscall.SubscribeSyscall,
-          Jido.Agent.Syscall.UnsubscribeSyscall
+          Jido.Agent.Directive.RegisterActionDirective,
+          Jido.Agent.Directive.SpawnDirective,
+          Jido.Agent.Directive.KillDirective,
+          Jido.Agent.Directive.PublishDirective,
+          Jido.Agent.Directive.SubscribeDirective,
+          Jido.Agent.Directive.UnsubscribeDirective
         ],
         Runner: [
           Jido.Runner,
@@ -175,6 +172,7 @@ defmodule Jido.MixProject do
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:excoveralls, "~> 0.18.3", only: [:dev, :test]},
       {:ex_dbug, "~> 1.2"},
+      {:expublish, "~> 2.7", only: [:dev], runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
       {:mimic, "~> 1.7", only: [:dev, :test]},
       {:mock, "~> 0.3.8", only: [:dev, :test]},

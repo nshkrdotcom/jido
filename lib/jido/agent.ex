@@ -795,7 +795,7 @@ defmodule Jido.Agent do
             |> OK.failure()
           end
 
-          def enqueue_instructions(agent, instructions) do
+          defp enqueue_instructions(agent, instructions) do
             new_queue =
               Enum.reduce(instructions, agent.pending_instructions, fn instruction, queue ->
                 :queue.in(instruction, queue)

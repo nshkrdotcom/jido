@@ -531,23 +531,23 @@ defmodule Jido.Agent do
                 OK.success(%{validated_agent | dirty_state?: true})
               else
                 {:error, error} ->
-                  {:error, error}
+                  OK.failure(error)
               end
             end
           end
 
           def set(%__MODULE__{} = agent, attrs, _opts) do
-            {:error,
-             Error.validation_error(
-               "Invalid state update. Expected a map or keyword list, got #{inspect(attrs)}"
-             )}
+            Error.validation_error(
+              "Invalid state update. Expected a map or keyword list, got #{inspect(attrs)}"
+            )
+            |> OK.failure()
           end
 
           def set(%_{} = agent, _attrs, _opts) do
-            {:error,
-             Error.validation_error(
-               "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
-             )}
+            Error.validation_error(
+              "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
+            )
+            |> OK.failure()
           end
 
           @spec do_set(map(), map() | keyword()) :: map_result()
@@ -630,15 +630,15 @@ defmodule Jido.Agent do
                    ),
                  agent_with_valid_state = %{before_agent | state: validated_state},
                  {:ok, final_agent} <- on_after_validate_state(agent_with_valid_state) do
-              {:ok, final_agent}
+              OK.success(final_agent)
             end
           end
 
           def validate(%_{} = agent, _opts) do
-            {:error,
-             Error.validation_error(
-               "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
-             )}
+            Error.validation_error(
+              "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
+            )
+            |> OK.failure()
           end
 
           @spec do_validate(t(), map(), keyword()) :: map_result()
@@ -648,7 +648,7 @@ defmodule Jido.Agent do
             strict_validation = Keyword.get(opts, :strict_validation, false)
 
             if Enum.empty?(schema) do
-              {:ok, state}
+              OK.success(state)
             else
               known_keys = Keyword.keys(schema)
               {known_state, unknown_state} = Map.split(state, known_keys)
@@ -660,41 +660,41 @@ defmodule Jido.Agent do
                   unknown_fields: Map.keys(unknown_state)
                 )
 
-                {:error,
-                 Error.validation_error(
-                   "Agent state validation failed: Strict validation is enabled but unknown fields were provided. " <>
-                     "When strict validation is enabled, only fields defined in the schema are allowed. " <>
-                     "Unknown fields: #{inspect(Map.keys(unknown_state))}",
-                   %{
-                     agent_id: agent.id,
-                     schema: schema,
-                     provided_state: known_state,
-                     unknown_fields: Map.keys(unknown_state)
-                   }
-                 )}
+                Error.validation_error(
+                  "Agent state validation failed: Strict validation is enabled but unknown fields were provided. " <>
+                    "When strict validation is enabled, only fields defined in the schema are allowed. " <>
+                    "Unknown fields: #{inspect(Map.keys(unknown_state))}",
+                  %{
+                    agent_id: agent.id,
+                    schema: schema,
+                    provided_state: known_state,
+                    unknown_fields: Map.keys(unknown_state)
+                  }
+                )
+                |> OK.failure()
               else
                 case NimbleOptions.validate(Enum.to_list(known_state), schema) do
                   {:ok, validated} ->
-                    {:ok, Map.merge(unknown_state, Map.new(validated))}
+                    OK.success(Map.merge(unknown_state, Map.new(validated)))
 
                   {:error, error} ->
                     dbug("Validation failed", agent_id: agent.id, error: error)
 
-                    {:error,
-                     Error.validation_error(
-                       "Agent state validation failed: The provided state does not match the schema requirements. " <>
-                         "This could be due to missing required fields, invalid field types, or values outside allowed ranges. " <>
-                         "Only fields defined in the schema are validated. " <>
-                         "Please check the schema definition and ensure all required fields are present with valid values. " <>
-                         "Error: #{error.message}",
-                       %{
-                         agent_id: agent.id,
-                         schema: schema,
-                         provided_state: known_state,
-                         unknown_fields: Map.keys(unknown_state),
-                         validation_error: error
-                       }
-                     )}
+                    Error.validation_error(
+                      "Agent state validation failed: The provided state does not match the schema requirements. " <>
+                        "This could be due to missing required fields, invalid field types, or values outside allowed ranges. " <>
+                        "Only fields defined in the schema are validated. " <>
+                        "Please check the schema definition and ensure all required fields are present with valid values. " <>
+                        "Error: #{error.message}",
+                      %{
+                        agent_id: agent.id,
+                        schema: schema,
+                        provided_state: known_state,
+                        unknown_fields: Map.keys(unknown_state),
+                        validation_error: error
+                      }
+                    )
+                    |> OK.failure()
                 end
               end
             end
@@ -773,26 +773,26 @@ defmodule Jido.Agent do
                  :ok <- Instruction.validate_allowed_actions(instruction_structs, agent.actions),
                  {:ok, agent} <- on_before_plan(agent, nil, %{}),
                  {:ok, agent} <- enqueue_instructions(agent, instruction_structs) do
-              {:ok, %{agent | dirty_state?: true}}
+              OK.success(%{agent | dirty_state?: true})
             else
               {:error, %Error{type: :config_error} = error} ->
-                {:error,
-                 %{
-                   error
-                   | message:
-                       "Action: #{error.details.actions |> Enum.join(", ")} not registered with agent #{__MODULE__.name()}"
-                 }}
+                %{
+                  error
+                  | message:
+                      "Action: #{error.details.actions |> Enum.join(", ")} not registered with agent #{__MODULE__.name()}"
+                }
+                |> OK.failure()
 
               {:error, reason} ->
-                {:error, reason}
+                OK.failure(reason)
             end
           end
 
           def plan(%_{} = agent, _instructions, _context) do
-            {:error,
-             Error.validation_error(
-               "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
-             )}
+            Error.validation_error(
+              "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
+            )
+            |> OK.failure()
           end
 
           def enqueue_instructions(agent, instructions) do
@@ -801,7 +801,7 @@ defmodule Jido.Agent do
                 :queue.in(instruction, queue)
               end)
 
-            {:ok, %{agent | pending_instructions: new_queue, dirty_state?: true}}
+            OK.success(%{agent | pending_instructions: new_queue, dirty_state?: true})
           end
 
           @doc """
@@ -896,79 +896,53 @@ defmodule Jido.Agent do
 
             with {:ok, validated_runner} <- Jido.Util.validate_runner(runner),
                  {:ok, agent} <- on_before_run(agent),
-                 {:ok, result} <- validated_runner.run(agent, opts) do
-              dbug("Runner execution completed",
-                agent_id: agent.id,
-                result_state: result.result_state,
-                directives: result.directives,
-                status: result.status
-              )
-
-              with {:ok, agent} <- apply_result_instructions(agent, result),
-                   {:ok, agent} <- on_after_run(agent, result),
-                   {:ok, agent} <- handle_directives(agent, result, opts) do
-                dbug("Directives applied successfully",
-                  agent_id: agent.id,
-                  current_state: agent.state,
-                  pending_count: pending?(agent)
-                )
-
-                with {:ok, agent} <- on_after_directives(agent, result),
-                     {:ok, agent} <- reset(agent),
-                     {:ok, agent} <- maybe_apply_state(agent, result, apply_state) do
-                  dbug("Run completed successfully",
-                    agent_id: agent.id,
-                    final_state: agent.state,
-                    result: agent.result
-                  )
-
-                  {:ok, agent}
-                end
-              end
+                 {:ok, result} <- validated_runner.run(agent, opts),
+                 {:ok, agent} <- apply_result_instructions(agent, result),
+                 {:ok, agent} <- on_after_run(agent, result),
+                 {:ok, agent} <- handle_directives(agent, result, opts),
+                 {:ok, agent} <- on_after_directives(agent, result),
+                 {:ok, agent} <- reset(agent),
+                 {:ok, agent} <- maybe_apply_state(agent, result, apply_state) do
+              OK.success(agent)
             else
               {:error, reason} = error ->
-                dbug("Run failed",
-                  agent_id: agent.id,
-                  error: reason,
-                  current_state: agent.state
-                )
-
                 agent_with_error = %{agent | result: reason}
                 on_error(agent_with_error, reason)
             end
           end
 
           def run(%_{} = agent, _opts) do
-            {:error,
-             Error.validation_error(
-               "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
-             )}
+            Error.validation_error(
+              "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
+            )
+            |> OK.failure()
           end
 
           defp apply_result_instructions(agent, result) do
-            {:ok, %{agent | pending_instructions: result.pending_instructions}}
+            OK.success(%{agent | pending_instructions: result.pending_instructions})
           end
 
           defp handle_directives(agent, result, opts) do
             dbug("Handling directives", agent: agent)
 
             case Directive.apply_agent_directives(agent, result, opts) do
-              {:ok, agent} = success ->
-                success
+              {:ok, agent} ->
+                OK.success(agent)
 
               {:error, error} ->
-                {:error, Error.execution_error("Directive application failed", %{error: error})}
+                Error.execution_error("Directive application failed", %{error: error})
+                |> OK.failure()
             end
           end
 
           defp maybe_apply_state(agent, result, true) do
             state = extract_result_state(result.result_state)
             agent = %{agent | state: Map.merge(agent.state, state), result: result}
-            {:ok, agent}
+            OK.success(agent)
           end
 
           defp maybe_apply_state(agent, result, false) do
-            {:ok, %{agent | result: result}}
+            OK.success(%{agent | result: result})
           end
 
           defp extract_result_state({:ok, state, _directives}), do: state
@@ -1070,7 +1044,7 @@ defmodule Jido.Agent do
                 result: agent.result
               )
 
-              {:ok, agent}
+              OK.success(agent)
             else
               {:error, reason} ->
                 dbug("Cmd execution failed",
@@ -1084,10 +1058,10 @@ defmodule Jido.Agent do
           end
 
           def cmd(%_{} = agent, _instructions, _attrs, _opts) do
-            {:error,
-             Error.validation_error(
-               "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
-             )}
+            Error.validation_error(
+              "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
+            )
+            |> OK.failure()
           end
 
           @doc """
@@ -1119,25 +1093,25 @@ defmodule Jido.Agent do
           end
 
           @spec on_before_validate_state(t()) :: agent_result()
-          def on_before_validate_state(agent), do: {:ok, agent}
+          def on_before_validate_state(agent), do: OK.success(agent)
 
           @spec on_after_validate_state(t()) :: agent_result()
-          def on_after_validate_state(agent), do: {:ok, agent}
+          def on_after_validate_state(agent), do: OK.success(agent)
 
           @spec on_before_plan(t(), Instruction.instruction_list(), map()) :: agent_result()
-          def on_before_plan(agent, _instructions, _context), do: {:ok, agent}
+          def on_before_plan(agent, _instructions, _context), do: OK.success(agent)
 
           @spec on_before_run(t()) :: agent_result()
-          def on_before_run(agent), do: {:ok, agent}
+          def on_before_run(agent), do: OK.success(agent)
 
           @spec on_after_run(t(), map()) :: agent_result()
-          def on_after_run(agent, _result), do: {:ok, agent}
+          def on_after_run(agent, _result), do: OK.success(agent)
 
           @spec on_after_directives(t(), map()) :: agent_result()
-          def on_after_directives(agent, _result), do: {:ok, agent}
+          def on_after_directives(agent, _result), do: OK.success(agent)
 
           @spec on_error(t(), any()) :: agent_result()
-          def on_error(agent, reason), do: {:error, reason}
+          def on_error(agent, reason), do: OK.failure(reason)
 
           defoverridable on_before_validate_state: 1,
                          on_after_validate_state: 1,
@@ -1280,15 +1254,15 @@ defmodule Jido.Agent do
     case Jido.Util.validate_actions(new_modules) do
       {:ok, validated_modules} ->
         new_actions = validated_modules ++ agent.actions
-        {:ok, %{agent | actions: new_actions}}
+        OK.success(%{agent | actions: new_actions})
 
       {:error, reason} ->
-        {:error,
-         Error.validation_error("Failed to register actions", %{
-           agent_id: agent.id,
-           actions: action_modules,
-           reason: reason
-         })}
+        Error.validation_error("Failed to register actions", %{
+          agent_id: agent.id,
+          actions: action_modules,
+          reason: reason
+        })
+        |> OK.failure()
     end
   end
 
@@ -1298,7 +1272,7 @@ defmodule Jido.Agent do
 
   def deregister_action(agent, action_module) do
     new_actions = Enum.reject(agent.actions, &(&1 == action_module))
-    {:ok, %{agent | actions: new_actions}}
+    OK.success(%{agent | actions: new_actions})
   end
 
   @doc """

@@ -182,6 +182,10 @@ defmodule Jido.Action do
             }
           end
 
+          def to_tool do
+            Jido.Workflow.Tool.to_tool(__MODULE__)
+          end
+
           def __action_metadata__ do
             to_json()
           end

@@ -124,7 +124,7 @@ defmodule Jido.Runner.Chain do
       remaining_count: length(remaining)
     )
 
-    case execute_instruction(instruction, result.result_state) do
+    case execute_instruction(instruction, result.result_state, opts) do
       {:ok, maybe_directive} ->
         dbug("Instruction executed successfully",
           instruction: instruction,
@@ -149,9 +149,13 @@ defmodule Jido.Runner.Chain do
     end
   end
 
-  @spec execute_instruction(Instruction.t(), map()) ::
+  @spec execute_instruction(Instruction.t(), map(), keyword()) ::
           {:ok, map() | Directive.t()} | {:error, term()}
-  defp execute_instruction(%Instruction{action: action, params: params, context: context}, state) do
+  defp execute_instruction(
+         %Instruction{action: action, params: params, context: context},
+         state,
+         opts
+       ) do
     dbug("Executing workflow",
       action: action,
       params: params,
@@ -169,7 +173,7 @@ defmodule Jido.Runner.Chain do
 
     context = Map.put(context, :state, state)
 
-    case Jido.Workflow.run(action, merged_params, context) do
+    case Jido.Workflow.run(action, merged_params, context, opts) do
       {:ok, result} ->
         {:ok, result}
 

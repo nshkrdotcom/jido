@@ -125,7 +125,7 @@ Actions are small, focused pieces of functionality that:
 - Return standardized results
 - Can be composed into workflows
 
-[Learn more about Actions →](guides/actions.md)
+[Learn more about Actions →](actions.md)
 
 ### Workflows: Combining Actions
 
@@ -153,7 +153,7 @@ Agents provide stateful wrappers around Actions with:
 - Runtime adaptation through directives
 - Lifecycle callbacks
 
-[Learn more about Agents →](guides/agents.md)
+[Learn more about Agents →](agents.md)
 
 ### Sensors: Real-time Monitoring
 
@@ -163,7 +163,7 @@ Sensors gather data and monitor system state:
 - Support real-time metrics
 - Enable adaptive behavior
 
-[Learn more about Sensors →](guides/sensors.md)
+[Learn more about Sensors →](sensors.md)
 
 ## Running in Production
 
@@ -197,25 +197,25 @@ Supervisor.start_link(children, strategy: :one_for_one)
 
 Now that you understand the basics, you can explore:
 
-1. [Building Complex Actions and Workflows](guides/actions.md)
+1. [Building Complex Actions and Workflows](actions.md)
    - Action composition patterns
    - Error handling
    - Async execution
    - Testing strategies
 
-2. [Creating Smart Agents](guides/agents.md)
+2. [Creating Smart Agents](agents.md)
    - State management
    - Planning and execution
    - Lifecycle hooks
    - Directive system
 
-3. [Implementing Sensors](guides/sensors.md)
+3. [Implementing Sensors](sensors.md)
    - Signal design
    - Real-time monitoring
    - Metric collection
    - Event processing
 
-4. [Using Agent Directives](guides/directives.md)
+4. [Using Agent Directives](directives.md)
    - Runtime adaptation
    - Dynamic capabilities
    - Self-modification patterns
@@ -224,7 +224,7 @@ Now that you understand the basics, you can explore:
 
 - [Complete Documentation](https://hexdocs.pm/jido)
 - [GitHub Repository](https://github.com/agentjido/jido)
-- [Examples and Tutorials](guides/)
+- [Examples and Tutorials](/)
 
 For AI/LLM integration capabilities, see the separate [`jido_ai`](https://github.com/agentjido/jido_ai) package.
 

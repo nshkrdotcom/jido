@@ -52,6 +52,7 @@ defmodule Jido.MixProject do
 
   # Specifies which paths to compile per environment.
   defp elixirc_paths(:test), do: ["lib", "test/support", "test/jido/bus/support"]
+  defp elixirc_paths(:dev), do: ["lib", "bench"]
   defp elixirc_paths(_), do: ["lib"]
 
   defp docs do
@@ -141,7 +142,9 @@ defmodule Jido.MixProject do
           Instructions: "guides/instructions.md",
           Agents: "guides/agents.md",
           "Sensors & Signals": "guides/sensors.md",
-          Directives: "guides/directives.md"
+          Directives: "guides/directives.md",
+          "Signal Router": "guides/signal-router.md",
+          Skills: "guides/skills.md"
         ]
       ]
     ]
@@ -160,6 +163,7 @@ defmodule Jido.MixProject do
 
   defp deps do
     [
+      # Jido Deps
       {:backoff, "~> 1.1"},
       {:deep_merge, "~> 1.0"},
       {:elixir_uuid, "~> 1.2"},
@@ -172,7 +176,12 @@ defmodule Jido.MixProject do
       {:telemetry, "~> 1.3"},
       {:typed_struct, "~> 0.3.0"},
 
+      # Skill & Action Dependencies for examples
+      {:abacus, "~> 2.1"},
+
       # Testing
+      {:benchee, "~> 1.3", only: [:dev, :test]},
+      {:benchee_html, "~> 1.0", only: [:dev, :test]},
       {:credo, "~> 1.7"},
       {:doctor, "~> 0.22.0", only: [:dev, :test]},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},

@@ -1,376 +1,314 @@
 defmodule Jido.Signal.RouterTest do
   use ExUnit.Case, async: true
 
+  alias Jido.Instruction
   alias Jido.Signal
   alias Jido.Signal.Router
-
+  alias JidoTest.TestActions.{Add, Multiply, Subtract, FormatUser, EnrichUserData}
   @moduletag :capture_log
 
-  describe "new/0 and new/1" do
-    test "creates an empty router" do
-      assert Router.new() == %{}
-    end
+  setup do
+    routes = [
+      # Static route - adds 1 to value
+      {"user.created", %Instruction{action: Add}},
 
-    test "creates router with path routes" do
-      handler = fn _ -> :ok end
-      routes = [{"payment.created", handler}]
+      # Single wildcard route - multiplies value by 2
+      {"user.*.updated", %Instruction{action: Multiply}},
 
-      router = Router.new(routes)
+      # Multi-level wildcard route - subtracts 1 from value
+      {"order.**.completed", %Instruction{action: Subtract}},
 
-      assert %{
-               "payment" => %{
-                 "created" => %{handler: {^handler, 0}}
-               }
-             } = router
-    end
+      # Priority route - formats user data
+      {"user.format", %Instruction{action: FormatUser}, 100},
 
-    test "creates router with path routes and priority" do
-      handler = fn _ -> :ok end
-      routes = [{"payment.created", handler, 10}]
+      # Pattern match route - enriches user data if email present
+      {
+        "user.enrich",
+        fn signal -> Map.has_key?(signal.data, :email) end,
+        %Instruction{action: EnrichUserData},
+        90
+      }
+    ]
 
-      router = Router.new(routes)
-
-      assert %{
-               "payment" => %{
-                 "created" => %{handler: {^handler, 10}}
-               }
-             } = router
-    end
-
-    test "creates router with pattern routes" do
-      pattern = fn %Signal{data: %{amount: amount}} -> amount > 1000 end
-      handler = fn _ -> :ok end
-      routes = [{"payment", pattern, handler}]
-
-      router = Router.new(routes)
-
-      assert %{
-               "payment" => %{
-                 matchers: [{^pattern, ^handler, 0}]
-               }
-             } = router
-    end
-
-    test "creates router with pattern routes and priority" do
-      pattern = fn %Signal{data: %{amount: amount}} -> amount > 1000 end
-      handler = fn _ -> :ok end
-      routes = [{"payment", pattern, handler, 10}]
-
-      router = Router.new(routes)
-
-      assert %{
-               "payment" => %{
-                 matchers: [{^pattern, ^handler, 10}]
-               }
-             } = router
-    end
-
-    test "creates router with mixed routes" do
-      path_handler = fn _ -> :path end
-      pattern = fn %Signal{data: %{amount: amount}} -> amount > 1000 end
-      pattern_handler = fn _ -> :pattern end
-
-      routes = [
-        {"payment.created", path_handler, 5},
-        {"payment", pattern, pattern_handler, 10}
-      ]
-
-      router = Router.new(routes)
-
-      assert %{
-               "payment" => %{
-                 "created" => %{handler: {^path_handler, 5}},
-                 matchers: [{^pattern, ^pattern_handler, 10}]
-               }
-             } = router
-    end
-
-    test "returns empty router on invalid route specs" do
-      routes = [
-        {"invalid", "not a function"},
-        {123, fn _ -> :ok end}
-      ]
-
-      assert Router.new(routes) == %{}
-    end
-  end
-
-  describe "add_path_route/3 and add_path_route/4" do
-    test "adds a simple path route" do
-      router =
-        Router.new()
-        |> Router.add_path_route("payment.created", fn _ -> :ok end)
-
-      assert %{"payment" => %{"created" => %{handler: {_handler, 0}}}} = router
-    end
-
-    test "adds path route with priority" do
-      router =
-        Router.new()
-        |> Router.add_path_route("payment.created", fn _ -> :ok end, 10)
-
-      assert %{"payment" => %{"created" => %{handler: {_handler, 10}}}} = router
-    end
-
-    test "adds multiple path routes" do
-      router =
-        Router.new()
-        |> Router.add_path_route("payment.created", fn _ -> :created end, 10)
-        |> Router.add_path_route("payment.updated", fn _ -> :updated end, 5)
-
-      assert %{
-               "payment" => %{
-                 "created" => %{handler: {_, 10}},
-                 "updated" => %{handler: {_, 5}}
-               }
-             } = router
-    end
-
-    test "adds wildcard route" do
-      router =
-        Router.new()
-        |> Router.add_path_route("payment.*", fn _ -> :any end, 1)
-
-      assert %{"payment" => %{"*" => %{handler: {_, 1}}}} = router
-    end
-
-    test "returns error on invalid path format" do
-      assert {:error, :invalid_path_format} =
-               Router.add_path_route(%{}, "invalid..path", fn _ -> :ok end)
-    end
-
-    test "returns error on invalid handler" do
-      assert {:error, :invalid_handler} = Router.add_path_route(%{}, "payment", "not a function")
-    end
-
-    test "returns error on invalid priority" do
-      assert {:error, :invalid_priority} =
-               Router.add_path_route(%{}, "payment", fn _ -> :ok end, "high")
-    end
-  end
-
-  describe "add_pattern_route/4 and add_pattern_route/5" do
-    test "adds a pattern route" do
-      router =
-        Router.new()
-        |> Router.add_pattern_route(
-          "payment",
-          fn %Signal{data: %{amount: amount}} -> amount > 1000 end,
-          fn _ -> :large_payment end
-        )
-
-      assert %{"payment" => %{matchers: [{_pattern_fn, _handler, 0}]}} = router
-    end
-
-    test "adds pattern route with priority" do
-      router =
-        Router.new()
-        |> Router.add_pattern_route(
-          "payment",
-          fn %Signal{data: %{amount: amount}} -> amount > 1000 end,
-          fn _ -> :large_payment end,
-          10
-        )
-
-      assert %{"payment" => %{matchers: [{_pattern_fn, _handler, 10}]}} = router
-    end
-
-    test "adds multiple pattern routes" do
-      router =
-        Router.new()
-        |> Router.add_pattern_route(
-          "payment",
-          fn %Signal{data: %{amount: amount}} -> amount > 1000 end,
-          fn _ -> :large_payment end,
-          10
-        )
-        |> Router.add_pattern_route(
-          "payment",
-          fn %Signal{data: %{currency: currency}} -> currency == "USD" end,
-          fn _ -> :usd_payment end,
-          5
-        )
-
-      assert %{"payment" => %{matchers: matchers}} = router
-      assert length(matchers) == 2
-      assert Enum.any?(matchers, fn {_, _, priority} -> priority == 10 end)
-      assert Enum.any?(matchers, fn {_, _, priority} -> priority == 5 end)
-    end
-
-    test "returns error on invalid pattern function" do
-      assert {:error, :invalid_pattern_function} =
-               Router.add_pattern_route(
-                 %{},
-                 "payment",
-                 fn _ -> "not a boolean" end,
-                 fn _ -> :ok end
-               )
-    end
+    {:ok, router} = Router.new(routes)
+    {:ok, %{router: router}}
   end
 
   describe "route/2" do
-    test "routes to exact path handler" do
-      router =
-        Router.new()
-        |> Router.add_path_route("payment.created", fn _ -> :created end, 1)
-
-      signal = %Signal{type: "payment.created", source: "test", id: "test-1"}
-      assert {:ok, [:created]} = Router.route(router, signal)
-    end
-
-    test "routes to wildcard handler" do
-      router =
-        Router.new()
-        |> Router.add_path_route("payment.*", fn _ -> :any end, 1)
-
-      signal = %Signal{type: "payment.created", source: "test", id: "test-1"}
-      assert {:ok, [:any]} = Router.route(router, signal)
-    end
-
-    test "routes to pattern handler when condition matches" do
-      router =
-        Router.new()
-        |> Router.add_pattern_route(
-          "payment",
-          fn %Signal{data: %{amount: amount}} -> amount > 1000 end,
-          fn _ -> :large_payment end,
-          10
-        )
-
-      signal = %Signal{type: "payment", data: %{amount: 2000}, source: "test", id: "test-1"}
-      assert {:ok, [:large_payment]} = Router.route(router, signal)
-    end
-
-    test "executes multiple matching handlers in priority order" do
-      router =
-        Router.new()
-        |> Router.add_pattern_route(
-          "payment",
-          fn %Signal{data: %{amount: amount}} -> amount > 1000 end,
-          fn _ -> :large end,
-          10
-        )
-        |> Router.add_pattern_route(
-          "payment",
-          fn %Signal{data: %{currency: currency}} -> currency == "USD" end,
-          fn _ -> :usd end,
-          5
-        )
-        |> Router.add_path_route("payment", fn _ -> :any end, 1)
-
+    test "routes static path signal", %{router: router} do
       signal = %Signal{
-        type: "payment",
-        data: %{amount: 2000, currency: "USD"},
-        source: "test",
-        id: "test-1"
+        id: UUID.uuid4(),
+        source: "/test",
+        type: "user.created",
+        data: %{value: 5}
       }
 
-      assert {:ok, [:large, :usd, :any]} = Router.route(router, signal)
+      assert {:ok, [%Instruction{action: Add}]} = Router.route(router, signal)
     end
 
-    test "returns error when no handler found" do
-      router = Router.new()
-      signal = %Signal{type: "unknown.event", source: "test", id: "test-1"}
-      assert {:error, :no_handler} = Router.route(router, signal)
+    test "routes single wildcard signal", %{router: router} do
+      signal = %Signal{
+        id: UUID.uuid4(),
+        source: "/test",
+        type: "user.123.updated",
+        data: %{value: 10}
+      }
+
+      assert {:ok, [%Instruction{action: Multiply}]} = Router.route(router, signal)
+    end
+
+    test "routes multi-level wildcard signal", %{router: router} do
+      signal = %Signal{
+        id: UUID.uuid4(),
+        source: "/test",
+        type: "order.123.payment.completed",
+        data: %{value: 20}
+      }
+
+      assert {:ok, [%Instruction{action: Subtract}]} = Router.route(router, signal)
+    end
+
+    test "routes by priority", %{router: router} do
+      signal = %Signal{
+        id: UUID.uuid4(),
+        source: "/test",
+        type: "user.format",
+        data: %{
+          name: "John Doe",
+          email: "john@example.com",
+          age: 30
+        }
+      }
+
+      assert {:ok, [%Instruction{action: FormatUser}]} = Router.route(router, signal)
+    end
+
+    test "routes pattern matched signal", %{router: router} do
+      signal = %Signal{
+        id: UUID.uuid4(),
+        source: "/test",
+        type: "user.enrich",
+        data: %{
+          formatted_name: "John Doe",
+          email: "john@example.com"
+        }
+      }
+
+      assert {:ok, [%Instruction{action: EnrichUserData}]} = Router.route(router, signal)
+    end
+
+    test "does not route pattern matched signal when condition fails", %{router: router} do
+      signal = %Signal{
+        id: UUID.uuid4(),
+        source: "/test",
+        type: "user.enrich",
+        data: %{
+          formatted_name: "John Doe"
+          # Missing email field
+        }
+      }
+
+      assert {:error, error} = Router.route(router, signal)
+      assert error.type == :routing_error
+      assert error.message == :no_handler
+    end
+
+    test "returns empty list for unmatched path", %{router: router} do
+      signal = %Signal{
+        id: UUID.uuid4(),
+        source: "/test",
+        type: "unknown.path",
+        data: %{}
+      }
+
+      assert {:error, error} = Router.route(router, signal)
+      assert error.type == :routing_error
+      assert error.message == :no_handler
     end
   end
 
-  # describe "remove_route/2" do
-  #   test "removes path route" do
-  #     router =
-  #       Router.new()
-  #       |> Router.add_path_route("payment", fn _ -> :any end)
-  #       |> Router.remove_route("payment")
+  describe "router edge cases" do
+    test "handles path pattern edge cases", %{router: _router} do
+      # Test empty path segments
+      {:error, error} = Router.new({"user..created", %Instruction{action: TestAction}})
+      assert error.type == :routing_error
 
-  #     signal = %Signal{type: "payment", source: "test", id: "test-1"}
-  #     assert {:error, :no_handler} = Router.route(router, signal)
-  #   end
+      # Test paths ending in wildcard
+      {:ok, router} = Router.new({"user.*", %Instruction{action: TestAction}})
+      signal = %Signal{type: "user.anything", source: "/test", id: UUID.uuid4()}
+      {:ok, [instruction]} = Router.route(router, signal)
+      assert instruction.action == TestAction
 
-  #   test "removes nested path route" do
-  #     router =
-  #       Router.new()
-  #       |> Router.add_path_route("payment.success", fn _ -> :success end)
-  #       |> Router.remove_route("payment.success")
+      # Test paths starting with wildcard
+      {:ok, router} = Router.new({"*.created", %Instruction{action: TestAction}})
+      signal = %Signal{type: "anything.created", source: "/test", id: UUID.uuid4()}
+      {:ok, [instruction]} = Router.route(router, signal)
+      assert instruction.action == TestAction
 
-  #     signal = %Signal{type: "payment.success", source: "test", id: "test-1"}
-  #     assert {:error, :no_handler} = Router.route(router, signal)
-  #   end
-  # end
+      # Test multiple consecutive wildcards
+      {:error, error} = Router.new({"user.**.**.created", %Instruction{action: TestAction}})
+      assert error.type == :routing_error
+      assert error.message == :invalid_path_format
+    end
 
-  # describe "remove_pattern_route/3" do
-  #   test "removes pattern route" do
-  #     pattern_fn = fn %Signal{data: %{amount: amount}} -> amount > 1000 end
+    test "handles priority edge cases", %{router: _router} do
+      # Test priority bounds
+      {:error, error} =
+        Router.new({
+          "test",
+          %Instruction{action: TestAction},
+          # Above max
+          101
+        })
 
-  #     router =
-  #       Router.new()
-  #       |> Router.add_pattern_route("payment", pattern_fn, fn _ -> :large end)
-  #       |> Router.remove_pattern_route("payment", pattern_fn)
+      assert error.type == :routing_error
 
-  #     signal = %Signal{type: "payment", data: %{amount: 2000}, source: "test", id: "test-1"}
-  #     assert {:error, :no_handler} = Router.route(router, signal)
-  #   end
+      {:error, error} =
+        Router.new({
+          "test",
+          %Instruction{action: TestAction},
+          # Below min
+          -101
+        })
 
-  #   test "removes only matching pattern route" do
-  #     pattern_1 = fn %Signal{data: %{amount: amount}} -> amount > 1000 end
-  #     pattern_2 = fn %Signal{data: %{currency: currency}} -> currency == "USD" end
+      assert error.type == :routing_error
 
-  #     router =
-  #       Router.new()
-  #       |> Router.add_pattern_route("payment", pattern_1, fn _ -> :large end)
-  #       |> Router.add_pattern_route("payment", pattern_2, fn _ -> :usd end)
-  #       |> Router.remove_pattern_route("payment", pattern_1)
+      # Test same priority ordering
+      {:ok, router} =
+        Router.new([
+          {"test", %Instruction{action: Action1}, 0},
+          {"test", %Instruction{action: Action2}, 0}
+        ])
 
-  #     signal = %Signal{
-  #       type: "payment",
-  #       data: %{amount: 2000, currency: "USD"},
-  #       source: "test",
-  #       id: "test-1"
-  #     }
+      signal = %Signal{type: "test", source: "/test", id: UUID.uuid4()}
+      {:ok, instructions} = Router.route(router, signal)
+      # Should maintain registration order
+      assert [%Instruction{action: Action1}, %Instruction{action: Action2}] = instructions
+    end
 
-  #     assert {:ok, [:usd]} = Router.route(router, signal)
-  #   end
-  # end
+    test "handles pattern matching edge cases" do
+      # Test pattern function that raises
+      {:error, error} =
+        Router.new({
+          "test",
+          fn _signal -> raise "boom" end,
+          %Instruction{action: TestAction}
+        })
 
-  # describe "list_routes/1" do
-  #   test "lists path routes" do
-  #     router =
-  #       Router.new()
-  #       |> Router.add_path_route("payment", fn _ -> :any end, 1)
-  #       |> Router.add_path_route("payment.success", fn _ -> :success end, 2)
+      assert error.type == :routing_error
 
-  #     routes = Router.list_routes(router)
-  #     assert Enum.member?(routes, {"payment", :path, 1})
-  #     assert Enum.member?(routes, {"payment.success", :path, 2})
-  #   end
+      # Test pattern function returning non-boolean
+      pattern_fn = fn _signal -> "not a boolean" end
 
-  #   test "lists pattern routes" do
-  #     router =
-  #       Router.new()
-  #       |> Router.add_pattern_route(
-  #         "payment",
-  #         fn %Signal{data: %{amount: amount}} -> amount > 1000 end,
-  #         fn _ -> :large end,
-  #         10
-  #       )
+      {:error, error} =
+        Router.new({
+          "test",
+          pattern_fn,
+          %Instruction{action: TestAction}
+        })
 
-  #     routes = Router.list_routes(router)
-  #     assert Enum.member?(routes, {"payment", :pattern, 10})
-  #   end
+      assert error.type == :routing_error
 
-  #   test "lists mixed routes" do
-  #     router =
-  #       Router.new()
-  #       |> Router.add_path_route("payment", fn _ -> :any end, 1)
-  #       |> Router.add_pattern_route(
-  #         "payment",
-  #         fn %Signal{data: %{amount: amount}} -> amount > 1000 end,
-  #         fn _ -> :large end,
-  #         10
-  #       )
+      # Test pattern function with nil signal data
+      {:ok, router} =
+        Router.new({
+          "test",
+          fn signal -> Map.get(signal.data, :key) == "value" end,
+          %Instruction{action: TestAction}
+        })
 
-  #     routes = Router.list_routes(router)
-  #     assert Enum.member?(routes, {"payment", :path, 1})
-  #     assert Enum.member?(routes, {"payment", :pattern, 10})
-  #   end
-  # end
+      signal = %Signal{type: "test", source: "/test", id: UUID.uuid4(), data: nil}
+      {:error, error} = Router.route(router, signal)
+      assert error.type == :routing_error
+    end
+
+    test "handles route management edge cases" do
+      # Test adding duplicate routes
+      {:ok, router} = Router.new({"test", %Instruction{action: Action1}})
+      {:ok, router} = Router.add(router, {"test", %Instruction{action: Action2}})
+      signal = %Signal{type: "test", source: "/test", id: UUID.uuid4()}
+      {:ok, instructions} = Router.route(router, signal)
+      # Should have both instructions
+      assert length(instructions) == 2
+
+      # Test removing non-existent route
+      {:ok, router} = Router.remove(router, "nonexistent")
+      # Should not error
+
+      # Test removing last route
+      {:ok, router} = Router.remove(router, "test")
+      signal = %Signal{type: "test", source: "/test", id: UUID.uuid4()}
+      {:error, error} = Router.route(router, signal)
+      assert error.type == :routing_error
+      assert error.message == :no_handler
+    end
+
+    test "handles signal type edge cases", %{router: router} do
+      # Test empty signal type
+      signal = %Signal{type: "", source: "/test", id: UUID.uuid4()}
+      {:error, error} = Router.route(router, signal)
+      assert error.type == :routing_error
+
+      # Test very long path
+      long_type = String.duplicate("a.", 100) <> "end"
+      signal = %Signal{type: long_type, source: "/test", id: UUID.uuid4()}
+      {:error, error} = Router.route(router, signal)
+      assert error.type == :routing_error
+
+      # Test invalid characters in type
+      signal = %Signal{type: "user@123", source: "/test", id: UUID.uuid4()}
+      {:error, error} = Router.route(router, signal)
+      assert error.type == :routing_error
+    end
+
+    test "handles complex wildcard interactions" do
+      {:ok, router} =
+        Router.new([
+          {"**", %Instruction{action: CatchAll}, -100},
+          {"*.*.created", %Instruction{action: Action1}},
+          {"user.**", %Instruction{action: Action2}},
+          {"user.*.created", %Instruction{action: Action3}},
+          {"user.123.created", %Instruction{action: Action4}}
+        ])
+
+      # Test overlapping wildcards
+      signal = %Signal{type: "user.123.created", source: "/test", id: UUID.uuid4()}
+      {:ok, instructions} = Router.route(router, signal)
+      # Should match all patterns in correct priority order
+      assert [
+               %{action: Action4},
+               %{action: Action3},
+               %{action: Action2},
+               %{action: Action1},
+               %{action: CatchAll}
+             ] = instructions
+    end
+
+    test "handles trie node edge cases" do
+      # Test very deep nesting - over 10 and the tests are really slow
+      deep_path = String.duplicate("nested.", 10) <> "end"
+
+      {:ok, router} =
+        Router.new({
+          deep_path,
+          %Instruction{action: TestAction}
+        })
+
+      signal = %Signal{type: deep_path, source: "/test", id: UUID.uuid4()}
+      {:ok, [instruction]} = Router.route(router, signal)
+      assert instruction.action == TestAction
+
+      # Test wide trie (many siblings)
+      wide_routes =
+        for n <- 1..1000 do
+          {"parent.#{n}", %Instruction{action: TestAction}}
+        end
+
+      {:ok, router} = Router.new(wide_routes)
+
+      signal = %Signal{type: "parent.500", source: "/test", id: UUID.uuid4()}
+      {:ok, [instruction]} = Router.route(router, signal)
+      assert instruction.action == TestAction
+    end
+  end
 end

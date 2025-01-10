@@ -1134,8 +1134,8 @@ defmodule Jido.Agent do
                          on_error: 2
 
         {:error, error} ->
-          error_message = Error.format_nimble_config_error(error, "Agent", __MODULE__)
-          raise CompileError, description: error_message, file: __ENV__.file, line: __ENV__.line
+          message = Error.format_nimble_config_error(error, "Agent", __MODULE__)
+          raise CompileError, description: message, file: __ENV__.file, line: __ENV__.line
       end
     end
   end

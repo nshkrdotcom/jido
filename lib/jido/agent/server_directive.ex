@@ -7,14 +7,10 @@ defmodule Jido.Agent.Server.Directive do
 
   alias Jido.Agent.Server.Process, as: ServerProcess
   alias Jido.Agent.Server.State, as: ServerState
-  alias Jido.Agent.Server.PubSub
 
   alias Jido.Agent.Directive.{
     SpawnDirective,
-    KillDirective,
-    PublishDirective,
-    SubscribeDirective,
-    UnsubscribeDirective
+    KillDirective
   }
 
   alias Jido.{Agent.Directive, Error}

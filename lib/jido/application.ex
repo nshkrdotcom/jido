@@ -16,10 +16,10 @@ defmodule Jido.Application do
 
       # Bus Registry & Default Supervisor
       {Registry, keys: :unique, name: Jido.BusRegistry},
-      {DynamicSupervisor, strategy: :one_for_one, name: Jido.BusSupervisor}
+      {DynamicSupervisor, strategy: :one_for_one, name: Jido.BusSupervisor},
 
-      # Default Agent Server
-      # BasicServer
+      # Chat Room Registry
+      {Registry, keys: :unique, name: Jido.Chat.Registry}
     ]
 
     # Initialize discovery cache asynchronously

@@ -169,6 +169,7 @@ defmodule Jido.MixProject do
       {:elixir_uuid, "~> 1.2"},
       {:jason, "~> 1.4"},
       {:nimble_options, "~> 1.1"},
+      {:nimble_parsec, "~> 1.4"},
       {:ok, "~> 2.3"},
       {:phoenix_pubsub, "~> 2.1"},
       {:private, "~> 0.1.2"},
@@ -198,7 +199,7 @@ defmodule Jido.MixProject do
 
   defp aliases do
     [
-      test: "test --trace",
+      # test: "test --trace",
 
       # Run to check the quality of your code
       q: ["quality"],

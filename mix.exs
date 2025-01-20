@@ -176,6 +176,7 @@ defmodule Jido.MixProject do
       {:proper_case, "~> 1.3"},
       {:telemetry, "~> 1.3"},
       {:typed_struct, "~> 0.3.0"},
+      {:typed_struct_nimble_options, "~> 0.1.1"},
 
       # Skill & Action Dependencies for examples
       {:abacus, "~> 2.1"},
@@ -199,7 +200,7 @@ defmodule Jido.MixProject do
 
   defp aliases do
     [
-      # test: "test --trace",
+      test: "test --trace",
 
       # Run to check the quality of your code
       q: ["quality"],

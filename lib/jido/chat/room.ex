@@ -190,25 +190,25 @@ defmodule Jido.Chat.Room do
 
   # Private Helpers
 
-  defp publish_message(message, state) do
-    case Jido.Bus.publish(state.bus_name, state.room_id, :any_version, [message.signal]) do
-      :ok -> {:reply, {:ok, message}, state}
-      error -> {:reply, error, state}
-    end
-  end
+  # defp publish_message(message, state) do
+  #   case Jido.Bus.publish(state.bus_name, state.room_id, :any_version, [message.signal]) do
+  #     :ok -> {:reply, {:ok, message}, state}
+  #     error -> {:reply, error, state}
+  #   end
+  # end
 
-  defp get_messages_from_bus(state) do
-    case Jido.Bus.replay(state.bus_name, state.room_id) do
-      {:error, _} = error ->
-        error
+  # defp get_messages_from_bus(state) do
+  #   case Jido.Bus.replay(state.bus_name, state.room_id) do
+  #     {:error, _} = error ->
+  #       error
 
-      stream ->
-        messages =
-          stream
-          |> Stream.map(&%Message{signal: &1})
-          |> Enum.to_list()
+  #     stream ->
+  #       messages =
+  #         stream
+  #         |> Stream.map(&%Message{signal: &1})
+  #         |> Enum.to_list()
 
-        {:ok, messages}
-    end
-  end
+  #       {:ok, messages}
+  #   end
+  # end
 end

@@ -75,7 +75,6 @@ defmodule Jido.Instruction do
     field(:params, map(), default: %{})
     field(:context, map(), default: %{})
     field(:opts, keyword(), default: [])
-    field(:result, term(), default: nil)
   end
 
   @doc """

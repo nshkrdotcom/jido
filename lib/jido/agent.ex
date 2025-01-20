@@ -257,6 +257,7 @@ defmodule Jido.Agent do
         ]
       ]
       use ExDbug, enabled: false
+      use GenServer
       alias Jido.Agent
       alias Jido.Util
       alias Jido.Instruction
@@ -297,6 +298,25 @@ defmodule Jido.Agent do
           def __agent_metadata__ do
             to_json()
           end
+
+          @doc false
+          def start_link(id \\ nil, initial_state \\ %{}, opts \\ []) do
+            agent = new(id, initial_state)
+            name = Keyword.get(opts, :name, "#{__MODULE__}.#{id}")
+
+            Jido.Agent.Server.start_link(Keyword.merge(opts, agent: agent, name: name))
+          end
+
+          @doc false
+          def child_spec(opts) do
+            %{
+              id: __MODULE__,
+              start: {__MODULE__, :start_link, [opts]}
+            }
+          end
+
+          @doc false
+          def init(opts), do: OK.success(opts)
 
           @doc """
           Registers a new action module with the Agent at server.
@@ -1125,7 +1145,18 @@ defmodule Jido.Agent do
           @spec on_error(t(), any()) :: agent_result()
           def on_error(agent, reason), do: OK.failure(reason)
 
-          defoverridable on_before_validate_state: 1,
+          @spec mount(t(), opts :: keyword()) :: agent_result()
+          def mount(agent, _opts), do: OK.success(agent)
+
+          @spec shutdown(t(), reason :: any()) :: agent_result()
+          def shutdown(agent, _reason), do: OK.success(agent)
+
+          defoverridable start_link: 3,
+                         child_spec: 1,
+                         init: 1,
+                         mount: 2,
+                         shutdown: 2,
+                         on_before_validate_state: 1,
                          on_after_validate_state: 1,
                          on_before_plan: 3,
                          on_before_run: 1,
@@ -1187,7 +1218,23 @@ defmodule Jido.Agent do
   """
   @callback on_error(agent :: t(), reason :: any()) :: {:ok, t()} | {:error, t()}
 
+  # Change these callback definitions
+  @callback start_link(
+              id :: String.t() | nil,
+              initial_state :: map(),
+              opts :: keyword()
+            ) :: {:ok, pid()} | {:error, any()}
+
+  @callback child_spec(opts :: keyword()) :: Supervisor.child_spec()
+
+  @callback mount(agent :: t(), opts :: keyword()) :: {:ok, map()} | {:error, any()}
+  @callback shutdown(agent :: t(), reason :: any()) :: {:ok, map()} | {:error, any()}
+
   @optional_callbacks [
+    start_link: 3,
+    child_spec: 1,
+    mount: 2,
+    shutdown: 2,
     on_before_validate_state: 1,
     on_after_validate_state: 1,
     on_before_plan: 3,

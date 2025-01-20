@@ -3,9 +3,6 @@ defmodule JidoTest.Helpers.ProcessHelper do
 
   import ExUnit.Assertions
 
-  alias JidoTest.Helpers.Wait
-  alias Commanded.Registration
-
   @doc """
   Stop the given process with a non-normal exit reason.
   """
@@ -24,19 +21,5 @@ defmodule JidoTest.Helpers.ProcessHelper do
       nil -> :ok
       pid -> shutdown(pid, reason)
     end
-  end
-
-  @doc """
-  Stop a given aggregate process.
-  """
-  def shutdown_aggregate(application, aggregate_module, aggregate_uuid) do
-    name = {application, aggregate_module, aggregate_uuid}
-
-    Registration.whereis_name(application, name) |> shutdown()
-
-    # Wait until process removed from registry
-    Wait.until(fn ->
-      assert Registration.whereis_name(application, name) == :undefined
-    end)
   end
 end

@@ -22,6 +22,9 @@ defmodule JidoTest.TestServer do
       Jido.Agent.Server.start_link("test_#{agent_id}",
         name: "test_agent_server",
         agent: agent,
+        # skills: [
+        #   JidoTest.TestSkills.Arithmetic
+        # ],
         schedule: [
           {"*/15 * * * *", fn -> System.cmd("rm", ["/tmp/tmp_"]) end}
         ],

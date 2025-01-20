@@ -6,8 +6,9 @@ defmodule Jido.Agent.Server.StateTest do
   alias Jido.Signal
 
   setup do
-    {:ok, _} = start_supervised({Phoenix.PubSub, name: TestPubSub})
-    :ok
+    pubsub_name = :"TestPubSub_#{:rand.uniform(999_999)}"
+    {:ok, _} = start_supervised({Phoenix.PubSub, name: pubsub_name})
+    {:ok, pubsub: pubsub_name}
   end
 
   describe "new state" do
@@ -23,12 +24,12 @@ defmodule Jido.Agent.Server.StateTest do
       assert :queue.is_empty(state.pending_signals)
     end
 
-    test "creates state with optional pubsub and topic" do
+    test "creates state with optional pubsub and topic", %{pubsub: pubsub} do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, pubsub: TestPubSub, topic: "test"}
+      state = %State{agent: agent, pubsub: pubsub, topic: "test"}
 
       assert state.agent == agent
-      assert state.pubsub == TestPubSub
+      assert state.pubsub == pubsub
       assert state.topic == "test"
       assert state.status == :idle
       assert :queue.is_queue(state.pending_signals)
@@ -37,10 +38,10 @@ defmodule Jido.Agent.Server.StateTest do
   end
 
   describe "transition/2" do
-    setup do
+    setup %{pubsub: pubsub} do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, pubsub: TestPubSub, topic: "test"}
-      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+      state = %State{agent: agent, pubsub: pubsub, topic: "test"}
+      :ok = Phoenix.PubSub.subscribe(pubsub, state.topic)
       {:ok, state: state}
     end
 
@@ -117,10 +118,10 @@ defmodule Jido.Agent.Server.StateTest do
   end
 
   describe "enqueue/2" do
-    setup do
+    setup %{pubsub: pubsub} do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, pubsub: TestPubSub, topic: "test"}
-      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+      state = %State{agent: agent, pubsub: pubsub, topic: "test"}
+      :ok = Phoenix.PubSub.subscribe(pubsub, state.topic)
       {:ok, state: state}
     end
 
@@ -153,9 +154,9 @@ defmodule Jido.Agent.Server.StateTest do
   end
 
   describe "dequeue/1" do
-    setup do
+    setup %{pubsub: pubsub} do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, pubsub: TestPubSub, topic: "test"}
+      state = %State{agent: agent, pubsub: pubsub, topic: "test"}
       {:ok, state: state}
     end
 
@@ -192,10 +193,10 @@ defmodule Jido.Agent.Server.StateTest do
   end
 
   describe "clear_queue/1" do
-    setup do
+    setup %{pubsub: pubsub} do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, pubsub: TestPubSub, topic: "test"}
-      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+      state = %State{agent: agent, pubsub: pubsub, topic: "test"}
+      :ok = Phoenix.PubSub.subscribe(pubsub, state.topic)
       {:ok, state: state}
     end
 

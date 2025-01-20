@@ -93,13 +93,14 @@ defmodule JidoTest.Sensor.Examples.RegistrationCounterSensorTest do
   end
 
   setup do
-    start_supervised!({Phoenix.PubSub, name: TestPubSub})
-    :ok
+    pubsub_name = :"TestPubSub_#{:rand.uniform(999_999)}"
+    start_supervised!({Phoenix.PubSub, name: pubsub_name})
+    {:ok, pubsub: pubsub_name}
   end
 
   describe "RegistrationCounterSensor" do
-    test "initializes with correct default values" do
-      {:ok, pid} = start_supervised({RegistrationCounterSensor, pubsub: TestPubSub})
+    test "initializes with correct default values", %{pubsub: pubsub} do
+      {:ok, pid} = start_supervised({RegistrationCounterSensor, pubsub: pubsub})
       state = :sys.get_state(pid)
 
       assert state.successful == 0
@@ -107,12 +108,12 @@ defmodule JidoTest.Sensor.Examples.RegistrationCounterSensorTest do
       assert state.emit_interval == 1000
     end
 
-    test "tracks successful registrations" do
+    test "tracks successful registrations", %{pubsub: pubsub} do
       {:ok, pid} =
-        start_supervised({RegistrationCounterSensor, pubsub: TestPubSub, emit_interval: 100})
+        start_supervised({RegistrationCounterSensor, pubsub: pubsub, emit_interval: 100})
 
       state = :sys.get_state(pid)
-      Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+      Phoenix.PubSub.subscribe(pubsub, state.topic)
 
       # Record successes and wait for each signal
       send(pid, {:registration, :success})
@@ -127,12 +128,12 @@ defmodule JidoTest.Sensor.Examples.RegistrationCounterSensorTest do
       assert signal2.data.success_rate == 100.0
     end
 
-    test "tracks failed registrations" do
+    test "tracks failed registrations", %{pubsub: pubsub} do
       {:ok, pid} =
-        start_supervised({RegistrationCounterSensor, pubsub: TestPubSub, emit_interval: 100})
+        start_supervised({RegistrationCounterSensor, pubsub: pubsub, emit_interval: 100})
 
       state = :sys.get_state(pid)
-      Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+      Phoenix.PubSub.subscribe(pubsub, state.topic)
 
       # Record some failures
       send(pid, {:registration, :failure})
@@ -148,12 +149,12 @@ defmodule JidoTest.Sensor.Examples.RegistrationCounterSensorTest do
       assert signal2.data.success_rate == 0.0
     end
 
-    test "calculates mixed success rate" do
+    test "calculates mixed success rate", %{pubsub: pubsub} do
       {:ok, pid} =
-        start_supervised({RegistrationCounterSensor, pubsub: TestPubSub, emit_interval: 100})
+        start_supervised({RegistrationCounterSensor, pubsub: pubsub, emit_interval: 100})
 
       state = :sys.get_state(pid)
-      Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+      Phoenix.PubSub.subscribe(pubsub, state.topic)
 
       # Mix of successes and failures
       send(pid, {:registration, :success})
@@ -177,12 +178,12 @@ defmodule JidoTest.Sensor.Examples.RegistrationCounterSensorTest do
       assert_in_delta signal3.data.success_rate, 66.67, 0.01
     end
 
-    test "emits regular metric updates" do
+    test "emits regular metric updates", %{pubsub: pubsub} do
       {:ok, pid} =
-        start_supervised({RegistrationCounterSensor, pubsub: TestPubSub, emit_interval: 100})
+        start_supervised({RegistrationCounterSensor, pubsub: pubsub, emit_interval: 100})
 
       state = :sys.get_state(pid)
-      Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+      Phoenix.PubSub.subscribe(pubsub, state.topic)
 
       # Should get regular updates even without activity
       assert_receive signal1, 200

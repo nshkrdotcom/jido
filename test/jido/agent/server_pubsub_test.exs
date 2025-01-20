@@ -6,16 +6,17 @@ defmodule JidoTest.Agent.Server.PubSubTest do
   setup do
     test_pid = self()
     topic = "test.topic"
-    {:ok, _} = start_supervised({Phoenix.PubSub, name: TestPubSub})
+    pubsub_name = :"TestPubSub_#{:rand.uniform(999_999)}"
+    {:ok, _} = start_supervised({Phoenix.PubSub, name: pubsub_name})
 
     state = %State{
       agent: %{id: "test-agent"},
-      pubsub: TestPubSub,
+      pubsub: pubsub_name,
       topic: topic,
       status: :idle
     }
 
-    {:ok, state: state, pubsub: TestPubSub, topic: topic, test_pid: test_pid}
+    {:ok, state: state, pubsub: pubsub_name, topic: topic, test_pid: test_pid}
   end
 
   describe "topic generation" do

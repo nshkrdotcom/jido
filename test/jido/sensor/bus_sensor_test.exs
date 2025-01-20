@@ -10,15 +10,16 @@ defmodule JidoTest.BusSensorTest do
 
   setup do
     bus_name = :"bus_#{:erlang.unique_integer()}"
+    pubsub_name = :"TestPubSub_#{:rand.uniform(999_999)}"
     start_supervised!({Jido.Bus, name: bus_name, adapter: :in_memory})
-    start_supervised!({Phoenix.PubSub, name: TestPubSub})
-    %{bus: bus_name}
+    start_supervised!({Phoenix.PubSub, name: pubsub_name})
+    %{bus: bus_name, pubsub: pubsub_name}
   end
 
   describe "BusSensor" do
-    test "initializes with required options", %{bus: bus} do
+    test "initializes with required options", %{bus: bus, pubsub: pubsub} do
       opts = [
-        pubsub: TestPubSub,
+        pubsub: pubsub,
         bus_name: bus,
         stream_id: "test_stream",
         subscription_name: "test_subscription"
@@ -32,9 +33,9 @@ defmodule JidoTest.BusSensorTest do
       assert is_pid(state.subscription)
     end
 
-    test "handles bus signals with acknowledgment", %{bus: bus} do
+    test "handles bus signals with acknowledgment", %{bus: bus, pubsub: pubsub} do
       opts = [
-        pubsub: TestPubSub,
+        pubsub: pubsub,
         bus_name: bus,
         stream_id: "test_stream",
         subscription_name: "test_subscription"
@@ -42,7 +43,7 @@ defmodule JidoTest.BusSensorTest do
 
       {:ok, pid} = BusSensor.start_link(opts)
       state = :sys.get_state(pid)
-      Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+      Phoenix.PubSub.subscribe(pubsub, state.topic)
 
       test_signal = %{
         type: "test",
@@ -61,11 +62,11 @@ defmodule JidoTest.BusSensorTest do
       Process.sleep(100)
     end
 
-    test "supports custom concurrency and partitioning", %{bus: bus} do
+    test "supports custom concurrency and partitioning", %{bus: bus, pubsub: pubsub} do
       partition_by = fn signal -> signal.data.value end
 
       opts = [
-        pubsub: TestPubSub,
+        pubsub: pubsub,
         bus_name: bus,
         stream_id: "test_stream",
         subscription_name: "test_subscription",
@@ -80,7 +81,7 @@ defmodule JidoTest.BusSensorTest do
       assert state.partition_by == partition_by
     end
 
-    test "logs warning on signal generation error", %{bus: bus} do
+    test "logs warning on signal generation error", %{bus: bus, pubsub: pubsub} do
       defmodule ErrorBusSensor do
         @moduledoc false
         use Jido.Sensor,
@@ -110,7 +111,7 @@ defmodule JidoTest.BusSensorTest do
       end
 
       opts = [
-        pubsub: TestPubSub,
+        pubsub: pubsub,
         bus_name: bus,
         stream_id: "test_stream",
         subscription_name: "test_subscription"
@@ -127,9 +128,9 @@ defmodule JidoTest.BusSensorTest do
       assert log =~ "Error generating signal: :test_error"
     end
 
-    test "unsubscribes from bus on shutdown", %{bus: bus} do
+    test "unsubscribes from bus on shutdown", %{bus: bus, pubsub: pubsub} do
       opts = [
-        pubsub: TestPubSub,
+        pubsub: pubsub,
         bus_name: bus,
         stream_id: "test_stream",
         subscription_name: "test_subscription"

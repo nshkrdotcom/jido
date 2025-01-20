@@ -7,13 +7,14 @@ defmodule JidoTest.SensorCounterTest do
   import ExUnit.CaptureLog
 
   setup do
-    start_supervised!({Phoenix.PubSub, name: TestPubSub})
-    :ok
+    pubsub_name = :"TestPubSub_#{:rand.uniform(999_999)}"
+    start_supervised!({Phoenix.PubSub, name: pubsub_name})
+    {:ok, pubsub: pubsub_name}
   end
 
   describe "CounterSensor" do
-    test "initializes with correct default values" do
-      opts = [pubsub: TestPubSub, emit_interval: 1000]
+    test "initializes with correct default values", %{pubsub: pubsub} do
+      opts = [pubsub: pubsub, emit_interval: 1000]
       {:ok, pid} = CounterSensor.start_link(opts)
       state = :sys.get_state(pid)
 
@@ -22,8 +23,8 @@ defmodule JidoTest.SensorCounterTest do
       assert state.emit_interval == 1000
     end
 
-    test "initializes with custom floor value" do
-      opts = [pubsub: TestPubSub, emit_interval: 1000, floor: 10]
+    test "initializes with custom floor value", %{pubsub: pubsub} do
+      opts = [pubsub: pubsub, emit_interval: 1000, floor: 10]
       {:ok, pid} = CounterSensor.start_link(opts)
       state = :sys.get_state(pid)
 
@@ -31,12 +32,12 @@ defmodule JidoTest.SensorCounterTest do
       assert state.counter == 10
     end
 
-    test "emits signals at specified interval" do
-      opts = [pubsub: TestPubSub, emit_interval: 100, floor: 5]
+    test "emits signals at specified interval", %{pubsub: pubsub} do
+      opts = [pubsub: pubsub, emit_interval: 100, floor: 5]
       {:ok, pid} = CounterSensor.start_link(opts)
 
       state = :sys.get_state(pid)
-      Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+      Phoenix.PubSub.subscribe(pubsub, state.topic)
 
       # Wait for three emissions
       assert_receive {:sensor_signal, %{data: %{value: 6}}}, 200
@@ -44,7 +45,7 @@ defmodule JidoTest.SensorCounterTest do
       assert_receive {:sensor_signal, %{data: %{value: 8}}}, 200
     end
 
-    test "handles errors in generate_signal" do
+    test "handles errors in generate_signal", %{pubsub: pubsub} do
       defmodule ErrorCounterSensor do
         @moduledoc false
         use Jido.Sensor,
@@ -79,11 +80,11 @@ defmodule JidoTest.SensorCounterTest do
         end
       end
 
-      opts = [pubsub: TestPubSub, emit_interval: 100]
+      opts = [pubsub: pubsub, emit_interval: 100]
       {:ok, pid} = ErrorCounterSensor.start_link(opts)
 
       state = :sys.get_state(pid)
-      Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+      Phoenix.PubSub.subscribe(pubsub, state.topic)
 
       log =
         capture_log(fn ->

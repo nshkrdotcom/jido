@@ -1,9 +1,9 @@
-# defmodule JidoAi.Models.Providers.OpenAI do
+# defmodule Jido.AI.Models.Providers.OpenAI do
 #   @moduledoc """
 #   OpenAI model provider implementation.
 #   """
 
-#   use JidoAi.Models.BaseProvider,
+#   use Jido.AI.Models.BaseProvider,
 #     config: %{
 #       endpoint: "https://api.openai.com/v1",
 #       settings: %{

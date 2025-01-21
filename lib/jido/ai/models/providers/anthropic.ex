@@ -1,9 +1,9 @@
-# defmodule JidoAi.Models.Providers.Anthropic do
+# defmodule Jido.AI.Models.Providers.Anthropic do
 #   @moduledoc """
 #   Anthropic Claude model provider implementation.
 #   """
 
-#   use JidoAi.Models.BaseProvider,
+#   use Jido.AI.Models.BaseProvider,
 #     config: %{
 #       settings: %{
 #         stop: [],

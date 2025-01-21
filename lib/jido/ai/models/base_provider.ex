@@ -1,13 +1,13 @@
-# defmodule JidoAi.Models.BaseProvider do
+# defmodule Jido.AI.Models.BaseProvider do
 #   @moduledoc """
 #   Provides base functionality for model providers.
 #   """
 
-#   alias JidoAi.Models.Types
+#   alias Jido.AI.Models.Types
 
 #   defmacro __using__(opts) do
 #     quote do
-#       @behaviour JidoAi.Models.ProviderBehaviour
+#       @behaviour Jido.AI.Models.ProviderBehaviour
 
 #       @config unquote(Macro.escape(opts[:config]))
 

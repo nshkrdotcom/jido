@@ -1,4 +1,4 @@
-defmodule JidoAi.Actions.Anthropic.ChooseTool do
+defmodule Jido.AI.Actions.Anthropic.ChooseTool do
   require Logger
 
   use Jido.Action,

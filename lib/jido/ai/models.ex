@@ -1,4 +1,4 @@
-# defmodule JidoAi.Models do
+# defmodule Jido.AI.Models do
 #   @moduledoc """
 #   Defines core types and structures for model configurations.
 #   """

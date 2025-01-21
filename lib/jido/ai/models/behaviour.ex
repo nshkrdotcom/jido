@@ -1,9 +1,9 @@
-# defmodule JidoAi.Models.ProviderBehaviour do
+# defmodule Jido.AI.Models.ProviderBehaviour do
 #   @moduledoc """
 #   Defines the behavior that all model providers must implement.
 #   """
 
-#   alias JidoAi.Models.Types
+#   alias Jido.AI.Models.Types
 
 #   @callback get_model(model_class :: Types.model_class()) :: String.t()
 #   @callback get_endpoint() :: String.t() | nil

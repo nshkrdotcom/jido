@@ -1,4 +1,4 @@
-defmodule JidoAi.Actions.Anthropic.ChatCompletion do
+defmodule Jido.AI.Actions.Anthropic.ChatCompletion do
   @moduledoc """
   A low-level thunk that provides direct access to Instructor's chat completion functionality.
   Supports most Instructor options

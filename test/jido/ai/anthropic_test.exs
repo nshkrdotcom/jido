@@ -1,8 +1,8 @@
-defmodule JidoAi.Actions.AnthropicTest do
+defmodule Jido.AI.Actions.AnthropicTest do
   use ExUnit.Case, async: true
   use Mimic
 
-  alias JidoAi.Actions.Anthropic.ChatCompletion
+  alias Jido.AI.Actions.Anthropic.ChatCompletion
   alias Jido.Workflow
   @moduletag :capture_log
 

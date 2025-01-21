@@ -1,4 +1,4 @@
-# defmodule JidoAi.Actions.Anthropic do
+# defmodule Jido.AI.Actions.Anthropic do
 #   @moduledoc """
 #   A collection of actions for working with the Instructor library.
 #   """

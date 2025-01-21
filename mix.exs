@@ -181,6 +181,13 @@ defmodule Jido.MixProject do
       # Skill & Action Dependencies for examples
       {:abacus, "~> 2.1"},
 
+      # Ai
+      {:ecto, "~> 3.12"},
+      # Hex does not yet have a release of `instructor` that supports the `Instructor.Adapters.Anthropic` adapter.
+      {:instructor, github: "thmsmlr/instructor_ex", branch: "main"},
+      {:langchain, "~> 0.3.0-rc.1"},
+      {:ex_json_schema, "~> 0.10.0"},
+
       # Testing
       {:benchee, "~> 1.3", only: [:dev, :test]},
       {:benchee_html, "~> 1.0", only: [:dev, :test]},

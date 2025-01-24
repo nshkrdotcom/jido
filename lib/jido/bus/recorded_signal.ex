@@ -1,6 +1,6 @@
 defmodule Jido.Bus.RecordedSignal do
   @moduledoc """
-  Contains the persisted stream identity, type, data, and metadata for a single signal.
+  Contains the persisted stream identity, type, data, and jido_metadata for a single signal.
 
   Signals are immutable once recorded.
 
@@ -23,7 +23,7 @@ defmodule Jido.Bus.RecordedSignal do
 
     - `data` - the signal data deserialized into a struct.
 
-    - `metadata` - a string keyed map of metadata associated with the signal.
+    - `jido_metadata` - a string keyed map of metadata associated with the signal.
 
     - `created_at` - the datetime, in UTC, indicating when the signal was
       created.
@@ -40,7 +40,7 @@ defmodule Jido.Bus.RecordedSignal do
   @type signal_id :: uuid()
   @type signal_number :: non_neg_integer()
   @type type :: String.t()
-  @type metadata :: map()
+  @type jido_metadata :: map()
   @type stream_id :: String.t()
   @type stream_version :: non_neg_integer()
   @type uuid :: String.t()
@@ -55,7 +55,7 @@ defmodule Jido.Bus.RecordedSignal do
           jido_correlation_id: jido_correlation_id(),
           type: type(),
           data: data(),
-          metadata: metadata(),
+          jido_metadata: jido_metadata(),
           created_at: created_at()
         }
 
@@ -81,7 +81,7 @@ defmodule Jido.Bus.RecordedSignal do
     :type,
     :data,
     :created_at,
-    metadata: %{}
+    jido_metadata: %{}
   ]
 
   @doc """
@@ -98,7 +98,7 @@ defmodule Jido.Bus.RecordedSignal do
       jido_correlation_id: jido_correlation_id,
       jido_causation_id: jido_causation_id,
       created_at: created_at,
-      metadata: metadata
+      jido_metadata: jido_metadata
     } = signal
 
     additional_metadata = Keyword.get(opts, :additional_metadata, %{})
@@ -112,7 +112,7 @@ defmodule Jido.Bus.RecordedSignal do
       jido_causation_id: jido_causation_id,
       created_at: created_at
     }
-    |> Map.merge(metadata || %{})
+    |> Map.merge(jido_metadata || %{})
     |> Map.merge(additional_metadata)
   end
 

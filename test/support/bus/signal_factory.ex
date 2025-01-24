@@ -7,12 +7,12 @@ defmodule JidoTest.Helpers.SignalFactory do
     stream_id = UUID.uuid4()
     jido_causation_id = Keyword.get(opts, :jido_causation_id, UUID.uuid4())
     jido_correlation_id = Keyword.get(opts, :jido_correlation_id, UUID.uuid4())
-    metadata = Keyword.get(opts, :metadata, %{})
+    jido_metadata = Keyword.get(opts, :jido_metadata, %{})
 
     fields = [
       jido_causation_id: jido_causation_id,
       jido_correlation_id: jido_correlation_id,
-      metadata: metadata
+      jido_metadata: jido_metadata
     ]
 
     signals
@@ -28,7 +28,7 @@ defmodule JidoTest.Helpers.SignalFactory do
         jido_correlation_id: signal.jido_correlation_id,
         type: signal.type,
         data: signal.data,
-        metadata: signal.metadata,
+        jido_metadata: signal.jido_metadata,
         created_at: DateTime.utc_now()
       }
     end)

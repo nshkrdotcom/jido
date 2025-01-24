@@ -16,7 +16,7 @@ defmodule Jido.Bus.RecordedSignalTest do
           %BankAccountOpened{account_number: "123", initial_balance: 1_000}
         ],
         1,
-        metadata: %{"key1" => "value1", "key2" => "value2"}
+        jido_metadata: %{"key1" => "value1", "key2" => "value2"}
       )
 
     [signal: signal]

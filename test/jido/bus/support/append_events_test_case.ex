@@ -182,7 +182,7 @@ defmodule Jido.Bus.AppendSignalsTestCase do
           assert signal.stream_id == "stream"
           assert signal.jido_correlation_id == jido_correlation_id
           assert signal.jido_causation_id == jido_causation_id
-          assert signal.metadata == %{"metadata" => "value"}
+          assert signal.jido_metadata == %{"metadata" => "value"}
           assert %DateTime{} = signal.created_at
         end)
 
@@ -238,7 +238,7 @@ defmodule Jido.Bus.AppendSignalsTestCase do
         jido_causation_id: jido_causation_id,
         type: "#{__MODULE__}.BankAccountOpened",
         data: %BankAccountOpened{account_number: account_number, initial_balance: 1_000},
-        metadata: %{"metadata" => "value"}
+        jido_metadata: %{"metadata" => "value"}
       }
     end
 
@@ -271,7 +271,7 @@ defmodule Jido.Bus.AppendSignalsTestCase do
           jido_causation_id: &1.jido_causation_id,
           jido_correlation_id: &1.jido_correlation_id,
           data: &1.data,
-          metadata: &1.metadata
+          jido_metadata: &1.jido_metadata
         }
       )
     end

@@ -35,9 +35,7 @@ defmodule Jido.Bus.BusPrefixTestCase do
            count,
            jido_correlation_id \\ UUID.uuid4(),
            jido_causation_id \\ UUID.uuid4()
-         )
-
-    defp build_signals(count, jido_correlation_id, jido_causation_id) do
+         ) do
       for account_number <- 1..count,
           do: build_signal(account_number, jido_correlation_id, jido_causation_id)
     end
@@ -49,8 +47,10 @@ defmodule Jido.Bus.BusPrefixTestCase do
         jido_correlation_id: jido_correlation_id,
         jido_causation_id: jido_causation_id,
         type: "#{__MODULE__}.BankAccountOpened",
-        data: %BankAccountOpened{account_number: account_number, initial_balance: 1_000},
-        metadata: %{"metadata" => "value"}
+        data: %{
+          signal: %BankAccountOpened{account_number: account_number, initial_balance: 1_000},
+          jido_metadata: %{"metadata" => "value"}
+        }
       }
     end
   end

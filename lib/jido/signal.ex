@@ -21,7 +21,7 @@ defmodule Jido.Signal do
     field(:jido_opts, map())
     field(:jido_causation_id, String.t())
     field(:jido_correlation_id, String.t())
-    field(:metadata, map())
+    field(:jido_metadata, map())
   end
 
   @doc """
@@ -123,7 +123,7 @@ defmodule Jido.Signal do
       jido_correlation_id: Keyword.get(fields, :jido_correlation_id),
       type: TypeProvider.to_string(signal),
       data: signal,
-      metadata: Keyword.get(fields, :metadata, %{})
+      jido_metadata: Keyword.get(fields, :jido_metadata, %{})
     }
   end
 

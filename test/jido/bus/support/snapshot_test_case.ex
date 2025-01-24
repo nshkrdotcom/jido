@@ -71,7 +71,7 @@ defmodule Jido.Bus.SnapshotTestCase do
         source_version: account_number,
         source_type: "#{__MODULE__}.BankAccountOpened",
         data: %BankAccountOpened{account_number: account_number, initial_balance: 1_000},
-        metadata: nil,
+        jido_metadata: nil,
         created_at: DateTime.utc_now()
       }
     end

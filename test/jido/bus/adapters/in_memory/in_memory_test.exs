@@ -34,8 +34,10 @@ defmodule Jido.Bus.Adapters.InMemoryTest do
       jido_causation_id: UUID.uuid4(),
       jido_correlation_id: UUID.uuid4(),
       type: "#{__MODULE__}.BankAccountOpened",
-      data: %BankAccountOpened{account_number: account_number, initial_balance: 1_000},
-      metadata: %{"user_id" => "test"}
+      data: %{
+        signal: %BankAccountOpened{account_number: account_number, initial_balance: 1_000},
+        jido_metadata: %{"user_id" => "test"}
+      }
     }
   end
 end

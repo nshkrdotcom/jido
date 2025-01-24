@@ -439,7 +439,7 @@ defmodule Jido.Bus.Adapters.InMemory do
       jido_correlation_id: jido_correlation_id,
       type: type,
       data: data,
-      metadata: metadata
+      jido_metadata: jido_metadata
     } = signal
 
     %RecordedSignal{
@@ -451,7 +451,7 @@ defmodule Jido.Bus.Adapters.InMemory do
       jido_correlation_id: jido_correlation_id,
       type: type,
       data: data,
-      metadata: metadata,
+      jido_metadata: jido_metadata,
       created_at: now
     }
   end
@@ -602,23 +602,23 @@ defmodule Jido.Bus.Adapters.InMemory do
 
   defp serialize(%State{} = state, %RecordedSignal{} = recorded_signal) do
     %State{serializer: serializer} = state
-    %RecordedSignal{data: data, metadata: metadata} = recorded_signal
+    %RecordedSignal{data: data, jido_metadata: jido_metadata} = recorded_signal
 
     %RecordedSignal{
       recorded_signal
       | data: serializer.serialize(data),
-        metadata: serializer.serialize(metadata)
+        jido_metadata: serializer.serialize(jido_metadata)
     }
   end
 
   defp serialize(%State{} = state, %Snapshot{} = snapshot) do
     %State{serializer: serializer} = state
-    %Snapshot{data: data, metadata: metadata} = snapshot
+    %Snapshot{data: data, jido_metadata: jido_metadata} = snapshot
 
     %Snapshot{
       snapshot
       | data: serializer.serialize(data),
-        metadata: serializer.serialize(metadata)
+        jido_metadata: serializer.serialize(jido_metadata)
     }
   end
 
@@ -626,23 +626,23 @@ defmodule Jido.Bus.Adapters.InMemory do
 
   defp deserialize(%State{} = state, %RecordedSignal{} = recorded_signal) do
     %State{serializer: serializer} = state
-    %RecordedSignal{data: data, metadata: metadata, type: type} = recorded_signal
+    %RecordedSignal{data: data, jido_metadata: jido_metadata, type: type} = recorded_signal
 
     %RecordedSignal{
       recorded_signal
       | data: serializer.deserialize(data, type: type),
-        metadata: serializer.deserialize(metadata)
+        jido_metadata: serializer.deserialize(jido_metadata)
     }
   end
 
   defp deserialize(%State{} = state, %Snapshot{} = snapshot) do
     %State{serializer: serializer} = state
-    %Snapshot{data: data, metadata: metadata, source_type: source_type} = snapshot
+    %Snapshot{data: data, jido_metadata: jido_metadata, source_type: source_type} = snapshot
 
     %Snapshot{
       snapshot
       | data: serializer.deserialize(data, type: source_type),
-        metadata: serializer.deserialize(metadata)
+        jido_metadata: serializer.deserialize(jido_metadata)
     }
   end
 

@@ -32,7 +32,8 @@ defmodule Jido.Bus.Examples.ExampleBusTest do
         id: UUID.uuid4(),
         source: "test",
         type: "test.event",
-        data: %{value: 123}
+        data: %{value: 123},
+        jido_metadata: %{}
       }
 
       :ok = Jido.Bus.publish(test_name, "test_stream", :any_version, [signal])
@@ -65,7 +66,8 @@ defmodule Jido.Bus.Examples.ExampleBusTest do
             id: UUID.uuid4(),
             source: "test",
             type: "test.event",
-            data: %{value: i}
+            data: %{value: i},
+            jido_metadata: %{}
           }
         end
 

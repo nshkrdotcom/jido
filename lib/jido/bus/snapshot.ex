@@ -8,7 +8,7 @@ defmodule Jido.Bus.Snapshot do
           source_version: non_neg_integer,
           source_type: String.t(),
           data: binary,
-          metadata: binary,
+          jido_metadata: binary,
           created_at: DateTime.t()
         }
 
@@ -17,7 +17,7 @@ defmodule Jido.Bus.Snapshot do
     :source_version,
     :source_type,
     :data,
-    :metadata,
+    :jido_metadata,
     :created_at
   ]
 end

@@ -11,7 +11,7 @@ defmodule Jido.Instruction do
   - `:action` - The action module to execute (required)
   - `:params` - Map of parameters to pass to the action (default: %{})
   - `:context` - Map of execution context data (default: %{})
-  - `:result` - Result of executing the instruction (default: nil)
+  - `:opts` - Keyword list of options (default: [])
 
   ## Instruction Shorthand Formats
 

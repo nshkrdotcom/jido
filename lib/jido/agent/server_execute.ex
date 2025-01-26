@@ -9,7 +9,7 @@ defmodule Jido.Agent.Server.Execute do
   # - Emitting events for signal processing lifecycle
 
   use Private
-  use ExDbug, enabled: false
+  use ExDbug, enabled: true
 
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Agent.Server.Signal, as: ServerSignal

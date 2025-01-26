@@ -7,10 +7,15 @@ defmodule Jido.Agent.Server.Directive do
 
   alias Jido.Agent.Server.Process, as: ServerProcess
   alias Jido.Agent.Server.State, as: ServerState
+  alias Jido.Agent.Server.Signal, as: ServerSignal
+  alias Jido.Instruction
 
   alias Jido.Agent.Directive.{
     SpawnDirective,
-    KillDirective
+    KillDirective,
+    EnqueueDirective,
+    RegisterActionDirective,
+    DeregisterActionDirective
   }
 
   alias Jido.{Agent.Directive, Error}
@@ -22,6 +27,54 @@ defmodule Jido.Agent.Server.Directive do
   Returns a tuple containing the result and updated server state.
   """
   @spec execute(ServerState.t(), Directive.t()) :: {:ok, ServerState.t()} | {:error, Error.t()}
+
+  def execute(%ServerState{} = state, %EnqueueDirective{action: nil}) do
+    {:error, Error.validation_error("Invalid action", %{action: nil})}
+  end
+
+  def execute(%ServerState{} = state, %EnqueueDirective{} = directive) do
+    instruction = %Instruction{
+      action: directive.action,
+      params: directive.params,
+      context: directive.context,
+      opts: directive.opts
+    }
+
+    new_queue = :queue.in(instruction, state.pending_signals)
+    {:ok, %{state | pending_signals: new_queue}}
+  end
+
+  def execute(%ServerState{} = state, %RegisterActionDirective{action_module: module})
+      when is_atom(module) do
+    case Code.ensure_loaded(module) do
+      {:module, _} ->
+        updated_agent = %{state.agent | actions: [module | state.agent.actions]}
+        {:ok, %{state | agent: updated_agent}}
+
+      {:error, _reason} ->
+        {:error, Error.validation_error("Invalid action module", %{module: module})}
+    end
+  end
+
+  def execute(%ServerState{} = state, %RegisterActionDirective{action_module: module}) do
+    {:error, Error.validation_error("Invalid action module", %{module: module})}
+  end
+
+  def execute(%ServerState{} = state, %DeregisterActionDirective{action_module: module})
+      when is_atom(module) do
+    case Code.ensure_loaded(module) do
+      {:module, _} ->
+        updated_agent = %{state.agent | actions: List.delete(state.agent.actions, module)}
+        {:ok, %{state | agent: updated_agent}}
+
+      {:error, _reason} ->
+        {:error, Error.validation_error("Invalid action module", %{module: module})}
+    end
+  end
+
+  def execute(%ServerState{} = state, %DeregisterActionDirective{action_module: module}) do
+    {:error, Error.validation_error("Invalid action module", %{module: module})}
+  end
 
   def execute(%ServerState{} = state, %SpawnDirective{module: module, args: args}) do
     child_spec = build_child_spec({module, args})
@@ -48,44 +101,6 @@ defmodule Jido.Agent.Server.Directive do
          Error.execution_error("Failed to terminate process", %{reason: reason, pid: pid})}
     end
   end
-
-  # def execute(%ServerState{} = state, %PublishDirective{stream_id: stream_id, signal: signal}) do
-  #   if is_nil(state.pubsub) do
-  #     {:error, Error.execution_error("PubSub not configured", %{})}
-  #   else
-  #     case Phoenix.PubSub.broadcast(state.pubsub, stream_id, signal) do
-  #       :ok ->
-  #         {:ok, state}
-
-  #       {:error, reason} ->
-  #         {:error,
-  #          Error.execution_error("Failed to broadcast message", %{
-  #            reason: reason,
-  #            stream_id: stream_id
-  #          })}
-  #     end
-  #   end
-  # end
-
-  # def execute(%ServerState{} = state, %SubscribeDirective{topic: topic}) do
-  #   case PubSub.subscribe(state, topic) do
-  #     {:ok, new_state} ->
-  #       {:ok, new_state}
-
-  #     {:error, reason} ->
-  #       {:error, Error.execution_error("Failed to subscribe", %{reason: reason, topic: topic})}
-  #   end
-  # end
-
-  # def execute(%ServerState{} = state, %UnsubscribeDirective{topic: topic}) do
-  #   case PubSub.unsubscribe(state, topic) do
-  #     {:ok, new_state} ->
-  #       {:ok, new_state}
-
-  #     {:error, reason} ->
-  #       {:error, Error.execution_error("Failed to unsubscribe", %{reason: reason, topic: topic})}
-  #   end
-  # end
 
   def execute(_state, invalid_directive) do
     {:error, Error.validation_error("Invalid directive", %{directive: invalid_directive})}

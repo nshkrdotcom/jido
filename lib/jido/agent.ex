@@ -256,7 +256,7 @@ defmodule Jido.Agent do
           doc: "The result of the last action executed by the Agent."
         ]
       ]
-      use ExDbug, enabled: true
+      use ExDbug, enabled: false
       use GenServer
       alias Jido.Agent
       alias Jido.Util

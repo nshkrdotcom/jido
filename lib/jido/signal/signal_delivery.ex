@@ -4,7 +4,7 @@ defmodule Jido.Sensor.SignalDelivery do
                             type: {:custom, __MODULE__, :validate_delivery_target, []},
                             required: true,
                             doc:
-                              "Target for signal delivery. Can be {:pid, pid}, {:bus, bus_name}, {:name, process_name}, or {:remote, {node, target}}"
+                              "Target for signal delivery. Can be pid(), {:bus, bus_name}, {:name, process_name}, or {:remote, {node, target}}"
                           ],
                           delivery_mode: [
                             type: {:in, [:sync, :async]},
@@ -27,17 +27,27 @@ defmodule Jido.Sensor.SignalDelivery do
                             default: []
                           ]
                         )
+  @type delivery_target ::
+          pid()
+          | {:bus, atom()}
+          | {:name, atom()}
+          | {:remote, {node(), delivery_target()}}
 
+  @type delivery_result ::
+          :ok
+          | {:error, :process_not_found | :not_implemented | String.t()}
+
+  @spec deliver({Signal.t(), map()}) :: delivery_result()
   @doc """
   Validates a delivery target value.
 
   Valid formats:
-  - {:pid, pid} - Direct process delivery
+  - pid() - Direct process delivery
   - {:bus, bus_name} - Bus delivery where bus_name is an atom
   - {:name, process_name} - Named process delivery where process_name is an atom
   - {:remote, {node, target}} - Remote node delivery
   """
-  def validate_delivery_target({:pid, pid}) when is_pid(pid), do: {:ok, {:pid, pid}}
+  def validate_delivery_target(pid) when is_pid(pid), do: {:ok, pid}
   def validate_delivery_target({:bus, name}) when is_atom(name), do: {:ok, {:bus, name}}
   def validate_delivery_target({:name, name}) when is_atom(name), do: {:ok, {:name, name}}
 
@@ -59,7 +69,7 @@ defmodule Jido.Sensor.SignalDelivery do
 
   def deliver({signal, routing_options}) do
     case routing_options.target do
-      {:pid, pid} ->
+      pid when is_pid(pid) ->
         do_deliver_to_pid(pid, signal, routing_options)
 
       {:bus, bus_name} ->

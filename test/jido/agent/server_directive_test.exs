@@ -1,131 +1,189 @@
-# defmodule Jido.Agent.Server.DirectiveTest do
-#   use ExUnit.Case, async: true
-#   alias Jido.Agent.Server.{Directive, State}
-#   alias JidoTest.TestAgents.BasicAgent
-#   alias Jido.Error
+defmodule Jido.Agent.Server.DirectiveTest do
+  use ExUnit.Case, async: true
+  alias Jido.Agent.Server.{Directive, State, Signal}
+  alias JidoTest.TestAgents.BasicAgent
+  alias Jido.Error
+  alias Jido.Instruction
 
-#   alias Jido.Agent.Directive.{
-#     SpawnDirective,
-#     KillDirective,
-#     PublishDirective,
-#     SubscribeDirective,
-#     UnsubscribeDirective
-#   }
+  alias Jido.Agent.Directive.{
+    SpawnDirective,
+    KillDirective,
+    EnqueueDirective,
+    RegisterActionDirective,
+    DeregisterActionDirective
+  }
 
-#   # Helper to compare Error structs ignoring stacktrace
-#   defp assert_error_match(actual, expected) do
-#     assert %Error{} = actual
-#     assert actual.type == expected.type
-#     assert actual.message == expected.message
-#     assert actual.details == expected.details
-#   end
+  # Helper to compare Error structs ignoring stacktrace
+  defp assert_error_match(actual, expected) do
+    assert %Error{} = actual
+    assert actual.type == expected.type
+    assert actual.message == expected.message
+    assert actual.details == expected.details
+  end
 
-#   setup do
-#     {:ok, supervisor} = start_supervised(DynamicSupervisor)
-#     agent = BasicAgent.new("test")
-#     {:ok, _} = start_supervised({Phoenix.PubSub, name: TestPubSub})
+  setup do
+    {:ok, supervisor} = start_supervised(DynamicSupervisor)
+    agent = BasicAgent.new("test")
 
-#     state = %State{
-#       agent: agent,
-#       child_supervisor: supervisor,
-#       pubsub: TestPubSub,
-#       topic: "test_topic",
-#       status: :idle,
-#       pending_signals: :queue.new(),
-#       subscriptions: []
-#     }
+    state = %State{
+      agent: agent,
+      child_supervisor: supervisor,
+      dispatch: {:pid, [target: self(), delivery_mode: :async]},
+      status: :idle,
+      pending_signals: :queue.new()
+    }
 
-#     {:ok, state: state}
-#   end
+    {:ok, state: state}
+  end
 
-#   describe "process management directives" do
-#     test "spawn creates a new child process", %{state: state} do
-#       task = fn -> Process.sleep(1000) end
-#       directive = %SpawnDirective{module: Task, args: task}
-#       {:ok, new_state} = Directive.execute(state, directive)
-#       assert state == new_state
-#     end
+  describe "instruction queue directives" do
+    test "enqueue adds instruction to queue", %{state: state} do
+      directive = %EnqueueDirective{
+        action: :test_action,
+        params: %{value: 42},
+        context: %{user: "test"},
+        opts: [priority: :high]
+      }
 
-#     test "kill terminates a specific process", %{state: state} do
-#       task = fn -> Process.sleep(1000) end
-#       spawn_directive = %SpawnDirective{module: Task, args: task}
-#       {:ok, state} = Directive.execute(state, spawn_directive)
+      {:ok, new_state} = Directive.execute(state, directive)
 
-#       # Get the PID from the state's child processes
-#       pid = DynamicSupervisor.which_children(state.child_supervisor) |> hd() |> elem(1)
-#       assert Process.alive?(pid)
+      # Verify instruction was added to queue
+      assert :queue.len(new_state.pending_signals) == 1
+      {{:value, instruction}, _} = :queue.out(new_state.pending_signals)
+      assert instruction.action == :test_action
+      assert instruction.params == %{value: 42}
+      assert instruction.context == %{user: "test"}
+      assert instruction.opts == [priority: :high]
+    end
 
-#       kill_directive = %KillDirective{pid: pid}
-#       {:ok, new_state} = Directive.execute(state, kill_directive)
-#       refute Process.alive?(pid)
-#       assert state == new_state
-#     end
+    test "enqueue fails with invalid action", %{state: state} do
+      directive = %EnqueueDirective{action: nil}
+      {:error, error} = Directive.execute(state, directive)
 
-#     test "kill returns error for non-existent process", %{state: state} do
-#       non_existent_pid = spawn(fn -> :ok end)
-#       Process.exit(non_existent_pid, :kill)
+      assert_error_match(error, %Error{
+        type: :validation_error,
+        message: "Invalid action",
+        details: %{action: nil}
+      })
+    end
+  end
 
-#       directive = %KillDirective{pid: non_existent_pid}
-#       {:error, error} = Directive.execute(state, directive)
+  describe "action registration directives" do
+    defmodule TestAction do
+      def run(_params, _context), do: {:ok, nil}
+    end
 
-#       assert_error_match(error, %Error{
-#         type: :execution_error,
-#         message: "Process not found",
-#         details: %{pid: non_existent_pid}
-#       })
-#     end
-#   end
+    test "register adds action module", %{state: state} do
+      directive = %RegisterActionDirective{action_module: TestAction}
+      {:ok, new_state} = Directive.execute(state, directive)
 
-#   describe "pubsub directives" do
-#     test "broadcast sends message to topic", %{state: state} do
-#       Phoenix.PubSub.subscribe(TestPubSub, "test_topic")
-#       directive = %PublishDirective{topic: "test_topic", message: "hello"}
-#       {:ok, new_state} = Directive.execute(state, directive)
-#       assert state == new_state
-#       assert_receive "hello"
-#     end
+      # Verify action was registered
+      assert TestAction in new_state.agent.actions
+    end
 
-#     test "subscribe adds subscription to state", %{state: state} do
-#       directive = %SubscribeDirective{topic: "test_topic"}
-#       {:ok, new_state} = Directive.execute(state, directive)
-#       assert "test_topic" in new_state.subscriptions
-#     end
+    test "register fails with invalid module", %{state: state} do
+      directive = %RegisterActionDirective{action_module: :not_a_module}
+      {:error, error} = Directive.execute(state, directive)
 
-#     test "unsubscribe removes subscription from state", %{state: state} do
-#       # First subscribe
-#       subscribe_directive = %SubscribeDirective{topic: "test_topic"}
-#       {:ok, state_with_sub} = Directive.execute(state, subscribe_directive)
-#       assert "test_topic" in state_with_sub.subscriptions
+      assert_error_match(error, %Error{
+        type: :validation_error,
+        message: "Invalid action module",
+        details: %{module: :not_a_module}
+      })
+    end
 
-#       # Then unsubscribe
-#       unsubscribe_directive = %UnsubscribeDirective{topic: "test_topic"}
-#       {:ok, final_state} = Directive.execute(state_with_sub, unsubscribe_directive)
-#       refute "test_topic" in final_state.subscriptions
-#     end
-#   end
+    test "deregister removes action module", %{state: state} do
+      # First register the action
+      {:ok, state_with_action} =
+        Directive.execute(state, %RegisterActionDirective{action_module: TestAction})
 
-#   describe "error handling" do
-#     test "returns error for invalid directive", %{state: state} do
-#       {:error, error} = Directive.execute(state, :invalid_directive)
+      # Then deregister it
+      directive = %DeregisterActionDirective{action_module: TestAction}
+      {:ok, final_state} = Directive.execute(state_with_action, directive)
 
-#       assert_error_match(error, %Error{
-#         type: :validation_error,
-#         message: "Invalid directive",
-#         details: %{directive: :invalid_directive}
-#       })
-#     end
+      # Verify action was removed
+      refute TestAction in final_state.agent.actions
+    end
 
-#     test "handles pubsub errors", %{state: state} do
-#       # Test with nil pubsub
-#       state_without_pubsub = %{state | pubsub: nil}
-#       directive = %PublishDirective{topic: "test_topic", message: "hello"}
-#       {:error, error} = Directive.execute(state_without_pubsub, directive)
+    test "deregister fails with invalid module", %{state: state} do
+      directive = %DeregisterActionDirective{action_module: :not_a_module}
+      {:error, error} = Directive.execute(state, directive)
 
-#       assert_error_match(error, %Error{
-#         type: :execution_error,
-#         message: "PubSub not configured",
-#         details: %{}
-#       })
-#     end
-#   end
-# end
+      assert_error_match(error, %Error{
+        type: :validation_error,
+        message: "Invalid action module",
+        details: %{module: :not_a_module}
+      })
+    end
+  end
+
+  describe "process management directives" do
+    test "spawn creates a new child process", %{state: state} do
+      task = fn -> Process.sleep(1000) end
+      directive = %SpawnDirective{module: Task, args: task}
+      {:ok, new_state} = Directive.execute(state, directive)
+      assert state == new_state
+
+      # Verify we received the process_started signal
+      assert_receive {:signal, signal}
+      assert signal.type == Signal.process_started()
+      assert is_pid(signal.data.child_pid)
+
+      assert signal.data.child_spec == %{
+               id: signal.data.child_spec.id,
+               start: {Task, :start_link, [task]},
+               restart: :temporary,
+               type: :worker
+             }
+    end
+
+    test "kill terminates a specific process", %{state: state} do
+      task = fn -> Process.sleep(1000) end
+      spawn_directive = %SpawnDirective{module: Task, args: task}
+      {:ok, state} = Directive.execute(state, spawn_directive)
+
+      # Clear the spawn signal
+      assert_receive {:signal, _}
+
+      # Get the PID from the state's child processes
+      pid = DynamicSupervisor.which_children(state.child_supervisor) |> hd() |> elem(1)
+      assert Process.alive?(pid)
+
+      kill_directive = %KillDirective{pid: pid}
+      {:ok, new_state} = Directive.execute(state, kill_directive)
+      refute Process.alive?(pid)
+      assert state == new_state
+
+      # Verify we received the process_terminated signal
+      assert_receive {:signal, signal}
+      assert signal.type == Signal.process_terminated()
+      assert signal.data.child_pid == pid
+    end
+
+    test "kill returns error for non-existent process", %{state: state} do
+      non_existent_pid = spawn(fn -> :ok end)
+      Process.exit(non_existent_pid, :kill)
+
+      directive = %KillDirective{pid: non_existent_pid}
+      {:error, error} = Directive.execute(state, directive)
+
+      assert_error_match(error, %Error{
+        type: :execution_error,
+        message: "Process not found",
+        details: %{pid: non_existent_pid}
+      })
+    end
+  end
+
+  describe "error handling" do
+    test "returns error for invalid directive", %{state: state} do
+      {:error, error} = Directive.execute(state, :invalid_directive)
+
+      assert_error_match(error, %Error{
+        type: :validation_error,
+        message: "Invalid directive",
+        details: %{directive: :invalid_directive}
+      })
+    end
+  end
+end

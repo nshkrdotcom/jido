@@ -26,4 +26,12 @@ defmodule Jido.Runner.Result do
     field(:directives, list(), default: [])
     field(:pending_instructions, :queue.queue(), default: :queue.new())
   end
+
+  # TODO - Simplify
+  # typedstruct enforce: true do
+  #   field(:status, atom(), default: :ok)
+  #   field(:state, map(), default: %{})
+  #   field(:directives, list(), default: [])
+  #   field(:error, Error.t(), default: nil)
+  # end
 end

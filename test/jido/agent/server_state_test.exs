@@ -5,32 +5,25 @@ defmodule Jido.Agent.Server.StateTest do
   alias JidoTest.TestAgents.BasicAgent
   alias Jido.Signal
 
-  setup do
-    pubsub_name = :"TestPubSub_#{:rand.uniform(999_999)}"
-    {:ok, _} = start_supervised({Phoenix.PubSub, name: pubsub_name})
-    {:ok, pubsub: pubsub_name}
-  end
-
   describe "new state" do
     test "creates state with required fields" do
       agent = BasicAgent.new("test")
       state = %State{agent: agent}
 
       assert state.agent == agent
-      assert state.pubsub == nil
-      assert state.topic == nil
+      assert state.dispatch == {:bus, [target: {:bus, :default}, stream: "agent"]}
       assert state.status == :idle
       assert :queue.is_queue(state.pending_signals)
       assert :queue.is_empty(state.pending_signals)
     end
 
-    test "creates state with optional pubsub and topic", %{pubsub: pubsub} do
+    test "creates state with custom dispatch" do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, pubsub: pubsub, topic: "test"}
+      dispatch = {:pid, [target: self(), delivery_mode: :async]}
+      state = %State{agent: agent, dispatch: dispatch}
 
       assert state.agent == agent
-      assert state.pubsub == pubsub
-      assert state.topic == "test"
+      assert state.dispatch == dispatch
       assert state.status == :idle
       assert :queue.is_queue(state.pending_signals)
       assert :queue.is_empty(state.pending_signals)
@@ -38,10 +31,9 @@ defmodule Jido.Agent.Server.StateTest do
   end
 
   describe "transition/2" do
-    setup %{pubsub: pubsub} do
+    setup do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, pubsub: pubsub, topic: "test"}
-      :ok = Phoenix.PubSub.subscribe(pubsub, state.topic)
+      state = %State{agent: agent, dispatch: {:pid, [target: self(), delivery_mode: :async]}}
       {:ok, state: state}
     end
 
@@ -51,46 +43,51 @@ defmodule Jido.Agent.Server.StateTest do
       transition_succeeded = ServerSignal.transition_succeeded()
       assert {:ok, %State{status: :idle}} = State.transition(state, :idle)
 
-      assert_receive %Signal{
-        type: ^transition_succeeded,
-        data: %{from: :initializing, to: :idle}
-      }
+      assert_receive {:signal,
+                      %Signal{
+                        type: ^transition_succeeded,
+                        data: %{from: :initializing, to: :idle}
+                      }}
 
       # idle -> planning
       state = %{state | status: :idle}
       assert {:ok, %State{status: :planning}} = State.transition(state, :planning)
 
-      assert_receive %Signal{
-        type: ^transition_succeeded,
-        data: %{from: :idle, to: :planning}
-      }
+      assert_receive {:signal,
+                      %Signal{
+                        type: ^transition_succeeded,
+                        data: %{from: :idle, to: :planning}
+                      }}
 
       # planning -> running
       state = %{state | status: :planning}
       assert {:ok, %State{status: :running}} = State.transition(state, :running)
 
-      assert_receive %Signal{
-        type: ^transition_succeeded,
-        data: %{from: :planning, to: :running}
-      }
+      assert_receive {:signal,
+                      %Signal{
+                        type: ^transition_succeeded,
+                        data: %{from: :planning, to: :running}
+                      }}
 
       # running -> paused
       state = %{state | status: :running}
       assert {:ok, %State{status: :paused}} = State.transition(state, :paused)
 
-      assert_receive %Signal{
-        type: ^transition_succeeded,
-        data: %{from: :running, to: :paused}
-      }
+      assert_receive {:signal,
+                      %Signal{
+                        type: ^transition_succeeded,
+                        data: %{from: :running, to: :paused}
+                      }}
 
       # paused -> running
       state = %{state | status: :paused}
       assert {:ok, %State{status: :running}} = State.transition(state, :running)
 
-      assert_receive %Signal{
-        type: ^transition_succeeded,
-        data: %{from: :paused, to: :running}
-      }
+      assert_receive {:signal,
+                      %Signal{
+                        type: ^transition_succeeded,
+                        data: %{from: :paused, to: :running}
+                      }}
     end
 
     test "rejects invalid transitions and emits failure signals", %{state: state} do
@@ -99,10 +96,11 @@ defmodule Jido.Agent.Server.StateTest do
       transition_failed = ServerSignal.transition_failed()
       assert {:error, {:invalid_transition, :idle, :paused}} = State.transition(state, :paused)
 
-      assert_receive %Signal{
-        type: ^transition_failed,
-        data: %{from: :idle, to: :paused}
-      }
+      assert_receive {:signal,
+                      %Signal{
+                        type: ^transition_failed,
+                        data: %{from: :idle, to: :paused}
+                      }}
 
       # Can't go from running to planning
       state = %{state | status: :running}
@@ -110,18 +108,18 @@ defmodule Jido.Agent.Server.StateTest do
       assert {:error, {:invalid_transition, :running, :planning}} =
                State.transition(state, :planning)
 
-      assert_receive %Signal{
-        type: ^transition_failed,
-        data: %{from: :running, to: :planning}
-      }
+      assert_receive {:signal,
+                      %Signal{
+                        type: ^transition_failed,
+                        data: %{from: :running, to: :planning}
+                      }}
     end
   end
 
   describe "enqueue/2" do
-    setup %{pubsub: pubsub} do
+    setup do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, pubsub: pubsub, topic: "test"}
-      :ok = Phoenix.PubSub.subscribe(pubsub, state.topic)
+      state = %State{agent: agent, dispatch: {:pid, [target: self(), delivery_mode: :async]}}
       {:ok, state: state}
     end
 
@@ -146,17 +144,18 @@ defmodule Jido.Agent.Server.StateTest do
       assert {:error, :queue_overflow} = State.enqueue(state_with_one, signal2)
       assert :queue.len(state_with_one.pending_signals) == 1
 
-      assert_receive %Signal{
-        type: ^queue_overflow,
-        data: %{queue_size: 1, max_size: 1}
-      }
+      assert_receive {:signal,
+                      %Signal{
+                        type: ^queue_overflow,
+                        data: %{queue_size: 1, max_size: 1}
+                      }}
     end
   end
 
   describe "dequeue/1" do
-    setup %{pubsub: pubsub} do
+    setup do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, pubsub: pubsub, topic: "test"}
+      state = %State{agent: agent, dispatch: {:pid, [target: self(), delivery_mode: :async]}}
       {:ok, state: state}
     end
 
@@ -193,10 +192,9 @@ defmodule Jido.Agent.Server.StateTest do
   end
 
   describe "clear_queue/1" do
-    setup %{pubsub: pubsub} do
+    setup do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, pubsub: pubsub, topic: "test"}
-      :ok = Phoenix.PubSub.subscribe(pubsub, state.topic)
+      state = %State{agent: agent, dispatch: {:pid, [target: self(), delivery_mode: :async]}}
       {:ok, state: state}
     end
 
@@ -211,7 +209,7 @@ defmodule Jido.Agent.Server.StateTest do
 
       {:ok, cleared_state} = State.clear_queue(state)
       assert :queue.is_empty(cleared_state.pending_signals)
-      assert_receive %Signal{type: ^queue_cleared, data: %{queue_size: 2}}
+      assert_receive {:signal, %Signal{type: ^queue_cleared, data: %{queue_size: 2}}}
     end
 
     test "clearing an empty queue emits signal with zero size", %{state: state} do
@@ -219,7 +217,7 @@ defmodule Jido.Agent.Server.StateTest do
       assert :queue.is_empty(state.pending_signals)
       {:ok, cleared_state} = State.clear_queue(state)
       assert :queue.is_empty(cleared_state.pending_signals)
-      assert_receive %Signal{type: ^queue_cleared, data: %{queue_size: 0}}
+      assert_receive {:signal, %Signal{type: ^queue_cleared, data: %{queue_size: 0}}}
     end
   end
 end

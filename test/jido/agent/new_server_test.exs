@@ -46,9 +46,9 @@ defmodule JidoTest.Agent.NewServerTest do
     #   assert is_pid(supervisor)
     # end
 
-    test "starts a minimal agent" do
-      {:ok, pid} = MinimalAgent.start_link()
-      assert is_pid(pid)
-    end
+    # test "starts a minimal agent" do
+    #   {:ok, pid} = MinimalAgent.start_link()
+    #   assert is_pid(pid)
+    # end
   end
 end

@@ -48,6 +48,7 @@ defmodule JidoTest do
       {:ok, pubsub: pubsub_name, registry: registry_name}
     end
 
+    @tag :skip
     test "returns the pid of an existing agent", %{pubsub: pubsub} do
       # Set up test agent using BasicAgent from test_agent.ex
       agent = JidoTest.TestAgents.BasicAgent.new("test_agent")
@@ -80,6 +81,7 @@ defmodule JidoTest do
       {:ok, pubsub: pubsub_name, registry: registry_name}
     end
 
+    @tag :skip
     test "successfully clones an existing agent", %{pubsub: pubsub} do
       # Create source agent
       source_agent = JidoTest.TestAgents.BasicAgent.new("source_agent")

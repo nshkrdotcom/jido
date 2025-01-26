@@ -5,7 +5,6 @@ defmodule Jido.Runner.SimpleTest do
   alias Jido.Runner.Result
   alias Jido.Agent.Directive.EnqueueDirective
   alias JidoTest.TestActions.{Add, ErrorAction}
-  alias Jido.Actions.Directives
 
   @moduletag :capture_log
 

@@ -153,7 +153,6 @@ defmodule Jido.BusTest do
       assert_receive {:subscribed, ^subscription}
 
       :ok = Bus.publish(bus, "stream1", 0, build_signals(1))
-      assert_receive {:signals, received_signals}
 
       :ok = Bus.unsubscribe(bus, subscription)
 

@@ -2,7 +2,7 @@ defmodule Jido.Sensor do
   @moduledoc """
   Defines the behavior and implementation for Sensors in the Jido system.
 
-  A Sensor is a GenServer that emits Signals on PubSub based on specific events and retains a configurable number of last values.
+  A Sensor is a GenServer that emits Signals using a Jido.Bus based on specific events and retains a configurable number of last values.
 
   ## Usage
 
@@ -36,8 +36,8 @@ defmodule Jido.Sensor do
   Implementing modules can override the following callbacks:
 
   - `c:mount/1`: Called when the sensor is initialized.
-  - `c:generate_signal/1`: Generates a signal based on the current state.
-  - `c:before_publish/2`: Called before a signal is published.
+  - `c:deliver_signal/1`: Generates a signal based on the current state.
+  - `c:on_before_deliver/2`: Called before a signal is delivered.
   - `c:shutdown/1`: Called when the sensor is shutting down.
   """
 
@@ -59,9 +59,8 @@ defmodule Jido.Sensor do
 
   @type options :: [
           id: String.t(),
-          topic: String.t(),
-          heartbeat_interval: non_neg_integer(),
-          pubsub: module(),
+          bus_name: atom(),
+          stream_id: String.t(),
           retain_last: pos_integer()
         ]
 
@@ -96,13 +95,15 @@ defmodule Jido.Sensor do
                                          type: :keyword_list,
                                          default: [],
                                          doc:
-                                           "A NimbleOptions schema for validating the Sensor's server options."
+                                           "A NimbleOptions schema for validating the Sensor's server configuration."
                                        ]
                                      )
 
   @callback mount(map()) :: {:ok, map()} | {:error, any()}
-  @callback generate_signal(map()) :: {:ok, Jido.Signal.t()} | {:error, any()}
-  @callback before_publish(Jido.Signal.t(), map()) :: {:ok, Jido.Signal.t()} | {:error, any()}
+  @callback set_config(map()) :: {:ok, map()} | {:error, any()}
+  @callback get_config() :: {:ok, map()} | {:error, any()}
+  @callback deliver_signal(map()) :: {:ok, Jido.Signal.t()} | {:error, any()}
+  @callback on_before_deliver(Jido.Signal.t(), map()) :: {:ok, Jido.Signal.t()} | {:error, any()}
   @callback shutdown(map()) :: {:ok, map()} | {:error, any()}
 
   defmacro __using__(opts) do
@@ -126,20 +127,13 @@ defmodule Jido.Sensor do
                                               type: :string,
                                               doc: "Unique identifier for the sensor instance"
                                             ],
-                                            pubsub: [
-                                              type: :atom,
+                                            target: [
+                                              type:
+                                                {:custom, Jido.Sensor.SignalDelivery,
+                                                 :validate_delivery_target, []},
                                               required: true,
-                                              doc: "PubSub module to use"
-                                            ],
-                                            topic: [
-                                              type: :string,
-                                              default: "#{@validated_opts[:name]}:${id}",
-                                              doc: "PubSub topic for the sensor"
-                                            ],
-                                            heartbeat_interval: [
-                                              type: :non_neg_integer,
-                                              default: 10_000,
-                                              doc: "Interval in milliseconds between heartbeats"
+                                              doc:
+                                                "Target for signal delivery. Can be {:pid, pid}, {:bus, bus_name}, {:name, process_name}, or {:remote, {node, target}}"
                                             ],
                                             retain_last: [
                                               type: :pos_integer,
@@ -150,117 +144,326 @@ defmodule Jido.Sensor do
                                         )
 
           @doc """
+          Returns the configured name of the sensor.
+          """
+          @spec name() :: String.t()
+          def name, do: @validated_opts[:name]
+
+          @doc """
+          Returns the configured description of the sensor.
+          """
+          @spec description() :: String.t() | nil
+          def description, do: @validated_opts[:description]
+
+          @doc """
+          Returns the configured category of the sensor.
+          """
+          @spec category() :: atom() | nil
+          def category, do: @validated_opts[:category]
+
+          @doc """
+          Returns the configured tags for the sensor.
+          """
+          @spec tags() :: [atom()]
+          def tags, do: @validated_opts[:tags]
+
+          @doc """
+          Returns the configured version of the sensor.
+          """
+          @spec vsn() :: String.t() | nil
+          def vsn, do: @validated_opts[:vsn]
+
+          @doc """
+          Returns the configured schema for the sensor.
+          """
+          @spec schema() :: Keyword.t()
+          def schema, do: @validated_opts[:schema]
+
+          @doc """
+          Converts the sensor metadata to a JSON-compatible map.
+
+          Returns a map containing the sensor's name, description, category, tags,
+          version and schema configuration.
+
+          ## Example
+
+              iex> MySensor.to_json()
+              %{
+                name: "my_sensor",
+                description: "A test sensor",
+                category: :test,
+                tags: [:test, :example],
+                vsn: "1.0.0",
+                schema: []
+              }
+          """
+          @spec to_json() :: map()
+          def to_json do
+            %{
+              name: @validated_opts[:name],
+              description: @validated_opts[:description],
+              category: @validated_opts[:category],
+              tags: @validated_opts[:tags],
+              vsn: @validated_opts[:vsn],
+              schema: @validated_opts[:schema]
+            }
+          end
+
+          @doc false
+          @spec __sensor_metadata__() :: map()
+          def __sensor_metadata__ do
+            to_json()
+          end
+
+          @doc """
           Starts a new Sensor process.
 
           ## Options
 
           #{NimbleOptions.docs(@sensor_server_options_schema)}
+
+          ## Return Values
+
+            * `{:ok, pid}` - The sensor was started successfully
+            * `{:error, reason}` - The sensor failed to start
+
+          ## Examples
+
+              iex> MySensor.start_link(id: "sensor1", target: {:bus, :my_bus})
+              {:ok, #PID<0.123.0>}
+
+              iex> MySensor.start_link(id: "sensor1", target: {:invalid, :target})
+              {:error, "invalid target specification"}
           """
           @spec start_link(Keyword.t()) :: GenServer.on_start()
           def start_link(opts) do
             {id, opts} = Keyword.pop(opts, :id, Jido.Util.generate_id())
-            GenServer.start_link(__MODULE__, Map.new(Keyword.put(opts, :id, id)))
+            opts = Keyword.put(opts, :id, id)
+
+            case validate_config(opts) do
+              {:ok, validated_opts} ->
+                GenServer.start_link(__MODULE__, validated_opts)
+
+              {:error, _} = error ->
+                error
+            end
+          end
+
+          @doc """
+          Retrieves the complete configuration of a sensor.
+
+          ## Parameters
+            * `sensor` - The sensor to get configuration from. Can be a PID, atom name, or string name.
+
+          ## Return Values
+            * `{:ok, config}` - The complete configuration map
+            * `{:error, reason}` - If the sensor cannot be found or accessed
+
+          ## Examples
+
+              iex> {:ok, config} = MySensor.get_config(sensor_pid)
+              {:ok, %{id: "sensor1", target: {:bus, :my_bus}}}
+
+              iex> MySensor.get_config(:nonexistent_sensor)
+              {:error, :invalid_sensor}
+          """
+          @spec get_config(Sensor.t()) :: {:ok, map()} | {:error, any()}
+          def get_config(sensor) do
+            case resolve_sensor(sensor) do
+              {:ok, pid} -> GenServer.call(pid, :get_all_config)
+              error -> error
+            end
+          end
+
+          @doc """
+          Retrieves a specific configuration value from a sensor.
+
+          ## Parameters
+            * `sensor` - The sensor to get configuration from. Can be a PID, atom name, or string name.
+            * `key` - The configuration key to retrieve
+
+          ## Return Values
+            * `{:ok, value}` - The configuration value for the key
+            * `{:error, :not_found}` - If the key does not exist
+            * `{:error, reason}` - If the sensor cannot be found or accessed
+
+          ## Examples
+
+              iex> {:ok, value} = MySensor.get_config(sensor_pid, :target)
+              {:ok, {:bus, :my_bus}}
+
+              iex> MySensor.get_config(sensor_pid, :nonexistent_key)
+              {:error, :not_found}
+          """
+          @spec get_config(Sensor.t(), atom()) :: {:ok, any()} | {:error, :not_found | any()}
+          def get_config(sensor, key) do
+            case resolve_sensor(sensor) do
+              {:ok, pid} -> GenServer.call(pid, {:get_config, key})
+              error -> error
+            end
+          end
+
+          @doc """
+          Updates multiple configuration values for a sensor.
+
+          ## Parameters
+            * `sensor` - The sensor to update. Can be a PID, atom name, or string name.
+            * `config` - A map containing the configuration key-value pairs to update
+
+          ## Return Values
+            * `:ok` - The configuration was updated successfully
+            * `{:error, reason}` - If the sensor cannot be found or accessed
+
+          ## Examples
+
+              iex> MySensor.set_config(sensor_pid, %{key1: "value1", key2: "value2"})
+              :ok
+
+              iex> MySensor.set_config(:nonexistent_sensor, %{key: "value"})
+              {:error, :invalid_sensor}
+          """
+          @spec set_config(Sensor.t(), map()) :: :ok | {:error, any()}
+          def set_config(sensor, config) when is_map(config) do
+            case resolve_sensor(sensor) do
+              {:ok, pid} -> GenServer.call(pid, {:set_config, config})
+              error -> error
+            end
+          end
+
+          @doc """
+          Updates a single configuration value for a sensor.
+
+          ## Parameters
+            * `sensor` - The sensor to update. Can be a PID, atom name, or string name.
+            * `key` - The configuration key to update
+            * `value` - The new value to set
+
+          ## Return Values
+            * `:ok` - The configuration was updated successfully
+            * `{:error, reason}` - If the sensor cannot be found or accessed
+
+          ## Examples
+
+              iex> MySensor.set_config(sensor_pid, :some_key, "new_value")
+              :ok
+
+              iex> MySensor.set_config(:nonexistent_sensor, :key, "value")
+              {:error, :invalid_sensor}
+          """
+          @spec set_config(Sensor.t(), atom(), any()) :: :ok | {:error, any()}
+          def set_config(sensor, key, value) do
+            case resolve_sensor(sensor) do
+              {:ok, pid} -> GenServer.call(pid, {:set_config, key, value})
+              error -> error
+            end
           end
 
           @impl GenServer
           def init(opts) do
             Process.flag(:trap_exit, true)
 
-            with {:ok, validated_opts} <- validate_opts(opts),
+            with {:ok, validated_opts} <- validate_config(opts),
                  {:ok, mount_state} <- mount(validated_opts) do
               state =
                 Map.merge(mount_state, %{
                   id: validated_opts.id,
-                  topic: validated_opts.topic,
-                  heartbeat_interval: validated_opts.heartbeat_interval,
-                  pubsub: validated_opts.pubsub,
+                  target: validated_opts.target,
                   sensor: struct(Sensor, @validated_opts),
                   last_values: :queue.new(),
-                  retain_last: validated_opts.retain_last
+                  retain_last: validated_opts.retain_last,
+                  config: Map.drop(validated_opts, [:id, :target, :retain_last])
                 })
 
-              schedule_heartbeat(state)
               {:ok, state}
             end
           end
 
           @impl GenServer
-          def handle_info(:heartbeat, state) do
-            with {:ok, signal} <- generate_signal(state),
-                 {:ok, validated_signal} <- before_publish(signal, state),
-                 :ok <- publish_signal(validated_signal, state) do
-              schedule_heartbeat(state)
-              {:noreply, state}
-            else
-              {:error, reason} ->
-                Logger.warning("Error generating or publishing signal: #{inspect(reason)}")
-                schedule_heartbeat(state)
-                {:noreply, state}
+          def handle_call({:set_config, config}, _from, state) when is_map(config) do
+            new_state = Map.update!(state, :config, &Map.merge(&1, config))
+            {:reply, :ok, new_state}
+          end
+
+          @impl GenServer
+          def handle_call({:set_config, key, value}, _from, state) do
+            new_state = put_in(state.config[key], value)
+            {:reply, :ok, new_state}
+          end
+
+          @impl GenServer
+          def handle_call({:get_config, key}, _from, state) do
+            case Map.get(state.config, key) do
+              nil -> {:reply, {:error, :not_found}, state}
+              value -> {:reply, {:ok, value}, state}
             end
           end
 
           @impl GenServer
-          def handle_info({:sensor_signal, signal}, state) do
-            new_state = update_last_values(state, signal)
-            {:noreply, new_state}
+          def handle_call(:get_all_config, _from, state) do
+            {:reply, {:ok, state.config}, state}
           end
 
-          @impl GenServer
-          def handle_info(msg, state) do
-            Logger.debug("Received unhandled message: #{inspect(msg)}")
-            {:noreply, state}
+          @impl true
+          @spec mount(map()) :: {:ok, map()} | {:error, any()}
+          def mount(opts), do: OK.success(opts)
+
+          @impl true
+          @spec deliver_signal(map()) :: {:ok, Jido.Signal.t()} | {:error, any()}
+          def deliver_signal(state) do
+            OK.success(
+              Jido.Signal.new(%{
+                source: "#{state.sensor.name}:#{state.id}",
+                topic: "signal",
+                payload: %{status: :ok},
+                timestamp: DateTime.utc_now()
+              })
+            )
           end
 
-          @impl GenServer
-          def handle_call(:get_last_values, _from, state) do
-            {:reply, :queue.to_list(state.last_values), state}
-          end
+          @impl true
+          @spec on_before_deliver(Jido.Signal.t(), map()) ::
+                  {:ok, Jido.Signal.t()} | {:error, any()}
+          def on_before_deliver(signal, _state), do: OK.success(signal)
+
+          @impl true
+          @spec shutdown(map()) :: {:ok, map()} | {:error, any()}
+          def shutdown(state), do: OK.success(state)
 
           @impl GenServer
           def terminate(_reason, state) do
-            case shutdown(state) do
-              {:ok, _} -> :ok
-            end
+            shutdown(state)
           end
 
-          @doc """
-          Returns the last N published values.
-          """
-          @spec get_last_values(pid(), pos_integer()) :: [Jido.Signal.t()]
-          def get_last_values(pid, n \\ 10) do
-            pid
-            |> GenServer.call(:get_last_values)
-            |> Enum.take(n)
-          end
-
-          @spec validate_opts(map()) :: {:ok, map()} | {:error, String.t()}
-          defp validate_opts(opts) do
-            case NimbleOptions.validate(Map.to_list(opts), @sensor_server_options_schema) do
+          defp validate_config(opts) when is_list(opts) do
+            case NimbleOptions.validate(opts, @sensor_server_options_schema) do
               {:ok, validated} ->
-                OK.success(Map.new(validated))
+                {:ok, Map.new(validated)}
 
               {:error, %NimbleOptions.ValidationError{} = error} ->
-                OK.failure(Error.format_nimble_validation_error(error, "Sensor", __MODULE__))
+                {:error, Exception.message(error)}
             end
           end
 
-          @spec schedule_heartbeat(map()) :: reference() | :ok
-          defp schedule_heartbeat(%{heartbeat_interval: interval}) when interval > 0 do
-            Process.send_after(self(), :heartbeat, interval)
+          defp validate_config(opts) when is_map(opts) do
+            validate_config(Map.to_list(opts))
           end
 
-          defp schedule_heartbeat(_), do: :ok
+          defp deliver_signal(%Jido.Signal{} = signal, state) do
+            require Logger
 
-          @spec publish_signal(Jido.Signal.t(), map()) :: :ok | {:error, :publish_failed}
-          defp publish_signal(%Jido.Signal{} = signal, state) do
-            Phoenix.PubSub.broadcast(state.pubsub, state.topic, {:sensor_signal, signal})
-          rescue
-            exception ->
-              Logger.error("Failed to publish signal: #{inspect(exception)}")
-              {:error, :publish_failed}
+            Logger.debug("Delivering signal: #{inspect(signal)}")
+
+            routing_opts = %{
+              target: state.target,
+              delivery_mode: :async,
+              stream: "default",
+              version: :any_version,
+              publish_opts: []
+            }
+
+            Jido.Sensor.SignalDelivery.deliver({signal, routing_opts})
           end
 
-          @spec update_last_values(map(), Jido.Signal.t()) :: map()
           defp update_last_values(state, signal) do
             new_queue = :queue.in(signal, state.last_values)
 
@@ -275,59 +478,17 @@ defmodule Jido.Sensor do
             %{state | last_values: new_queue}
           end
 
-          # Default implementations
-          @impl true
-          @spec mount(map()) :: {:ok, map()} | {:error, any()}
-          def mount(opts), do: OK.success(opts)
+          defp resolve_sensor(sensor) when is_pid(sensor), do: {:ok, sensor}
+          defp resolve_sensor(sensor) when is_atom(sensor), do: {:ok, Process.whereis(sensor)}
 
-          @impl true
-          @spec generate_signal(map()) :: {:ok, Jido.Signal.t()} | {:error, any()}
-          def generate_signal(state) do
-            OK.success(
-              Jido.Signal.new(%{
-                source: "#{state.sensor.name}:#{state.id}",
-                topic: "heartbeat",
-                payload: %{status: :ok},
-                timestamp: DateTime.utc_now()
-              })
-            )
-          end
+          defp resolve_sensor(sensor) when is_binary(sensor),
+            do: {:ok, Process.whereis(String.to_atom(sensor))}
 
-          @impl true
-          @spec before_publish(Jido.Signal.t(), map()) :: {:ok, Jido.Signal.t()} | {:error, any()}
-          def before_publish(signal, _state), do: OK.success(signal)
-
-          @impl true
-          @spec shutdown(map()) :: {:ok, map()} | {:error, any()}
-          def shutdown(state), do: OK.success(state)
-
-          @doc """
-          Returns metadata about the sensor.
-          """
-          @spec metadata() :: Sensor.t()
-          def metadata, do: struct(Sensor, @validated_opts)
-
-          @doc """
-          Converts the sensor metadata to a JSON-compatible map.
-          """
-          @spec to_json() :: map()
-          def to_json do
-            metadata()
-            |> Map.from_struct()
-            |> Map.update!(:tags, &Enum.map(&1, fn tag -> Atom.to_string(tag) end))
-            |> Map.update!(:category, &if(&1, do: Atom.to_string(&1)))
-          end
-
-          @doc false
-          @spec __sensor_metadata__() :: map()
-          def __sensor_metadata__ do
-            to_json()
-          end
+          defp resolve_sensor(_), do: {:error, :invalid_sensor}
 
           defoverridable mount: 1,
-                         generate_signal: 1,
-                         handle_info: 2,
-                         before_publish: 2,
+                         deliver_signal: 1,
+                         on_before_deliver: 2,
                          shutdown: 1
 
         {:error, error} ->

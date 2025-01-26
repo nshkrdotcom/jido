@@ -1,6 +1,6 @@
 defmodule Jido.Signal.Router do
   use Private
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
   use TypedStruct
   alias Jido.Signal
   alias Jido.Instruction
@@ -416,8 +416,8 @@ defmodule Jido.Signal.Router do
       end
     end
 
-    defp validate_path(invalid) do
-      dbug("Invalid path type", value: invalid)
+    defp validate_path(_invalid) do
+      dbug("Invalid path type: #{inspect(_invalid)}")
       {:error, Error.routing_error(:invalid_path)}
     end
 
@@ -427,8 +427,8 @@ defmodule Jido.Signal.Router do
       {:ok, instruction}
     end
 
-    defp validate_instruction(invalid) do
-      dbug("Invalid instruction", value: invalid)
+    defp validate_instruction(_invalid) do
+      dbug("Invalid instruction: #{inspect(_invalid)}")
       {:error, Error.routing_error(:invalid_instruction)}
     end
 
@@ -459,19 +459,19 @@ defmodule Jido.Signal.Router do
             dbug("Match function validation successful")
             {:ok, match_fn}
 
-          other ->
-            dbug("Match function returned non-boolean", result: other)
+          _other ->
+            dbug("Match function returned non-boolean: #{inspect(_other)}")
             {:error, Error.routing_error(:invalid_match_function)}
         end
       rescue
-        error ->
-          dbug("Match function raised error", error: error)
+        _error ->
+          dbug("Match function raised error: #{inspect(_error)}")
           {:error, Error.routing_error(:invalid_match_function)}
       end
     end
 
-    defp validate_match(invalid) do
-      dbug("Invalid match function", value: invalid)
+    defp validate_match(_invalid) do
+      dbug("Invalid match function: #{inspect(_invalid)}")
       {:error, Error.routing_error(:invalid_match_function)}
     end
 
@@ -496,8 +496,8 @@ defmodule Jido.Signal.Router do
       end
     end
 
-    defp validate_priority(invalid) do
-      dbug("Invalid priority type", value: invalid)
+    defp validate_priority(_invalid) do
+      dbug("Invalid priority type: #{inspect(_invalid)}")
       {:error, Error.routing_error(:invalid_priority)}
     end
 
@@ -548,8 +548,8 @@ defmodule Jido.Signal.Router do
       acc
     end
 
-    defp do_route([segment | rest] = segments, %TrieNode{} = trie, %Signal{} = signal, acc) do
-      dbug("Routing segments", segments: segments)
+    defp do_route([segment | rest] = _segments, %TrieNode{} = trie, %Signal{} = signal, acc) do
+      dbug("Routing segments", segments: _segments)
 
       # First try exact match
       matching_handlers =

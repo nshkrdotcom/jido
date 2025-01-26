@@ -278,4 +278,40 @@ defmodule JidoTest.TestAgents do
         ]
       ]
   end
+
+  defmodule CustomServerAgent do
+    @moduledoc "Basic agent with simple schema and actions"
+    use Jido.Agent,
+      name: "basic_agent",
+      actions: [
+        JidoTest.TestActions.BasicAction,
+        JidoTest.TestActions.NoSchema,
+        JidoTest.TestActions.EnqueueAction,
+        JidoTest.TestActions.RegisterAction,
+        JidoTest.TestActions.DeregisterAction
+      ],
+      schema: [
+        location: [type: :atom, default: :home],
+        battery_level: [type: :integer, default: 100]
+      ]
+
+    def start_link(_opts) do
+      # agent_id = UUID.uuid4()
+      # agent = CustomServerAgent.new(agent_id)
+
+      # Jido.Agent.Server.start_link("test_#{agent_id}",
+      #   name: "test_agent_server",
+      #   agent: agent,
+      #   skills: [
+      #     JidoTest.TestSkills.WeatherMonitorSkill
+      #   ],
+      #   schedule: [
+      #     {"*/15 * * * *", fn -> System.cmd("rm", ["/tmp/tmp_"]) end}
+      #   ],
+      #   child_spec: [
+      #     {BusSensor, %{name: "test_bus_sensor", bus: "test_bus"}}
+      #   ]
+      # )
+    end
+  end
 end

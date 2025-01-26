@@ -70,7 +70,7 @@ defmodule Jido.Agent.Server do
   See `cmd/4` for sending commands and `get_state/1` for retrieving current server state.
   """
   use GenServer
-  use ExDbug, enabled: false
+  use ExDbug, enabled: true
 
   alias Jido.Agent.Server.Execute
   alias Jido.Agent.Server.PubSub
@@ -151,6 +151,8 @@ defmodule Jido.Agent.Server do
   """
   @spec start_link([start_opt()]) :: GenServer.on_start()
   def start_link(opts) do
+    dbug("Starting Agent Server", opts: opts)
+
     with {:ok, agent} <- build_agent(opts),
          {:ok, agent} <- validate_agent(agent),
          {:ok, config} <- build_config(opts, agent) do

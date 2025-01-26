@@ -217,7 +217,7 @@ defmodule JidoTest.TestSkills do
     end
 
     def handle_result(
-          %Result{status: :ok, result_state: %{weather_data: data}} = result,
+          %Result{status: :ok, result_state: %{weather_data: data}},
           "weather_monitor.data.received"
         ) do
       [

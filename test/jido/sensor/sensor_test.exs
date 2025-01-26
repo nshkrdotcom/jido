@@ -2,55 +2,21 @@ defmodule JidoTest.SensorTest do
   use ExUnit.Case, async: true
 
   import ExUnit.CaptureLog
+  alias JidoTest.TestSensors.TestSensor
 
   @moduletag :capture_log
 
-  defmodule TestSensor do
-    @moduledoc false
-    use Jido.Sensor,
-      name: "test_sensor",
-      description: "A sensor for testing",
-      category: :test,
-      tags: [:test, :unit],
-      vsn: "1.0.0",
-      schema: [
-        test_param: [type: :integer, default: 0]
-      ]
-
-    def mount(opts) do
-      {:ok, Map.put(opts, :mounted, true)}
-    end
-
-    def generate_signal(state) do
-      Jido.Signal.new(%{
-        source: "#{state.sensor.name}:#{state.id}",
-        subject: "test_signal",
-        type: "test_signal",
-        data: %{value: state.test_param},
-        timestamp: DateTime.utc_now()
-      })
-    end
-
-    def before_publish(signal, _state) do
-      if signal.data.value >= 0 do
-        {:ok, signal}
-      else
-        {:error, :invalid_value}
-      end
-    end
-  end
-
-  setup do
-    start_supervised!({Phoenix.PubSub, name: SensorTestPubSub})
-    :ok
+  setup context do
+    bus_name = :"test_bus_#{context.test}"
+    start_supervised!({Jido.Bus, name: bus_name})
+    {:ok, bus_name: bus_name}
   end
 
   describe "Sensor initialization" do
-    test "starts the sensor with valid options" do
+    test "starts the sensor with valid options", %{bus_name: bus_name} do
       opts = [
         id: "test_id",
-        topic: "test_topic",
-        pubsub: SensorTestPubSub,
+        target: {:bus, bus_name},
         test_param: 42
       ]
 
@@ -59,53 +25,81 @@ defmodule JidoTest.SensorTest do
 
       state = :sys.get_state(pid)
       assert state.id == "test_id"
-      assert state.topic == "test_topic"
-      assert state.pubsub == SensorTestPubSub
-      assert state.test_param == 42
-      assert state.mounted == true
+      assert state.config.test_param == 42
     end
 
-    test "uses default values when not provided" do
-      opts = [pubsub: SensorTestPubSub]
+    test "uses default values when not provided", %{bus_name: bus_name} do
+      opts = [
+        target: {:bus, bus_name}
+      ]
 
       assert {:ok, pid} = TestSensor.start_link(opts)
       state = :sys.get_state(pid)
 
       assert is_binary(state.id)
-      assert state.topic =~ "test_sensor:"
-      assert state.test_param == 0
-      assert state.heartbeat_interval == 10_000
+      assert state.config.test_param == 0
       assert state.retain_last == 10
     end
 
-    test "fails to start with invalid options" do
-      opts = [pubsub: SensorTestPubSub, test_param: "not an integer"]
+    test "fails to start with invalid options", %{bus_name: bus_name} do
+      opts = [
+        target: {:bus, bus_name},
+        test_param: "not an integer"
+      ]
+
       assert {:error, reason} = TestSensor.start_link(opts)
-      assert reason =~ "Invalid parameters for Sensor"
+      assert reason =~ "test_param"
     end
 
-    test "fails to start without required pubsub option" do
+    test "fails to start without required target option" do
       assert {:error, reason} = TestSensor.start_link([])
-      assert reason =~ "Invalid parameters for Sensor"
-      assert reason =~ "pubsub"
+      assert reason =~ "required :target option not found"
     end
   end
 
-  describe "Sensor behavior" do
-    setup do
-      opts = [pubsub: SensorTestPubSub, test_param: 42]
+  describe "Configuration management" do
+    setup %{bus_name: bus_name} do
+      opts = [
+        target: {:bus, bus_name},
+        test_param: 42
+      ]
+
       {:ok, pid} = TestSensor.start_link(opts)
       %{pid: pid}
     end
 
-    test "generates and publishes signals", %{pid: pid} do
+    test "gets complete configuration", %{pid: pid} do
       state = :sys.get_state(pid)
-      Phoenix.PubSub.subscribe(SensorTestPubSub, state.topic)
+      assert is_map(state.config)
+      assert state.config.test_param == 42
+    end
 
-      send(pid, :heartbeat)
+    test "gets specific configuration value", %{pid: pid} do
+      assert {:ok, 42} = TestSensor.get_config(pid, :test_param)
+      assert {:error, :not_found} = TestSensor.get_config(pid, :nonexistent)
+    end
 
-      assert_receive {:sensor_signal, %Jido.Signal{subject: "test_signal", data: %{value: 42}}},
-                     1000
+    test "updates multiple configuration values", %{pid: pid} do
+      assert :ok = TestSensor.set_config(pid, %{test_param: 100, new_param: "value"})
+      assert {:ok, 100} = TestSensor.get_config(pid, :test_param)
+      assert {:ok, "value"} = TestSensor.get_config(pid, :new_param)
+    end
+
+    test "updates single configuration value", %{pid: pid} do
+      assert :ok = TestSensor.set_config(pid, :test_param, 200)
+      assert {:ok, 200} = TestSensor.get_config(pid, :test_param)
+    end
+  end
+
+  describe "Sensor behavior" do
+    setup %{bus_name: bus_name} do
+      opts = [
+        target: {:bus, bus_name},
+        test_param: 42
+      ]
+
+      {:ok, pid} = TestSensor.start_link(opts)
+      %{pid: pid}
     end
 
     test "retains last values", %{pid: pid} do
@@ -121,103 +115,63 @@ defmodule JidoTest.SensorTest do
         send(pid, {:sensor_signal, signal})
       end)
 
-      last_values = TestSensor.get_last_values(pid)
+      state = :sys.get_state(pid)
+      last_values = :queue.to_list(state.last_values)
 
       assert length(last_values) == 10
       assert Enum.map(last_values, & &1.data.value) == Enum.to_list(6..15)
     end
 
     test "validates signals before publishing", %{pid: pid} do
+      :ok = TestSensor.set_config(pid, :test_param, 42)
       state = :sys.get_state(pid)
-      Phoenix.PubSub.subscribe(SensorTestPubSub, state.topic)
-
-      send(pid, :heartbeat)
-      assert_receive {:sensor_signal, %Jido.Signal{data: %{value: 42}}}, 1000
-
-      :sys.replace_state(pid, fn state -> %{state | test_param: -1} end)
-      send(pid, :heartbeat)
-      refute_receive {:sensor_signal, _}, 1000
-    end
-
-    test "handles custom heartbeat interval" do
-      opts = [pubsub: SensorTestPubSub, heartbeat_interval: 100]
-      {:ok, pid} = TestSensor.start_link(opts)
-
-      state = :sys.get_state(pid)
-      Phoenix.PubSub.subscribe(SensorTestPubSub, state.topic)
-
-      # Increased the timeout to 300ms to account for potential delays
-      assert_receive {:sensor_signal, %Jido.Signal{}}, 300
-    end
-
-    test "disables heartbeat when interval is 0" do
-      opts = [pubsub: SensorTestPubSub, heartbeat_interval: 0]
-      {:ok, pid} = TestSensor.start_link(opts)
-
-      state = :sys.get_state(pid)
-      Phoenix.PubSub.subscribe(SensorTestPubSub, state.topic)
-
-      refute_receive {:sensor_signal, %Jido.Signal{}}, 1000
+      {:ok, signal} = TestSensor.deliver_signal(state)
+      assert {:error, :invalid_value} = TestSensor.on_before_deliver(signal, state)
     end
   end
 
   describe "Error handling" do
-    test "handles invalid server options" do
-      opts = [pubsub: SensorTestPubSub, test_param: "not an integer"]
+    test "handles invalid server options", %{bus_name: bus_name} do
+      opts = [
+        target: {:bus, bus_name},
+        test_param: "not an integer"
+      ]
+
       assert {:error, reason} = TestSensor.start_link(opts)
-      assert reason =~ "Invalid parameters for Sensor"
+      assert reason =~ "test_param"
     end
 
-    test "fails to start without required pubsub option" do
-      assert {:error, reason} = TestSensor.start_link([])
-      assert reason =~ "Invalid parameters for Sensor"
-      assert reason =~ "required :pubsub option not found"
-    end
-
-    test "handles errors in generate_signal" do
-      defmodule ErrorSensor1 do
-        @moduledoc false
-        use Jido.Sensor, name: "error_sensor"
-
-        def generate_signal(_), do: {:error, :test_error}
-      end
-
-      {:ok, pid} = ErrorSensor1.start_link(pubsub: SensorTestPubSub)
-      Phoenix.PubSub.subscribe(SensorTestPubSub, "error_sensor:#{:sys.get_state(pid).id}")
+    test "handles errors in generate_signal", %{bus_name: bus_name} do
+      {:ok, pid} = JidoTest.TestSensors.ErrorSensor1.start_link(target: {:bus, bus_name})
 
       log =
         capture_log(fn ->
-          send(pid, :heartbeat)
-          refute_receive {:sensor_signal, _}, 1000
+          state = :sys.get_state(pid)
+          {:error, :test_error} = JidoTest.TestSensors.ErrorSensor1.deliver_signal(state)
         end)
 
-      assert log =~ "Error generating or publishing signal: :test_error"
+      assert log =~ "Test error in generate_signal"
     end
 
-    test "handles errors in before_publish" do
-      defmodule ErrorSensor2 do
-        @moduledoc false
-        use Jido.Sensor, name: "error_sensor"
-
-        def before_publish(_, _), do: {:error, :test_error}
-      end
-
-      {:ok, pid} = ErrorSensor2.start_link(pubsub: SensorTestPubSub)
-      Phoenix.PubSub.subscribe(SensorTestPubSub, "error_sensor:#{:sys.get_state(pid).id}")
+    test "handles errors in before_publish", %{bus_name: bus_name} do
+      {:ok, pid} = JidoTest.TestSensors.ErrorSensor2.start_link(target: {:bus, bus_name})
 
       log =
         capture_log(fn ->
-          send(pid, :heartbeat)
-          refute_receive {:sensor_signal, _}, 1000
+          state = :sys.get_state(pid)
+          {:ok, signal} = JidoTest.TestSensors.ErrorSensor2.deliver_signal(state)
+
+          {:error, :test_error} =
+            JidoTest.TestSensors.ErrorSensor2.on_before_deliver(signal, state)
         end)
 
-      assert log =~ "Error generating or publishing signal: :test_error"
+      assert log =~ "Test error in before_publish"
     end
   end
 
   describe "Sensor metadata" do
     test "returns correct metadata" do
-      metadata = TestSensor.metadata()
+      assert metadata = TestSensor.__sensor_metadata__()
       assert metadata.name == "test_sensor"
       assert metadata.description == "A sensor for testing"
       assert metadata.category == :test
@@ -230,8 +184,8 @@ defmodule JidoTest.SensorTest do
       json = TestSensor.to_json()
       assert is_map(json)
       assert json.name == "test_sensor"
-      assert json.category == "test"
-      assert json.tags == ["test", "unit"]
+      assert json.category == :test
+      assert json.tags == [:test, :unit]
     end
   end
 end

@@ -2,7 +2,6 @@ defmodule Jido.SkillDefinitionTest do
   use ExUnit.Case, async: true
   alias JidoTest.TestSkills.WeatherMonitorSkill
   alias Jido.Runner.Result
-  alias Jido.Signal
 
   @moduletag :capture_log
 

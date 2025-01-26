@@ -256,7 +256,7 @@ defmodule Jido.Agent do
           doc: "The result of the last action executed by the Agent."
         ]
       ]
-      use ExDbug, enabled: false
+      use ExDbug, enabled: true
       use GenServer
       alias Jido.Agent
       alias Jido.Util
@@ -303,7 +303,7 @@ defmodule Jido.Agent do
           def start_link(id \\ nil, initial_state \\ %{}, opts \\ []) do
             agent = new(id, initial_state)
             name = Keyword.get(opts, :name, "#{__MODULE__}.#{id}")
-
+            dbug("Starting agent", agent: agent, name: name)
             Jido.Agent.Server.start_link(Keyword.merge(opts, agent: agent, name: name))
           end
 

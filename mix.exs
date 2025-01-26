@@ -136,7 +136,7 @@ defmodule Jido.MixProject do
       ],
       sidebar_items: [
         Home: "README.md",
-        Guides: [
+        "Start Here": [
           "Getting Started": "guides/getting-started.md",
           Actions: "guides/actions.md",
           Instructions: "guides/instructions.md",
@@ -144,7 +144,21 @@ defmodule Jido.MixProject do
           "Sensors & Signals": "guides/sensors.md",
           Directives: "guides/directives.md",
           "Signal Router": "guides/signal-router.md",
-          Skills: "guides/skills.md"
+          Skills: "guides/skills.md",
+          Glossary: "guides/glossary.md"
+        ],
+        "About Jido": [
+          "Why Jido?": "guides/why-jido.md",
+          "Design Principles": "guides/design-principles.md",
+          Alternatives: "guides/alternatives.md"
+        ],
+        Memory: [
+          Memory: "guides/memory.md",
+          "Memory Stores": "guides/memory-stores.md"
+        ],
+        Chat: [
+          Chat: "guides/chat.md",
+          "Chat History": "guides/chat-history.md"
         ]
       ]
     ]
@@ -177,7 +191,7 @@ defmodule Jido.MixProject do
       {:telemetry, "~> 1.3"},
       {:typed_struct, "~> 0.3.0"},
       {:typed_struct_nimble_options, "~> 0.1.1"},
-
+      {:quantum, "~> 3.5"},
       # Skill & Action Dependencies for examples
       {:abacus, "~> 2.1"},
 
@@ -207,7 +221,7 @@ defmodule Jido.MixProject do
 
   defp aliases do
     [
-      test: "test --trace",
+      # test: "test --trace",
 
       # Run to check the quality of your code
       q: ["quality"],

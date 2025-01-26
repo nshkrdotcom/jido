@@ -11,7 +11,7 @@ defmodule Jido.Discovery do
   @cache_key :__jido_discovery_cache__
   @cache_version "1.0"
 
-  @type component_type :: :action | :sensor | :agent
+  @type component_type :: :action | :sensor | :agent | :skill | :demo
   @type component_metadata :: %{
           module: module(),
           name: String.t(),
@@ -26,7 +26,9 @@ defmodule Jido.Discovery do
           last_updated: DateTime.t(),
           actions: [component_metadata()],
           sensors: [component_metadata()],
-          agents: [component_metadata()]
+          agents: [component_metadata()],
+          skills: [component_metadata()],
+          demos: [component_metadata()]
         }
 
   @doc """
@@ -180,6 +182,64 @@ defmodule Jido.Discovery do
   end
 
   @doc """
+  Retrieves a Skill by its slug.
+
+  ## Parameters
+
+  - `slug`: A string representing the unique identifier of the Skill.
+
+  ## Returns
+
+  The Skill metadata if found, otherwise `nil`.
+
+  ## Examples
+
+      iex> Jido.get_skill_by_slug("jkl012mn")
+      %{module: MyApp.SomeSkill, name: "some_skill", description: "Provides some capability", slug: "jkl012mn"}
+
+      iex> Jido.get_skill_by_slug("nonexistent")
+      nil
+
+  """
+  @spec get_skill_by_slug(String.t()) :: component_metadata() | nil
+  def get_skill_by_slug(slug) do
+    with {:ok, cache} <- get_cache() do
+      Enum.find(cache.skills, fn skill -> skill.slug == slug end)
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Retrieves a Demo by its slug.
+
+  ## Parameters
+
+  - `slug`: A string representing the unique identifier of the Demo.
+
+  ## Returns
+
+  The Demo metadata if found, otherwise `nil`.
+
+  ## Examples
+
+      iex> Jido.get_demo_by_slug("mno345pq")
+      %{module: MyApp.SomeDemo, name: "some_demo", description: "Demonstrates something", slug: "mno345pq"}
+
+      iex> Jido.get_demo_by_slug("nonexistent")
+      nil
+
+  """
+  @spec get_demo_by_slug(String.t()) :: component_metadata() | nil
+  def get_demo_by_slug(slug) do
+    with {:ok, cache} <- get_cache() do
+      Enum.find(cache.demos, fn demo -> demo.slug == slug end)
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
   Lists all Actions with optional filtering and pagination.
 
   ## Parameters
@@ -281,6 +341,74 @@ defmodule Jido.Discovery do
     end
   end
 
+  @doc """
+  Lists all Skills with optional filtering and pagination.
+
+  ## Parameters
+
+  - `opts`: A keyword list of options for filtering and pagination. Available options:
+    - `:limit`: Maximum number of results to return.
+    - `:offset`: Number of results to skip before starting to return.
+    - `:name`: Filter Skills by name (partial match).
+    - `:description`: Filter Skills by description (partial match).
+    - `:category`: Filter Skills by category (exact match).
+    - `:tag`: Filter Skills by tag (must have the exact tag).
+
+  ## Returns
+
+  A list of Skill metadata.
+
+  ## Examples
+
+      iex> Jido.list_skills(limit: 10, offset: 5, category: :capability)
+      [%{module: MyApp.SomeSkill, name: "some_skill", description: "Provides some capability", slug: "jkl012mn", category: :capability}]
+
+  """
+  @spec list_skills(keyword()) :: [component_metadata()]
+  def list_skills(opts \\ []) do
+    dbug("Listing skills with options", opts: opts)
+
+    with {:ok, cache} <- get_cache() do
+      filter_and_paginate(cache.skills, opts)
+    else
+      _ -> []
+    end
+  end
+
+  @doc """
+  Lists all Demos with optional filtering and pagination.
+
+  ## Parameters
+
+  - `opts`: A keyword list of options for filtering and pagination. Available options:
+    - `:limit`: Maximum number of results to return.
+    - `:offset`: Number of results to skip before starting to return.
+    - `:name`: Filter Demos by name (partial match).
+    - `:description`: Filter Demos by description (partial match).
+    - `:category`: Filter Demos by category (exact match).
+    - `:tag`: Filter Demos by tag (must have the exact tag).
+
+  ## Returns
+
+  A list of Demo metadata.
+
+  ## Examples
+
+      iex> Jido.list_demos(limit: 10, offset: 5, category: :example)
+      [%{module: MyApp.SomeDemo, name: "some_demo", description: "Demonstrates something", slug: "mno345pq", category: :example}]
+
+  """
+  @spec list_demos(keyword()) :: [component_metadata()]
+  def list_demos(opts \\ []) do
+    dbug("Listing demos with options", opts: opts)
+
+    with {:ok, cache} <- get_cache() do
+      filter_and_paginate(cache.demos, opts)
+    else
+      _ -> []
+    end
+  end
+
   @doc false
   # Helper for testing use
 
@@ -304,8 +432,9 @@ defmodule Jido.Discovery do
       last_updated: DateTime.utc_now(),
       actions: discover_components(:__action_metadata__),
       sensors: discover_components(:__sensor_metadata__),
-      commands: discover_components(:__command_metadata__),
-      agents: discover_components(:__agent_metadata__)
+      agents: discover_components(:__agent_metadata__),
+      skills: discover_components(:__skill_metadata__),
+      demos: discover_components(:__jido_demo__)
     }
   end
 
@@ -325,43 +454,7 @@ defmodule Jido.Discovery do
         |> Base.url_encode64(padding: false)
         |> String.slice(0, 8)
 
-      # Special handling for command metadata which returns command specs
-      metadata =
-        case metadata_function do
-          :__command_metadata__ ->
-            dbug("Processing command metadata", metadata: metadata)
-            # Extract command names, handling both keyword lists and lists with bare atoms
-            command_names =
-              metadata
-              |> Enum.map(fn
-                {name, _opts} when is_atom(name) -> name
-                name when is_atom(name) -> name
-                {name, _opts} when is_tuple(name) -> elem(name, 0)
-              end)
-
-            dbug("Extracted command names", names: command_names)
-
-            # Convert to map, handling both keyword lists and lists with bare atoms
-            commands_map =
-              metadata
-              |> Enum.map(fn
-                {name, opts} when is_atom(name) -> {name, opts}
-                name when is_atom(name) -> {name, [description: "Command #{name}", schema: []]}
-                {name, opts} when is_tuple(name) -> {elem(name, 0), opts}
-              end)
-              |> Map.new()
-
-            %{
-              name: module_name |> String.split(".") |> List.last() |> Macro.underscore(),
-              description: "Command module providing: #{Enum.join(command_names, ", ")}",
-              category: :command,
-              tags: command_names,
-              commands: commands_map
-            }
-
-          _ ->
-            if Keyword.keyword?(metadata), do: Map.new(metadata), else: metadata
-        end
+      metadata = if Keyword.keyword?(metadata), do: Map.new(metadata), else: metadata
 
       metadata
       |> Map.put(:module, module)

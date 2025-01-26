@@ -385,8 +385,12 @@ defmodule Jido do
   defdelegate list_actions(opts \\ []), to: Jido.Discovery
   defdelegate list_sensors(opts \\ []), to: Jido.Discovery
   defdelegate list_agents(opts \\ []), to: Jido.Discovery
+  defdelegate list_skills(opts \\ []), to: Jido.Discovery
+  defdelegate list_demos(opts \\ []), to: Jido.Discovery
 
   defdelegate get_action_by_slug(slug), to: Jido.Discovery
   defdelegate get_sensor_by_slug(slug), to: Jido.Discovery
   defdelegate get_agent_by_slug(slug), to: Jido.Discovery
+  defdelegate get_skill_by_slug(slug), to: Jido.Discovery
+  defdelegate get_demo_by_slug(slug), to: Jido.Discovery
 end

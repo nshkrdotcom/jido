@@ -29,8 +29,8 @@ defmodule Jido.Runner.Simple do
 
   alias Jido.Instruction
   alias Jido.Runner.Result
-  alias Jido.Agent.Directive
   alias Jido.Error
+  alias Jido.Agent.Directive
 
   @type run_opts :: keyword()
   @type run_result :: {:ok, Result.t()} | {:error, Error.t() | String.t()}
@@ -55,7 +55,7 @@ defmodule Jido.Runner.Simple do
 
   ## Returns
     * `{:ok, %Result{}}` - Successful execution with:
-      * `result_state` - Updated state map (for state results)
+      * `_state` - Updated state map (for state results)
       * `directives` - List of directives (for directive results)
       * `status` - Set to :ok
       * `error` - Set to nil
@@ -116,9 +116,7 @@ defmodule Jido.Runner.Simple do
         dbug("Execution skipped - empty instruction queue")
 
         result = %Result{
-          initial_state: agent.state,
-          instructions: [],
-          result_state: agent.state,
+          state: agent.state,
           directives: [],
           status: :ok
         }
@@ -129,7 +127,7 @@ defmodule Jido.Runner.Simple do
 
   @doc false
   @spec execute_instruction(Jido.Agent.t(), Instruction.t(), :queue.queue()) :: run_result()
-  defp execute_instruction(agent, instruction, remaining) do
+  defp execute_instruction(agent, instruction, _remaining) do
     dbug("Preparing execution context",
       agent_id: agent.id,
       action: instruction.action,
@@ -138,9 +136,7 @@ defmodule Jido.Runner.Simple do
 
     # Initialize result tracking
     result = %Result{
-      initial_state: agent.state,
-      instructions: [instruction],
-      pending_instructions: remaining
+      state: agent.state
     }
 
     dbug("Executing workflow action",
@@ -149,13 +145,26 @@ defmodule Jido.Runner.Simple do
     )
 
     case Jido.Workflow.run(instruction.action, instruction.params, instruction.context) do
-      {:ok, result_value} ->
-        dbug("Workflow execution successful",
-          agent_id: agent.id,
-          result_type: get_result_type(result_value)
+      {:ok, state_map, directive} ->
+        dbug("Workflow execution successful - directive result",
+          agent_id: agent.id
         )
 
-        handle_successful_execution(result, result_value)
+        case Directive.validate_directives(directive) do
+          :ok ->
+            {:ok, %{result | state: state_map, directives: [directive], status: :ok}}
+
+          {:error, reason} ->
+            error = Error.validation_error("Invalid directive", %{reason: reason})
+            {:error, %{result | error: error, status: :error}}
+        end
+
+      {:ok, state_map} ->
+        dbug("Workflow execution successful - state result",
+          agent_id: agent.id
+        )
+
+        {:ok, %{result | state: state_map, status: :ok}}
 
       {:error, error} ->
         dbug("Workflow execution failed",
@@ -165,29 +174,6 @@ defmodule Jido.Runner.Simple do
         )
 
         {:error, %{result | error: error, status: :error}}
-    end
-  end
-
-  @doc false
-  @spec handle_successful_execution(Result.t(), term()) :: {:ok, Result.t()}
-  defp handle_successful_execution(result, result_value) do
-    dbug("Processing execution result",
-      result_type: get_result_type(result_value)
-    )
-
-    if Directive.is_directive?(result_value) do
-      dbug("Storing directive result")
-
-      {:ok,
-       %{
-         result
-         | result_state: result.initial_state,
-           directives: [result_value],
-           status: :ok
-       }}
-    else
-      dbug("Storing state result")
-      {:ok, %{result | result_state: result_value, directives: [], status: :ok}}
     end
   end
 end

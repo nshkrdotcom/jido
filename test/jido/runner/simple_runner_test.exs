@@ -24,9 +24,7 @@ defmodule Jido.Runner.SimpleTest do
 
       assert {:ok,
               %Result{
-                initial_state: %{value: 0},
-                instructions: [^instruction],
-                result_state: %{value: 1},
+                state: %{value: 1},
                 status: :ok,
                 error: nil
               }} = Simple.run(agent)
@@ -80,14 +78,9 @@ defmodule Jido.Runner.SimpleTest do
 
       assert {:ok,
               %Result{
-                initial_state: %{value: 0},
-                instructions: [^instruction1],
-                result_state: %{value: 1},
-                status: :ok,
-                pending_instructions: remaining
+                state: %{value: 1},
+                status: :ok
               }} = Simple.run(agent)
-
-      assert :queue.to_list(remaining) == [instruction2]
     end
 
     test "handles directive returned from action" do
@@ -97,7 +90,8 @@ defmodule Jido.Runner.SimpleTest do
           action: :next_action,
           params: %{}
         },
-        context: %{}
+        context: %{},
+        opts: [timeout: 0]
       }
 
       agent = %{
@@ -108,12 +102,40 @@ defmodule Jido.Runner.SimpleTest do
 
       assert {:ok,
               %Result{
-                initial_state: %{},
-                instructions: [^instruction],
-                result_state: %{},
+                state: %{},
                 directives: [%EnqueueDirective{action: :next_action, params: %{}, context: %{}}],
                 status: :ok,
                 error: nil
+              }} = Simple.run(agent)
+    end
+
+    test "handles invalid directive returned from action" do
+      instruction = %Instruction{
+        action: JidoTest.TestActions.EnqueueAction,
+        params: %{
+          # Invalid - action is required
+          action: nil,
+          params: %{}
+        },
+        context: %{},
+        opts: [timeout: 0]
+      }
+
+      agent = %{
+        id: "test-agent",
+        state: %{},
+        pending_instructions: :queue.from_list([instruction])
+      }
+
+      assert {:error,
+              %Result{
+                state: %{},
+                error: %Jido.Error{
+                  type: :validation_error,
+                  message: "Invalid directive",
+                  details: %{reason: :invalid_action}
+                },
+                status: :error
               }} = Simple.run(agent)
     end
   end

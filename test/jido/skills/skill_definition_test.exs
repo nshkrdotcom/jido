@@ -121,7 +121,7 @@ defmodule Jido.SkillDefinitionTest do
     test "handles successful weather data processing" do
       result = %Result{
         status: :ok,
-        result_state: %{
+        state: %{
           weather_data: %{
             temperature: 75.0,
             humidity: 45,
@@ -135,13 +135,13 @@ defmodule Jido.SkillDefinitionTest do
       assert length(signals) == 1
       [signal] = signals
       assert signal.type == "weather_monitor.data.processed"
-      assert signal.data == result.result_state.weather_data
+      assert signal.data == result.state.weather_data
     end
 
     test "handles weather alert generation" do
       result = %Result{
         status: :ok,
-        result_state: %{
+        state: %{
           alert: true,
           conditions: %{severe_weather: true},
           severity: 5,
@@ -161,7 +161,7 @@ defmodule Jido.SkillDefinitionTest do
     test "handles no alert needed case" do
       result = %Result{
         status: :ok,
-        result_state: :no_alert_needed
+        state: :no_alert_needed
       }
 
       signals = WeatherMonitorSkill.handle_result(result, "weather_monitor.alert.**")

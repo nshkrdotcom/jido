@@ -37,9 +37,7 @@ defmodule Jido.Runner.ChainTest do
 
       assert {:ok,
               %Result{
-                initial_state: %{value: 0},
-                instructions: ^instructions,
-                result_state: %{value: 4},
+                state: %{value: 4},
                 status: :ok
               }} = Chain.run(agent)
     end
@@ -54,7 +52,6 @@ defmodule Jido.Runner.ChainTest do
       assert {:ok, %Result{status: :ok}} = Chain.run(agent)
     end
 
-    @tag :skip
     test "propagates errors from actions" do
       instructions = [
         %Instruction{
@@ -82,8 +79,6 @@ defmodule Jido.Runner.ChainTest do
 
       assert {:error,
               %Result{
-                initial_state: %{},
-                instructions: ^instructions,
                 error: %Error{message: "Validation error"},
                 status: :error
               }} = Chain.run(agent)
@@ -109,9 +104,7 @@ defmodule Jido.Runner.ChainTest do
 
       assert {:ok,
               %Result{
-                initial_state: %{},
-                instructions: ^instructions,
-                result_state: %{},
+                state: %{},
                 directives: [
                   %EnqueueDirective{
                     action: :next_action,
@@ -151,9 +144,7 @@ defmodule Jido.Runner.ChainTest do
 
       assert {:ok,
               %Result{
-                initial_state: %{},
-                instructions: ^instructions,
-                result_state: %{},
+                state: %{},
                 directives: [
                   %EnqueueDirective{
                     action: :first_action,
@@ -195,9 +186,7 @@ defmodule Jido.Runner.ChainTest do
 
       assert {:ok,
               %Result{
-                initial_state: %{value: 0},
-                instructions: ^instructions,
-                result_state: %{value: 1},
+                state: %{value: 1},
                 directives: [
                   %EnqueueDirective{
                     action: :next_action,
@@ -236,9 +225,7 @@ defmodule Jido.Runner.ChainTest do
 
       assert {:ok,
               %Result{
-                initial_state: %{value: 10},
-                instructions: ^instructions,
-                result_state: %{value: 30},
+                state: %{value: 30},
                 status: :ok
               }} = Chain.run(agent)
     end

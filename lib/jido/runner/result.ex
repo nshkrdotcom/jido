@@ -17,21 +17,9 @@ defmodule Jido.Runner.Result do
   alias Jido.Error
 
   typedstruct enforce: true do
-    field(:id, String.t(), default: Jido.Util.generate_id())
-    field(:initial_state, map(), default: %{})
-    field(:result_state, map(), default: %{})
     field(:status, atom(), default: :ok)
-    field(:error, Error.t(), default: nil)
-    field(:instructions, list(), default: [])
+    field(:state, map(), default: %{})
     field(:directives, list(), default: [])
-    field(:pending_instructions, :queue.queue(), default: :queue.new())
+    field(:error, Error.t(), default: nil)
   end
-
-  # TODO - Simplify
-  # typedstruct enforce: true do
-  #   field(:status, atom(), default: :ok)
-  #   field(:state, map(), default: %{})
-  #   field(:directives, list(), default: [])
-  #   field(:error, Error.t(), default: nil)
-  # end
 end

@@ -3,7 +3,6 @@ defmodule Jido.Agent.Server.DirectiveTest do
   alias Jido.Agent.Server.{Directive, State, Signal}
   alias JidoTest.TestAgents.BasicAgent
   alias Jido.Error
-  alias Jido.Instruction
 
   alias Jido.Agent.Directive.{
     SpawnDirective,

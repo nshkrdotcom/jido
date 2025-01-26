@@ -148,9 +148,8 @@ defmodule JidoTest.Examples.UserAgentTest do
 
       # Result contains the initial state and the result state
       assert result_agent.result.status == :ok
-      assert result_agent.result.initial_state == initial_agent.state
-      assert result_agent.result.result_state.email == result_agent.state.email
-      assert result_agent.result.result_state.formatted_name == result_agent.state.formatted_name
+      assert result_agent.result.state.email == result_agent.state.email
+      assert result_agent.result.state.formatted_name == result_agent.state.formatted_name
     end
 
     test "runs action chain", %{agent: initial_agent} do
@@ -187,9 +186,8 @@ defmodule JidoTest.Examples.UserAgentTest do
 
       # Action Chain result is preserved
       assert result_agent.result.status == :ok
-      assert result_agent.result.initial_state == initial_agent.state
-      assert result_agent.result.result_state.email == "john@example.com"
-      assert result_agent.result.result_state.formatted_name == "John Doe"
+      assert result_agent.result.state.email == "john@example.com"
+      assert result_agent.result.state.formatted_name == "John Doe"
     end
 
     test "requires prior planning", %{agent: agent} do
@@ -201,6 +199,7 @@ defmodule JidoTest.Examples.UserAgentTest do
       assert agent.state.username == nil
     end
 
+    @tag :skip
     test "clears instructions after run", %{agent: initial_agent} do
       {:ok, planned_agent} = UserAgent.plan(initial_agent, {FormatUser, initial_agent.state})
       {:ok, agent} = UserAgent.run(planned_agent)

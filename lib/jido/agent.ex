@@ -929,7 +929,6 @@ defmodule Jido.Agent do
             with {:ok, validated_runner} <- Jido.Util.validate_runner(runner),
                  {:ok, agent} <- on_before_run(agent),
                  {:ok, result} <- validated_runner.run(agent, opts),
-                 {:ok, agent} <- apply_result_instructions(agent, result),
                  {:ok, agent} <- on_after_run(agent, result),
                  {:ok, agent} <- handle_directives(agent, result, opts),
                  {:ok, agent} <- on_after_directives(agent, result),
@@ -954,31 +953,44 @@ defmodule Jido.Agent do
             OK.success(%{agent | pending_instructions: result.pending_instructions})
           end
 
-          defp handle_directives(agent, result, opts) do
-            dbug("Handling directives", agent: agent)
+          def handle_directives(agent, result, opts \\ []) do
+            dbug("Handling directives", agent_id: agent.id)
 
-            case Directive.apply_agent_directives(agent, result, opts) do
-              {:ok, agent} ->
-                OK.success(agent)
+            case result do
+              %Result{directives: []} ->
+                {:ok, agent}
 
-              {:error, error} ->
-                Error.execution_error("Directive application failed", %{error: error})
-                |> OK.failure()
+              %Result{directives: directives} when is_list(directives) ->
+                dbug("Applying #{length(directives)} directives", agent_id: agent.id)
+
+                case Directive.apply_directives(agent, result, opts) do
+                  {:ok, updated_agent} ->
+                    {:ok, updated_agent}
+
+                  {:error, reason} = error ->
+                    dbug("Failed to apply directives",
+                      agent_id: agent.id,
+                      reason: reason
+                    )
+
+                    error
+                end
             end
           end
 
           defp maybe_apply_state(agent, result, true) do
-            state = extract_result_state(result.result_state)
-            agent = %{agent | state: Map.merge(agent.state, state), result: result}
+            agent = %{
+              agent
+              | state: DeepMerge.deep_merge(agent.state, result.state),
+                result: result
+            }
+
             OK.success(agent)
           end
 
           defp maybe_apply_state(agent, result, false) do
             OK.success(%{agent | result: result})
           end
-
-          defp extract_result_state({:ok, state, _directives}), do: state
-          defp extract_result_state(state) when is_map(state), do: state
 
           @doc """
           Validates, plans and executes instructions for the agent with enhanced error handling and state management.

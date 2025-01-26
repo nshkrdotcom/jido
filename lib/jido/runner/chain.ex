@@ -79,9 +79,7 @@ defmodule Jido.Runner.Chain do
         dbug("No instructions found")
 
         result = %Result{
-          initial_state: agent.state,
-          instructions: [],
-          result_state: agent.state,
+          state: agent.state,
           directives: [],
           status: :ok
         }
@@ -97,9 +95,7 @@ defmodule Jido.Runner.Chain do
   @spec execute_chain(Jido.Agent.t(), [Instruction.t()], keyword()) :: chain_result()
   defp execute_chain(agent, instructions_list, opts) do
     initial_result = %Result{
-      initial_state: agent.state,
-      instructions: instructions_list,
-      result_state: agent.state,
+      state: agent.state,
       directives: [],
       status: :ok
     }
@@ -119,30 +115,33 @@ defmodule Jido.Runner.Chain do
   defp execute_chain_step([instruction | remaining], result, opts) do
     dbug("Executing chain step",
       instruction: instruction,
-      current_state: result.result_state,
+      current_state: result.state,
       instruction_params: instruction.params,
       remaining_count: length(remaining)
     )
 
-    case execute_instruction(instruction, result.result_state, opts) do
-      {:ok, maybe_directive} ->
-        dbug("Instruction executed successfully",
+    case execute_instruction(instruction, result.state, opts) do
+      {:ok, state_map, directive} ->
+        dbug("Instruction executed successfully with directive",
           instruction: instruction,
-          result_type: if(Directive.is_directive?(maybe_directive), do: :directive, else: :state),
-          result: maybe_directive
+          directive: directive
         )
 
-        if Directive.is_directive?(maybe_directive) do
-          handle_directive_result(maybe_directive, remaining, result, opts)
-        else
-          handle_state_result(maybe_directive, remaining, result, opts)
-        end
+        handle_directive_result(directive, remaining, %{result | state: state_map}, opts)
+
+      {:ok, state_map} ->
+        dbug("Instruction executed successfully with state",
+          instruction: instruction,
+          state: state_map
+        )
+
+        handle_state_result(state_map, remaining, result, opts)
 
       {:error, error} ->
         dbug("Chain step failed",
           error: error,
           instruction: instruction,
-          current_state: result.result_state
+          current_state: result.state
         )
 
         {:error, %{result | error: error, status: :error}}
@@ -150,7 +149,7 @@ defmodule Jido.Runner.Chain do
   end
 
   @spec execute_instruction(Instruction.t(), map(), keyword()) ::
-          {:ok, map() | Directive.t()} | {:error, term()}
+          {:ok, map()} | {:ok, map(), Directive.t()} | {:error, term()}
   defp execute_instruction(
          %Instruction{action: action, params: params, context: context},
          state,
@@ -174,10 +173,17 @@ defmodule Jido.Runner.Chain do
     context = Map.put(context, :state, state)
 
     case Jido.Workflow.run(action, merged_params, context, opts) do
-      {:ok, result} ->
-        {:ok, result}
+      {:ok, state_map, directive} ->
+        # Merge state_map with existing state
+        merged_state = Map.merge(state, state_map)
+        {:ok, merged_state, directive}
 
-      {:error, %Jido.Error{type: :validation_error} = error} ->
+      {:ok, state_map} ->
+        # Merge state_map with existing state
+        merged_state = Map.merge(state, state_map)
+        {:ok, merged_state}
+
+      {:error, %Jido.Error{} = error} ->
         {:error, error}
 
       {:error, reason} ->
@@ -217,7 +223,7 @@ defmodule Jido.Runner.Chain do
           chain_result()
   defp handle_state_result(new_state, remaining, result, opts) do
     dbug("Handling state transition in chain",
-      previous_state: result.result_state,
+      previous_state: result.state,
       new_state: new_state,
       remaining_count: length(remaining)
     )
@@ -225,12 +231,12 @@ defmodule Jido.Runner.Chain do
     updated_result = %{
       result
       | # Merge new_state with existing state instead of replacing
-        result_state: Map.merge(result.result_state, new_state),
+        state: Map.merge(result.state, new_state),
         status: :ok
     }
 
     dbug("Updated chain state",
-      final_state: updated_result.result_state,
+      final_state: updated_result.state,
       remaining_instructions: length(remaining)
     )
 

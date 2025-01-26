@@ -33,7 +33,7 @@ defmodule Jido.Actions.Directives do
         opts: opts
       }
 
-      {:ok, directive}
+      {:ok, %{}, directive}
     end
   end
 
@@ -51,7 +51,7 @@ defmodule Jido.Actions.Directives do
         action_module: action_module
       }
 
-      {:ok, directive}
+      {:ok, %{}, directive}
     end
   end
 
@@ -73,7 +73,7 @@ defmodule Jido.Actions.Directives do
           action_module: action_module
         }
 
-        {:ok, directive}
+        {:ok, %{}, directive}
       end
     end
   end
@@ -88,14 +88,15 @@ defmodule Jido.Actions.Directives do
         args: [type: :any, required: true, doc: "Arguments to pass to the module"]
       ]
 
-    @spec run(map(), map()) :: {:ok, Jido.Agent.Directive.SpawnDirective.t()} | {:error, term()}
+    @spec run(map(), map()) ::
+            {:ok, map(), Jido.Agent.Directive.SpawnDirective.t()} | {:error, term()}
     def run(%{module: module, args: args}, _ctx) do
       directive = %Jido.Agent.Directive.SpawnDirective{
         module: module,
         args: args
       }
 
-      {:ok, directive}
+      {:ok, %{}, directive}
     end
   end
 
@@ -108,10 +109,11 @@ defmodule Jido.Actions.Directives do
         pid: [type: :pid, required: true, doc: "PID of process to terminate"]
       ]
 
-    @spec run(map(), map()) :: {:ok, Jido.Agent.Directive.KillDirective.t()} | {:error, term()}
+    @spec run(map(), map()) ::
+            {:ok, map(), Jido.Agent.Directive.KillDirective.t()} | {:error, term()}
     def run(%{pid: pid}, _ctx) do
       directive = %Jido.Agent.Directive.KillDirective{pid: pid}
-      {:ok, directive}
+      {:ok, %{}, directive}
     end
   end
 
@@ -125,14 +127,15 @@ defmodule Jido.Actions.Directives do
         signal: [type: :any, required: true, doc: "Signal to publish"]
       ]
 
-    @spec run(map(), map()) :: {:ok, Jido.Agent.Directive.PublishDirective.t()} | {:error, term()}
+    @spec run(map(), map()) ::
+            {:ok, map(), Jido.Agent.Directive.PublishDirective.t()} | {:error, term()}
     def run(%{stream_id: stream_id, signal: signal}, _ctx) do
       directive = %Jido.Agent.Directive.PublishDirective{
         stream_id: stream_id,
         signal: signal
       }
 
-      {:ok, directive}
+      {:ok, %{}, directive}
     end
   end
 
@@ -146,10 +149,10 @@ defmodule Jido.Actions.Directives do
       ]
 
     @spec run(map(), map()) ::
-            {:ok, Jido.Agent.Directive.SubscribeDirective.t()} | {:error, term()}
+            {:ok, map(), Jido.Agent.Directive.SubscribeDirective.t()} | {:error, term()}
     def run(%{stream_id: stream_id}, _ctx) do
       directive = %Jido.Agent.Directive.SubscribeDirective{stream_id: stream_id}
-      {:ok, directive}
+      {:ok, %{}, directive}
     end
   end
 
@@ -163,10 +166,10 @@ defmodule Jido.Actions.Directives do
       ]
 
     @spec run(map(), map()) ::
-            {:ok, Jido.Agent.Directive.UnsubscribeDirective.t()} | {:error, term()}
+            {:ok, map(), Jido.Agent.Directive.UnsubscribeDirective.t()} | {:error, term()}
     def run(%{stream_id: stream_id}, _ctx) do
       directive = %Jido.Agent.Directive.UnsubscribeDirective{stream_id: stream_id}
-      {:ok, directive}
+      {:ok, %{}, directive}
     end
   end
 end

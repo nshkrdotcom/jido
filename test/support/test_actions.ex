@@ -625,7 +625,7 @@ defmodule JidoTest.TestActions do
         context: %{}
       }
 
-      {:ok, directive}
+      {:ok, %{}, directive}
     end
   end
 
@@ -643,7 +643,7 @@ defmodule JidoTest.TestActions do
         action_module: action_module
       }
 
-      {:ok, directive}
+      {:ok, %{}, directive}
     end
   end
 
@@ -657,11 +657,34 @@ defmodule JidoTest.TestActions do
       ]
 
     def run(%{action_module: action_module}, _context) do
-      directive = %Jido.Agent.Directive.DeregisterActionDirective{
-        action_module: action_module
+      # Prevent deregistering this module
+      if action_module == __MODULE__ do
+        {:error, :cannot_deregister_self}
+      else
+        directive = %Jido.Agent.Directive.DeregisterActionDirective{
+          action_module: action_module
+        }
+
+        {:ok, %{}, directive}
+      end
+    end
+  end
+
+  defmodule ErrorDirective do
+    @moduledoc false
+    use Action,
+      name: "error_directive",
+      description: "Raises an error",
+      schema: []
+
+    def run(%{action: action, params: params}, _context) do
+      directive = %Jido.Agent.Directive.EnqueueDirective{
+        action: action,
+        params: params,
+        context: %{}
       }
 
-      {:ok, directive}
+      {:error, Error.internal_server_error("Simulated error"), directive}
     end
   end
 

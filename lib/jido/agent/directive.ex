@@ -219,57 +219,32 @@ defmodule Jido.Agent.Directive do
   ## Returns
     - `{:ok, updated_agent}` - All directives were successfully applied
     - `{:error, reason}` - A directive failed to apply, with reason for failure
-
-  ## Examples
-
-      result = %Result{directives: [
-        %EnqueueDirective{action: :my_action, params: %{key: "value"}},
-        %RegisterActionDirective{action_module: MyAction}
-      ]}
-
-      {:ok, updated_agent} = Directive.apply_agent_directives(agent, result)
-
-  ## Behavior
-  - Applies directives in order, stopping on first error
-  - Maintains atomicity - all directives succeed or none are applied
-  - Logs debug info about directive application
   """
-  def apply_agent_directives(agent, %Result{directives: directives}, opts \\ []) do
+  @spec apply_directives(Agent.t(), Result.t(), keyword()) :: directive_result()
+  def apply_directives(agent, %Result{directives: directives}, opts \\ []) do
     dbug("Applying #{length(directives)} directives to agent #{agent.id}",
       agent_id: agent.id,
       directive_count: length(directives)
     )
 
-    {agent, _completed_instruction} =
+    # Remove current instruction from queue
+    {agent, _} =
       case :queue.out(agent.pending_instructions) do
-        {{:value, instruction}, remaining_queue} ->
-          {%{agent | pending_instructions: remaining_queue}, instruction}
-
-        {:empty, _} ->
-          {agent, nil}
+        {{:value, _}, remaining_queue} -> {%{agent | pending_instructions: remaining_queue}, nil}
+        {:empty, _} -> {agent, nil}
       end
 
-    # Now process the directives
+    # Process directives in order, stopping on first error
     Enum.reduce_while(directives, {:ok, agent}, fn directive, {:ok, current_agent} ->
-      case apply_agent_directive(current_agent, directive, opts) do
-        {:ok, updated_agent} ->
-          {:cont, {:ok, updated_agent}}
-
-        {:error, _reason} = error ->
-          dbug("Failed to apply directive",
-            agent: agent,
-            directive: directive,
-            reason: error
-          )
-
-          {:halt, error}
+      case apply_directive(current_agent, directive, opts) do
+        {:ok, updated_agent} -> {:cont, {:ok, updated_agent}}
+        {:error, _reason} = error -> {:halt, error}
       end
     end)
   end
 
   @doc """
-  Applies a single directive to an agent. Pattern matches on directive type
-  to execute the appropriate transformation.
+  Applies a single directive to an agent.
 
   ## Parameters
     - agent: The agent struct to apply the directive to
@@ -279,122 +254,173 @@ defmodule Jido.Agent.Directive do
   ## Returns
     - `{:ok, updated_agent}` - Directive was successfully applied
     - `{:error, reason}` - Failed to apply directive with reason
-
-  ## Directive Types
-
-  ### EnqueueDirective
-  Adds a new instruction to the agent's pending queue.
-
-  ### RegisterActionDirective
-  Registers a new action module with the agent.
-
-  ### DeregisterActionDirective
-  Removes an action module from the agent.
-
-  ### SpawnDirective
-  Spawns a child process under the agent's supervisor.
-
-  ### KillDirective
-  Terminates a child process.
-
-  ### PublishDirective
-  Broadcasts a message on a PubSub topic.
-
-  ### SubscribeDirective
-  Subscribes to a PubSub topic.
-
-  ### UnsubscribeDirective
-  Unsubscribes from a PubSub topic.
   """
-  @spec apply_agent_directive(Agent.t(), t(), keyword()) :: directive_result()
-  def apply_agent_directive(agent, %EnqueueDirective{} = directive, _opts) do
-    case validate_enqueue_directive(directive) do
+  @spec apply_directive(Agent.t(), t(), keyword()) :: directive_result()
+  def apply_directive(agent, %EnqueueDirective{} = directive, _opts) do
+    case validate_directive(directive) do
       :ok ->
         instruction = build_instruction(directive)
         new_queue = :queue.in(instruction, agent.pending_instructions)
-
-        dbug("Enqueued new instruction",
-          agent_id: agent.id,
-          action: directive.action
-        )
-
+        dbug("Enqueued new instruction", agent_id: agent.id, action: directive.action)
         {:ok, %{agent | pending_instructions: new_queue}}
 
-      {:error, _reason} = error ->
+      error ->
         error
     end
   end
 
-  def apply_agent_directive(agent, %RegisterActionDirective{} = directive, _opts) do
-    case validate_register_directive(directive) do
+  def apply_directive(agent, %RegisterActionDirective{} = directive, _opts) do
+    case validate_directive(directive) do
       :ok ->
-        dbug("Registering action module",
-          agent_id: agent.id,
-          module: directive.action_module
-        )
-
+        dbug("Registering action module", agent_id: agent.id, module: directive.action_module)
         Agent.register_action(agent, directive.action_module)
 
-      {:error, _reason} = error ->
+      error ->
         error
     end
   end
 
-  def apply_agent_directive(agent, %DeregisterActionDirective{} = directive, _opts) do
-    case validate_deregister_directive(directive) do
+  def apply_directive(agent, %DeregisterActionDirective{} = directive, _opts) do
+    case validate_directive(directive) do
       :ok ->
-        dbug("Deregistering action module",
-          agent_id: agent.id,
-          module: directive.action_module
-        )
-
+        dbug("Deregistering action module", agent_id: agent.id, module: directive.action_module)
         Agent.deregister_action(agent, directive.action_module)
 
-      {:error, _reason} = error ->
+      error ->
         error
     end
   end
 
-  @spec validate_syscall(t()) :: :ok | {:error, term()}
-  def validate_syscall(%SpawnDirective{module: nil}), do: {:error, :invalid_module}
-  def validate_syscall(%SpawnDirective{module: mod}) when is_atom(mod), do: :ok
+  def apply_directive(agent, %SpawnDirective{} = directive, _opts) do
+    case validate_directive(directive) do
+      :ok ->
+        dbug("Spawning child process", agent_id: agent.id, module: directive.module)
+        Agent.spawn_child(agent, directive.module, directive.args)
 
-  def validate_syscall(%KillDirective{pid: pid}) when is_pid(pid), do: :ok
-  def validate_syscall(%KillDirective{}), do: {:error, :invalid_pid}
+      error ->
+        error
+    end
+  end
 
-  def validate_syscall(%PublishDirective{stream_id: stream_id}) when is_binary(stream_id),
+  def apply_directive(agent, %KillDirective{} = directive, _opts) do
+    case validate_directive(directive) do
+      :ok ->
+        dbug("Killing child process", agent_id: agent.id, pid: directive.pid)
+        Agent.kill_child(agent, directive.pid)
+
+      error ->
+        error
+    end
+  end
+
+  def apply_directive(agent, %PublishDirective{} = directive, _opts) do
+    case validate_directive(directive) do
+      :ok ->
+        dbug("Publishing message", agent_id: agent.id, stream_id: directive.stream_id)
+        Agent.publish(agent, directive.stream_id, directive.signal)
+
+      error ->
+        error
+    end
+  end
+
+  def apply_directive(agent, %SubscribeDirective{} = directive, _opts) do
+    case validate_directive(directive) do
+      :ok ->
+        dbug("Subscribing to topic", agent_id: agent.id, stream_id: directive.stream_id)
+        Agent.subscribe(agent, directive.stream_id)
+
+      error ->
+        error
+    end
+  end
+
+  def apply_directive(agent, %UnsubscribeDirective{} = directive, _opts) do
+    case validate_directive(directive) do
+      :ok ->
+        dbug("Unsubscribing from topic", agent_id: agent.id, stream_id: directive.stream_id)
+        Agent.unsubscribe(agent, directive.stream_id)
+
+      error ->
+        error
+    end
+  end
+
+  # Private validation functions
+  @spec validate_directive(t()) :: :ok | {:error, term()}
+  defp validate_directive(%EnqueueDirective{action: nil}), do: {:error, :invalid_action}
+  defp validate_directive(%EnqueueDirective{action: action}) when is_atom(action), do: :ok
+
+  defp validate_directive(%RegisterActionDirective{action_module: nil}),
+    do: {:error, :invalid_action_module}
+
+  defp validate_directive(%RegisterActionDirective{action_module: module}) when is_atom(module),
     do: :ok
 
-  def validate_syscall(%PublishDirective{}), do: {:error, :invalid_stream_id}
-
-  def validate_syscall(%SubscribeDirective{stream_id: stream_id}) when is_binary(stream_id),
+  defp validate_directive(%DeregisterActionDirective{action_module: module}) when is_atom(module),
     do: :ok
 
-  def validate_syscall(%SubscribeDirective{}), do: {:error, :invalid_stream_id}
+  defp validate_directive(%SpawnDirective{module: nil}), do: {:error, :invalid_module}
+  defp validate_directive(%SpawnDirective{module: mod}) when is_atom(mod), do: :ok
 
-  def validate_syscall(%UnsubscribeDirective{stream_id: stream_id}) when is_binary(stream_id),
+  defp validate_directive(%KillDirective{pid: pid}) when is_pid(pid), do: :ok
+
+  defp validate_directive(%PublishDirective{stream_id: stream_id}) when is_binary(stream_id),
     do: :ok
 
-  def validate_syscall(%UnsubscribeDirective{}), do: {:error, :invalid_stream_id}
+  defp validate_directive(%SubscribeDirective{stream_id: stream_id}) when is_binary(stream_id),
+    do: :ok
 
-  def validate_syscall(_), do: {:error, :invalid_syscall}
-  defp validate_enqueue_directive(%EnqueueDirective{action: nil}), do: {:error, :invalid_action}
-  defp validate_enqueue_directive(%EnqueueDirective{action: action}) when is_atom(action), do: :ok
-  defp validate_enqueue_directive(_), do: {:error, :invalid_action}
+  defp validate_directive(%UnsubscribeDirective{stream_id: stream_id}) when is_binary(stream_id),
+    do: :ok
 
-  defp validate_register_directive(%RegisterActionDirective{action_module: module})
-       when is_atom(module),
-       do: :ok
-
-  defp validate_register_directive(_), do: {:error, :invalid_action_module}
-
-  defp validate_deregister_directive(%DeregisterActionDirective{action_module: module})
-       when is_atom(module),
-       do: :ok
-
-  defp validate_deregister_directive(_), do: {:error, :invalid_action_module}
+  defp validate_directive(%EnqueueDirective{}), do: {:error, :invalid_action}
+  defp validate_directive(%RegisterActionDirective{}), do: {:error, :invalid_action_module}
+  defp validate_directive(%DeregisterActionDirective{}), do: {:error, :invalid_action_module}
+  defp validate_directive(%SpawnDirective{}), do: {:error, :invalid_module}
+  defp validate_directive(%KillDirective{}), do: {:error, :invalid_pid}
+  defp validate_directive(%PublishDirective{}), do: {:error, :invalid_stream_id}
+  defp validate_directive(%SubscribeDirective{}), do: {:error, :invalid_stream_id}
+  defp validate_directive(%UnsubscribeDirective{}), do: {:error, :invalid_stream_id}
+  defp validate_directive(_), do: {:error, :invalid_directive}
 
   defp build_instruction(%EnqueueDirective{action: action, params: params, context: context}) do
     %Instruction{action: action, params: params, context: context}
   end
+
+  @doc """
+  Validates a single directive or list of directives.
+
+  ## Parameters
+    - directives: A single directive struct or list of directive structs to validate
+
+  ## Returns
+    - `:ok` if all directives are valid
+    - `{:error, reason}` if any directive is invalid
+
+  ## Examples
+
+      iex> validate_directives(%EnqueueDirective{action: :test})
+      :ok
+
+      iex> validate_directives([
+      ...>   %EnqueueDirective{action: :test},
+      ...>   %RegisterActionDirective{action_module: MyModule}
+      ...> ])
+      :ok
+
+      iex> validate_directives(%EnqueueDirective{action: nil})
+      {:error, :invalid_action}
+  """
+  @spec validate_directives(t() | [t()]) :: :ok | {:error, term()}
+  def validate_directives(directives) when is_list(directives) do
+    Enum.reduce_while(directives, :ok, fn directive, :ok ->
+      case validate_directive(directive) do
+        :ok -> {:cont, :ok}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  def validate_directives(directive), do: validate_directive(directive)
 end

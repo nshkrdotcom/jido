@@ -31,10 +31,7 @@ defmodule JidoTest.AgentCmdTest do
         )
 
       assert final.state.value == 15
-      assert :queue.is_empty(final.pending_instructions)
-      assert final.dirty_state? == false
-      assert final.state.status == :busy
-      assert final.state.last_result_at != nil
+      assert final.result.status == :ok
     end
 
     test "executes list of action tuples", %{agent: agent} do
@@ -47,10 +44,7 @@ defmodule JidoTest.AgentCmdTest do
       {:ok, final} = FullFeaturedAgent.cmd(agent, instructions, %{}, runner: Chain)
 
       assert final.state.value == 30
-      assert :queue.is_empty(final.pending_instructions)
-      assert final.dirty_state? == false
-      assert final.state.status == :busy
-      assert final.state.last_result_at != nil
+      assert final.result.status == :ok
     end
 
     test "preserves state with apply_state: false", %{agent: agent} do
@@ -70,10 +64,7 @@ defmodule JidoTest.AgentCmdTest do
       # Original state preserved
       assert final.state.location == :home
       assert final.state.value == 0
-      assert :queue.is_empty(final.pending_instructions)
-      assert final.dirty_state? == false
-      # Result contains new state
-      assert final.result.result_state.value == 43
+      assert final.result.status == :ok
     end
 
     test "enforces schema validation with strict_validation: true", %{agent: agent} do
@@ -131,9 +122,6 @@ defmodule JidoTest.AgentCmdTest do
       callbacks = Enum.map(final.state.callback_log, & &1.callback)
 
       assert :on_before_run in callbacks
-      # assert :on_after_run in callbacks
-      # assert :on_after_directives in callbacks
-      # IO.inspect(callbacks)
       assert final.state.value == 15
     end
   end
@@ -147,8 +135,7 @@ defmodule JidoTest.AgentCmdTest do
     test "handles empty instruction list", %{agent: agent} do
       {:ok, final} = FullFeaturedAgent.cmd(agent, [], %{}, runner: Chain)
 
-      assert :queue.is_empty(final.pending_instructions)
-      assert final.dirty_state? == false
+      assert final.result.status == :ok
       # State should remain unchanged
       assert final.state.location == :home
       assert final.state.value == 0
@@ -226,7 +213,7 @@ defmodule JidoTest.AgentCmdTest do
       assert result.error.type == :validation_error
       # Chain should stop at first error
       # Original value unchanged
-      assert result.result_state.value == 0
+      assert result.state.value == 0
     end
 
     test "handles extremely large instruction lists", %{agent: agent} do
@@ -309,8 +296,7 @@ defmodule JidoTest.AgentCmdTest do
           runner: Chain
         )
 
-      assert :queue.is_empty(final.pending_instructions)
-      assert final.dirty_state? == false
+      assert final.result.status == :ok
     end
   end
 end

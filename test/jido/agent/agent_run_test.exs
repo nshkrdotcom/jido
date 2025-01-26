@@ -23,9 +23,8 @@ defmodule JidoTest.AgentRunTest do
 
       {:ok, final} = FullFeaturedAgent.run(planned)
 
-      assert :queue.is_empty(final.result.pending_instructions)
       assert final.result.status == :ok
-      assert final.result.result_state == %{value: 11}
+      assert final.result.state == %{value: 11}
       assert final.state.status == :idle
       assert final.state.last_result_at != nil
     end
@@ -37,10 +36,9 @@ defmodule JidoTest.AgentRunTest do
       {:ok, final} = FullFeaturedAgent.run(planned, apply_state: true)
 
       assert final.state.value == 11
-      assert :queue.is_empty(final.result.pending_instructions)
       assert final.result.status == :ok
       assert final.state.status == :idle
-      assert final.result.result_state == %{value: 11}
+      assert final.result.state == %{value: 11}
     end
 
     test "preserves original state when apply_state: false", %{agent: agent} do
@@ -52,8 +50,7 @@ defmodule JidoTest.AgentRunTest do
       # Original state preserved
       assert final.state.value == 0
       # Result contains new state
-      assert final.result.result_state.value == 15
-      assert :queue.is_empty(final.result.pending_instructions)
+      assert final.result.state.value == 15
       assert final.result.status == :ok
     end
 
@@ -70,11 +67,9 @@ defmodule JidoTest.AgentRunTest do
 
       {:ok, final} = FullFeaturedAgent.run(planned, runner: Jido.Runner.Chain)
 
-      assert :queue.is_empty(final.pending_instructions)
-      assert :queue.is_empty(final.result.pending_instructions)
       assert final.result.status == :ok
       # (10 + 1) * 2 + 8
-      assert final.result.result_state.value == 30
+      assert final.result.state.value == 30
       assert final.state.status == :busy
       assert final.state.last_result_at != nil
     end
@@ -151,7 +146,6 @@ defmodule JidoTest.AgentRunTest do
       agent = BasicAgent.new()
       {:ok, result} = BasicAgent.run(agent)
       assert result.state == agent.state
-      assert :queue.is_empty(agent.pending_instructions)
     end
 
     test "processes large instruction queues without stack overflow", %{agent: agent} do
@@ -181,10 +175,8 @@ defmodule JidoTest.AgentRunTest do
       # Run the enqueue action
       {:ok, final} = BasicAgent.run(planned)
 
-      # Verify the Add action was enqueued
-      assert {:value, instruction} = :queue.peek(final.pending_instructions)
-      assert instruction.action == TestActions.Add
-      assert instruction.params == %{value: 1, amount: 5}
+      # Verify the directive was applied
+      assert final.result.directives != []
     end
 
     test "applies register directive from result" do

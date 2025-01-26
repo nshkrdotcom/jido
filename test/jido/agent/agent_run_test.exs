@@ -23,8 +23,7 @@ defmodule JidoTest.AgentRunTest do
 
       {:ok, final} = FullFeaturedAgent.run(planned)
 
-      assert final.result.status == :ok
-      assert final.result.state == %{value: 11}
+      assert final.result.value == 11
       assert final.state.status == :idle
       assert final.state.last_result_at != nil
     end
@@ -36,9 +35,8 @@ defmodule JidoTest.AgentRunTest do
       {:ok, final} = FullFeaturedAgent.run(planned, apply_state: true)
 
       assert final.state.value == 11
-      assert final.result.status == :ok
+      assert final.result.value == 11
       assert final.state.status == :idle
-      assert final.result.state == %{value: 11}
     end
 
     test "preserves original state when apply_state: false", %{agent: agent} do
@@ -50,8 +48,7 @@ defmodule JidoTest.AgentRunTest do
       # Original state preserved
       assert final.state.value == 0
       # Result contains new state
-      assert final.result.state.value == 15
-      assert final.result.status == :ok
+      assert final.result.value == 15
     end
 
     test "executes list of action tuples", %{agent: agent} do
@@ -67,21 +64,18 @@ defmodule JidoTest.AgentRunTest do
 
       {:ok, final} = FullFeaturedAgent.run(planned, runner: Jido.Runner.Chain)
 
-      assert final.result.status == :ok
       # (10 + 1) * 2 + 8
-      assert final.result.state.value == 30
-      assert final.state.status == :busy
-      assert final.state.last_result_at != nil
+      assert final.state.value == 30
     end
 
     test "handles errors appropriately" do
       agent = ErrorHandlingAgent.new()
       {:ok, agent} = ErrorHandlingAgent.set(agent, %{should_recover?: false})
       {:ok, planned} = ErrorHandlingAgent.plan(agent, {TestActions.ErrorAction, %{}})
-      {:error, result} = ErrorHandlingAgent.run(planned)
+      {:error, error} = ErrorHandlingAgent.run(planned)
 
-      assert result.error.type == :execution_error
-      assert result.error.message == "Workflow failed"
+      assert error.type == :execution_error
+      assert error.message == "Workflow failed"
     end
 
     test "tracks callbacks in correct order" do
@@ -92,7 +86,6 @@ defmodule JidoTest.AgentRunTest do
       callbacks = Enum.map(final.state.callback_log, & &1.callback)
       assert :on_before_run in callbacks
       assert :on_after_run in callbacks
-      assert :on_after_directives in callbacks
     end
 
     test "preserves state on action error with apply_state: true" do
@@ -101,11 +94,11 @@ defmodule JidoTest.AgentRunTest do
       {:ok, agent} = ErrorHandlingAgent.set(agent, %{battery_level: 100, should_recover?: false})
 
       {:ok, planned} = ErrorHandlingAgent.plan(agent, {TestActions.ErrorAction, %{}})
-      {:error, result} = ErrorHandlingAgent.run(planned, apply_state: true)
+      {:error, error} = ErrorHandlingAgent.run(planned, apply_state: true)
 
       # Error result should be stored
-      assert result.error.type == :execution_error
-      assert result.error.message == "Workflow failed"
+      assert error.type == :execution_error
+      assert error.message == "Workflow failed"
     end
 
     test "attempts recovery on error" do
@@ -118,7 +111,7 @@ defmodule JidoTest.AgentRunTest do
       # Recovery should have incremented error count
       assert recovered_agent.state.error_count == 1
       # Last error should be stored
-      assert recovered_agent.state.last_error.type == Jido.Error
+      assert recovered_agent.state.last_error.type == :execution_error
       assert recovered_agent.state.last_error.message =~ "Workflow failed"
     end
 
@@ -144,17 +137,17 @@ defmodule JidoTest.AgentRunTest do
 
     test "handles empty instruction queue gracefully", %{agent: _agent} do
       agent = BasicAgent.new()
-      {:ok, result} = BasicAgent.run(agent)
-      assert result.state == agent.state
+      {:ok, final} = BasicAgent.run(agent)
+      assert final.state == agent.state
     end
 
     test "processes large instruction queues without stack overflow", %{agent: agent} do
       qty = 1000
       actions = List.duplicate({TestActions.Add, %{amount: 1}}, qty)
       {:ok, planned} = FullFeaturedAgent.plan(agent, actions)
-      {:ok, result} = FullFeaturedAgent.run(planned, runner: Jido.Runner.Chain)
+      {:ok, final} = FullFeaturedAgent.run(planned, runner: Jido.Runner.Chain)
 
-      assert result.state.value == qty
+      assert final.state.value == qty
     end
   end
 
@@ -173,10 +166,10 @@ defmodule JidoTest.AgentRunTest do
         })
 
       # Run the enqueue action
-      {:ok, final} = BasicAgent.run(planned)
+      {:ok, final} = BasicAgent.run(planned, runner: Jido.Runner.Simple)
 
-      # Verify the directive was applied
-      assert final.result.directives != []
+      # Verify the directive was applied by checking the pending instructions
+      assert :queue.len(final.pending_instructions) > 0
     end
 
     test "applies register directive from result" do

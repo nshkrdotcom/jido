@@ -146,11 +146,7 @@ defmodule JidoTest.TestAgents do
       new_state =
         agent.state
         |> Map.update!(:error_count, &(&1 + 1))
-        |> Map.put(:last_error, %{
-          type: result.error.__struct__,
-          message: result.error.message,
-          timestamp: DateTime.utc_now()
-        })
+        |> Map.put(:last_error, result)
 
       {:ok, %{agent | state: new_state}}
     end
@@ -231,11 +227,6 @@ defmodule JidoTest.TestAgents do
     @impl true
     def on_after_run(agent, _result) do
       {:ok, track_callback(agent, :on_after_run)}
-    end
-
-    @impl true
-    def on_after_directives(agent, _result) do
-      {:ok, track_callback(agent, :on_after_directives)}
     end
 
     @impl true

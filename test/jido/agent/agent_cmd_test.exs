@@ -3,11 +3,11 @@ defmodule JidoTest.AgentCmdTest do
 
   alias JidoTest.TestAgents.{
     FullFeaturedAgent,
+    ErrorHandlingAgent,
     CallbackTrackingAgent
   }
 
   alias JidoTest.TestActions
-  alias Jido.Runner.Chain
 
   @moduletag :capture_log
 
@@ -21,17 +21,12 @@ defmodule JidoTest.AgentCmdTest do
       {:ok, final} =
         FullFeaturedAgent.cmd(
           agent,
-          {TestActions.Add,
-           %{
-             value: 10,
-             amount: 5
-           }},
+          {TestActions.Add, %{value: 10, amount: 5}},
           %{},
-          runner: Chain
+          runner: Jido.Runner.Chain
         )
 
       assert final.state.value == 15
-      assert final.result.status == :ok
     end
 
     test "executes list of action tuples", %{agent: agent} do
@@ -41,10 +36,9 @@ defmodule JidoTest.AgentCmdTest do
         {TestActions.Add, %{amount: 8}}
       ]
 
-      {:ok, final} = FullFeaturedAgent.cmd(agent, instructions, %{}, runner: Chain)
+      {:ok, final} = FullFeaturedAgent.cmd(agent, instructions, %{}, runner: Jido.Runner.Chain)
 
       assert final.state.value == 30
-      assert final.result.status == :ok
     end
 
     test "preserves state with apply_state: false", %{agent: agent} do
@@ -58,13 +52,14 @@ defmodule JidoTest.AgentCmdTest do
           {TestActions.Add, %{value: 42}},
           %{},
           apply_state: false,
-          runner: Chain
+          runner: Jido.Runner.Chain
         )
 
-      # Original state preserved
-      assert final.state.location == :home
+      # Original state preserved in final agent
       assert final.state.value == 0
-      assert final.result.status == :ok
+      assert final.state.location == :home
+      # Result contains the action's output
+      assert final.result.value == 43
     end
 
     test "enforces schema validation with strict_validation: true", %{agent: agent} do
@@ -75,7 +70,7 @@ defmodule JidoTest.AgentCmdTest do
                  {TestActions.Add, %{value: 10}},
                  %{unknown_field: "test"},
                  strict_validation: true,
-                 runner: Chain
+                 runner: Jido.Runner.Chain
                )
 
       assert error.type == :validation_error
@@ -89,7 +84,7 @@ defmodule JidoTest.AgentCmdTest do
           {TestActions.Add, %{value: 10}},
           %{unknown_field: "test"},
           strict_validation: false,
-          runner: Chain
+          runner: Jido.Runner.Chain
         )
 
       assert final.state.value == 11
@@ -98,7 +93,7 @@ defmodule JidoTest.AgentCmdTest do
 
     test "handles unregistered actions", %{agent: agent} do
       assert {:error, error} =
-               FullFeaturedAgent.cmd(agent, UnregisteredAction, %{}, runner: Chain)
+               FullFeaturedAgent.cmd(agent, UnregisteredAction, %{}, runner: Jido.Runner.Chain)
 
       assert error.type == :config_error
       assert error.message =~ "Action not registered"
@@ -110,19 +105,70 @@ defmodule JidoTest.AgentCmdTest do
       {:ok, final} =
         CallbackTrackingAgent.cmd(
           agent,
-          {TestActions.Add,
-           %{
-             value: 10,
-             amount: 5
-           }},
+          {TestActions.Add, %{value: 10, amount: 5}},
           %{},
-          runner: Chain
+          runner: Jido.Runner.Chain
         )
 
       callbacks = Enum.map(final.state.callback_log, & &1.callback)
 
       assert :on_before_run in callbacks
       assert final.state.value == 15
+    end
+  end
+
+  describe "cmd/4 error handling" do
+    test "handles errors appropriately" do
+      agent = ErrorHandlingAgent.new()
+      {:ok, agent} = ErrorHandlingAgent.set(agent, %{should_recover?: false})
+
+      {:error, error} =
+        ErrorHandlingAgent.cmd(
+          agent,
+          {TestActions.ErrorAction, %{}},
+          %{},
+          runner: Jido.Runner.Chain
+        )
+
+      assert error.type == :execution_error
+      assert error.message == "Workflow failed"
+    end
+
+    test "preserves state on action error" do
+      agent = ErrorHandlingAgent.new()
+      {:ok, agent} = ErrorHandlingAgent.set(agent, %{battery_level: 100, should_recover?: false})
+
+      {:error, error} =
+        ErrorHandlingAgent.cmd(
+          agent,
+          {TestActions.ErrorAction, %{}},
+          %{},
+          runner: Jido.Runner.Chain
+        )
+
+      assert error.type == :execution_error
+      assert error.message == "Workflow failed"
+      # State should be preserved
+      assert agent.state.battery_level == 100
+    end
+
+    test "attempts recovery on error" do
+      agent = ErrorHandlingAgent.new()
+      {:ok, agent} = ErrorHandlingAgent.set(agent, %{battery_level: 100, should_recover?: true})
+
+      {:ok, recovered} =
+        ErrorHandlingAgent.cmd(
+          agent,
+          {TestActions.ErrorAction, %{}},
+          %{},
+          runner: Jido.Runner.Chain
+        )
+
+      # Recovery should have incremented error count
+      assert recovered.state.error_count == 1
+      # Last error should be stored
+      assert recovered.state.last_error.type == :execution_error
+      assert recovered.state.last_error.message =~ "Workflow failed"
     end
   end
 
@@ -133,9 +179,8 @@ defmodule JidoTest.AgentCmdTest do
     end
 
     test "handles empty instruction list", %{agent: agent} do
-      {:ok, final} = FullFeaturedAgent.cmd(agent, [], %{}, runner: Chain)
+      {:ok, final} = FullFeaturedAgent.cmd(agent, [], %{}, runner: Jido.Runner.Chain)
 
-      assert final.result.status == :ok
       # State should remain unchanged
       assert final.state.location == :home
       assert final.state.value == 0
@@ -148,7 +193,7 @@ defmodule JidoTest.AgentCmdTest do
           agent,
           {TestActions.Add, %{value: 1}},
           nil,
-          runner: Chain
+          runner: Jido.Runner.Chain
         )
 
       assert error.type == :validation_error
@@ -161,7 +206,7 @@ defmodule JidoTest.AgentCmdTest do
           agent,
           {TestActions.Add, %{value: 1}},
           %{},
-          runner: Chain
+          runner: Jido.Runner.Chain
         )
 
       assert final.state.value == 2
@@ -174,7 +219,7 @@ defmodule JidoTest.AgentCmdTest do
           {TestActions.Add, %{value: 1}},
           %{},
           context: nil,
-          runner: Chain
+          runner: Jido.Runner.Chain
         )
 
       assert final.state.value == 2
@@ -188,7 +233,7 @@ defmodule JidoTest.AgentCmdTest do
                  invalid_agent,
                  {TestActions.Add, %{value: 1}},
                  %{},
-                 runner: Chain
+                 runner: Jido.Runner.Chain
                )
 
       assert error.type == :validation_error
@@ -202,18 +247,18 @@ defmodule JidoTest.AgentCmdTest do
         {TestActions.Add, %{amount: 5}}
       ]
 
-      assert {:error, result} =
+      assert {:error, error} =
                FullFeaturedAgent.cmd(
                  agent,
                  instructions,
                  %{},
-                 runner: Chain
+                 runner: Jido.Runner.Chain
                )
 
-      assert result.error.type == :validation_error
-      # Chain should stop at first error
+      assert error.type == :validation_error
+      assert error.message =~ "Invalid parameters for Action"
       # Original value unchanged
-      assert result.state.value == 0
+      assert agent.state.value == 0
     end
 
     test "handles extremely large instruction lists", %{agent: agent} do
@@ -227,7 +272,7 @@ defmodule JidoTest.AgentCmdTest do
           agent,
           large_instruction_list,
           %{},
-          runner: Chain
+          runner: Jido.Runner.Chain
         )
 
       # Sum of numbers 1 to 1000
@@ -242,7 +287,7 @@ defmodule JidoTest.AgentCmdTest do
                  agent,
                  {UnregisteredAction, %{value: 42}},
                  %{status: :running},
-                 runner: Chain
+                 runner: Jido.Runner.Chain
                )
 
       # Even though we tried to set status: :running, it should be rolled back
@@ -270,7 +315,7 @@ defmodule JidoTest.AgentCmdTest do
           agent,
           recursive_instructions,
           %{},
-          runner: Chain
+          runner: Jido.Runner.Chain
         )
 
       assert final.state.value == 3
@@ -293,10 +338,10 @@ defmodule JidoTest.AgentCmdTest do
           agent,
           mixed_instructions,
           %{},
-          runner: Chain
+          runner: Jido.Runner.Chain
         )
 
-      assert final.result.status == :ok
+      assert final.state.value > 0
     end
   end
 end

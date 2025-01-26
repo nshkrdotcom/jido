@@ -214,7 +214,7 @@ defmodule Jido.Skills.Arithmetic do
     }
   end
 
-  def handle_result(%Result{status: :ok} = result, path) do
+  def handle_result({:ok, result}, path) do
     operation = path |> String.split(".") |> List.last() |> String.to_atom()
 
     [
@@ -222,12 +222,12 @@ defmodule Jido.Skills.Arithmetic do
         id: UUID.uuid4(),
         source: "replace_agent_id",
         type: "arithmetic.result",
-        data: Map.merge(result.result_state, %{operation: operation})
+        data: Map.merge(result, %{operation: operation})
       }
     ]
   end
 
-  def handle_result(%Result{status: :error} = result, path) do
+  def handle_result({:error, error}, path) do
     operation = path |> String.split(".") |> List.last() |> String.to_atom()
 
     [
@@ -236,7 +236,7 @@ defmodule Jido.Skills.Arithmetic do
         source: "replace_agent_id",
         type: "arithmetic.error",
         data: %{
-          error: result.error,
+          error: error,
           operation: operation
         }
       }

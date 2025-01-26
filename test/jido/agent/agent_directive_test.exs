@@ -5,12 +5,6 @@ defmodule JidoTest.AgentDirectiveTest do
   alias JidoTest.TestAgents.BasicAgent
   alias Jido.Runner.Chain
 
-  alias Jido.Agent.Directive.{
-    EnqueueDirective,
-    RegisterActionDirective,
-    DeregisterActionDirective
-  }
-
   alias JidoTest.TestActions.{
     BasicAction,
     NoSchema,
@@ -41,17 +35,10 @@ defmodule JidoTest.AgentDirectiveTest do
           runner: Jido.Runner.Simple
         )
 
-      # Verify enqueued action
+      # Verify action was enqueued
       assert {:value, instruction} = :queue.peek(final.pending_instructions)
       assert instruction.action == BasicAction
       assert instruction.params == %{value: 42}
-
-      # Verify directive result format
-      assert %{result: result} = final
-      assert %{directives: [%EnqueueDirective{} = directive]} = result
-      assert directive.action == BasicAction
-      assert directive.params == %{value: 42}
-      assert is_map(directive.context)
     end
 
     test "maintains queue order with multiple enqueues", %{agent: agent} do
@@ -66,19 +53,8 @@ defmodule JidoTest.AgentDirectiveTest do
       {{:value, first}, queue} = :queue.out(final.pending_instructions)
       {{:value, second}, _} = :queue.out(queue)
 
-      # assert first.params.id == 1
-      # assert second.params.id == 2
-
-      # Verify directives
-      assert %{result: result} = final
-      assert %{directives: directives} = result
-      assert length(directives) == 2
-      [first_directive, second_directive] = directives
-
-      assert %EnqueueDirective{} = first_directive
-      assert first_directive.params.id == 1
-      assert %EnqueueDirective{} = second_directive
-      assert second_directive.params.id == 2
+      assert first.params.id == 1
+      assert second.params.id == 2
     end
   end
 
@@ -100,15 +76,10 @@ defmodule JidoTest.AgentDirectiveTest do
 
       {:ok, final} = BasicAgent.run(planned)
 
-      # Verify registered actions
+      # Verify action was registered
       assert BasicAction in final.actions
       assert RegisterAction in final.actions
       assert length(final.actions) == 2
-
-      # Verify directive result
-      assert %{result: result} = final
-      assert %{directives: [%RegisterActionDirective{} = directive]} = result
-      assert directive.action_module == BasicAction
     end
 
     test "registers multiple action modules", %{agent: agent} do
@@ -119,22 +90,11 @@ defmodule JidoTest.AgentDirectiveTest do
 
       {:ok, final} = BasicAgent.cmd(agent, instructions, %{}, runner: Chain)
 
-      # Verify registered actions
+      # Verify actions were registered
       assert BasicAction in final.actions
       assert NoSchema in final.actions
       assert RegisterAction in final.actions
       assert length(final.actions) == 3
-
-      # Verify directives
-      assert %{result: result} = final
-      assert %{directives: directives} = result
-      assert length(directives) == 2
-
-      [first_directive, second_directive] = directives
-      assert %RegisterActionDirective{} = first_directive
-      assert first_directive.action_module == BasicAction
-      assert %RegisterActionDirective{} = second_directive
-      assert second_directive.action_module == NoSchema
     end
 
     test "idempotent registration of same module", %{agent: agent} do
@@ -145,21 +105,11 @@ defmodule JidoTest.AgentDirectiveTest do
 
       {:ok, final} = BasicAgent.cmd(agent, instructions, %{}, runner: Chain)
 
-      # Verify registered actions
+      # Verify action was registered only once
       assert length(final.actions) == 2
       assert BasicAction in final.actions
       assert RegisterAction in final.actions
       refute NoSchema in final.actions
-
-      # Verify directives
-      assert %{result: result} = final
-      assert %{directives: directives} = result
-      assert length(directives) == 2
-
-      Enum.each(directives, fn directive ->
-        assert %RegisterActionDirective{} = directive
-        assert directive.action_module == BasicAction
-      end)
     end
   end
 
@@ -180,11 +130,6 @@ defmodule JidoTest.AgentDirectiveTest do
 
       # Verify action was deregistered
       refute BasicAction in final.actions
-
-      # Verify directive
-      assert %{result: result} = final
-      assert %{directives: [%DeregisterActionDirective{} = directive]} = result
-      assert directive.action_module == BasicAction
     end
 
     test "safely handles deregistering non-existent module", %{agent: agent} do
@@ -198,15 +143,10 @@ defmodule JidoTest.AgentDirectiveTest do
 
       # Verify actions unchanged
       assert final.actions == agent.actions
-
-      # Verify directive
-      assert %{result: result} = final
-      assert %{directives: [%DeregisterActionDirective{} = directive]} = result
-      assert directive.action_module == UnknownModule
     end
 
     test "prevents deregistering self", %{agent: agent} do
-      {:error, %Jido.Runner.Result{error: error}} =
+      {:error, error} =
         BasicAgent.cmd(
           agent,
           {DeregisterAction, %{action_module: DeregisterAction}},

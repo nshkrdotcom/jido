@@ -91,7 +91,6 @@ defmodule Jido.Agent do
   * `on_before_plan/3`           - Pre-planning processing with params
   * `on_before_run/1`            - Pre-execution validation/setup
   * `on_after_run/2`             - Post-execution processing
-  * `on_after_directives/2`      - Post-directive application
   * `on_error/2`                 - Error handling and recovery
 
   Default implementations pass through the agent unchanged.
@@ -411,7 +410,7 @@ defmodule Jido.Agent do
               * Must be unique within your system
               * Should be URL-safe
               * Should not exceed 255 characters
-              * Is used as-is without validation
+              * Is used-as-is without validation
             * `initial_state` - Optional map of initial state values to merge with defaults
 
           ## Returns
@@ -847,9 +846,7 @@ defmodule Jido.Agent do
           1. Pre-execution callback (`on_before_run/1`)
           2. Runner execution of pending instructions
           3. Post-execution callback (`on_after_run/2`)
-          4. Apply directives
-          5. Post-directive callback (`on_after_directives/2`)
-          6. Return agent with updated state and result
+          4. Return agent with updated state and result
 
           ## Parameters
           * `agent` - The agent struct containing pending instructions
@@ -907,7 +904,6 @@ defmodule Jido.Agent do
           ## Callbacks
           * `on_before_run/1` - Pre-execution preparation
           * `on_after_run/2` - Post-execution processing
-          * `on_after_directives/2` - Final state adjustments
 
           See `Jido.Runner` for implementing custom runners and `plan/2` for queueing actions.
           """
@@ -928,12 +924,8 @@ defmodule Jido.Agent do
 
             with {:ok, validated_runner} <- Jido.Util.validate_runner(runner),
                  {:ok, agent} <- on_before_run(agent),
-                 {:ok, result} <- validated_runner.run(agent, opts),
-                 {:ok, agent} <- on_after_run(agent, result),
-                 {:ok, agent} <- handle_directives(agent, result, opts),
-                 {:ok, agent} <- on_after_directives(agent, result),
-                 {:ok, agent} <- reset(agent),
-                 {:ok, agent} <- maybe_apply_state(agent, result, apply_state) do
+                 {:ok, agent} <- validated_runner.run(agent, opts),
+                 {:ok, agent} <- on_after_run(agent, agent.result) do
               OK.success(agent)
             else
               {:error, reason} = error ->
@@ -947,49 +939,6 @@ defmodule Jido.Agent do
               "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
             )
             |> OK.failure()
-          end
-
-          defp apply_result_instructions(agent, result) do
-            OK.success(%{agent | pending_instructions: result.pending_instructions})
-          end
-
-          def handle_directives(agent, result, opts \\ []) do
-            dbug("Handling directives", agent_id: agent.id)
-
-            case result do
-              %Result{directives: []} ->
-                {:ok, agent}
-
-              %Result{directives: directives} when is_list(directives) ->
-                dbug("Applying #{length(directives)} directives", agent_id: agent.id)
-
-                case Directive.apply_directives(agent, result, opts) do
-                  {:ok, updated_agent} ->
-                    {:ok, updated_agent}
-
-                  {:error, reason} = error ->
-                    dbug("Failed to apply directives",
-                      agent_id: agent.id,
-                      reason: reason
-                    )
-
-                    error
-                end
-            end
-          end
-
-          defp maybe_apply_state(agent, result, true) do
-            agent = %{
-              agent
-              | state: DeepMerge.deep_merge(agent.state, result.state),
-                result: result
-            }
-
-            OK.success(agent)
-          end
-
-          defp maybe_apply_state(agent, result, false) do
-            OK.success(%{agent | result: result})
           end
 
           @doc """
@@ -1151,9 +1100,6 @@ defmodule Jido.Agent do
           @spec on_after_run(t(), map()) :: agent_result()
           def on_after_run(agent, _result), do: OK.success(agent)
 
-          @spec on_after_directives(t(), map()) :: agent_result()
-          def on_after_directives(agent, _result), do: OK.success(agent)
-
           @spec on_error(t(), any()) :: agent_result()
           def on_error(agent, reason), do: OK.failure(reason)
 
@@ -1173,7 +1119,6 @@ defmodule Jido.Agent do
                          on_before_plan: 3,
                          on_before_run: 1,
                          on_after_run: 2,
-                         on_after_directives: 2,
                          on_error: 2
 
         {:error, error} ->
@@ -1222,7 +1167,6 @@ defmodule Jido.Agent do
   Called after successful directive application.
   Allows post-processing of directive results.
   """
-  @callback on_after_directives(agent :: t(), result :: map()) :: agent_result()
 
   @doc """
   Called when any error occurs during the agent lifecycle.
@@ -1252,7 +1196,6 @@ defmodule Jido.Agent do
     on_before_plan: 3,
     on_before_run: 1,
     on_after_run: 2,
-    on_after_directives: 2,
     on_error: 2
   ]
 

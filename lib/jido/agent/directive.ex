@@ -99,7 +99,6 @@ defmodule Jido.Agent.Directive do
   use ExDbug, enabled: false
   use TypedStruct
   alias Jido.Agent
-  alias Jido.Runner.Result
   alias Jido.Instruction
 
   typedstruct module: EnqueueDirective do
@@ -213,26 +212,25 @@ defmodule Jido.Agent.Directive do
 
   ## Parameters
     - agent: The agent struct to apply directives to
-    - result: A Result struct containing the list of directives to apply
+    - directives: A single directive or list of directives to apply
     - opts: Optional keyword list of options (default: [])
 
   ## Returns
     - `{:ok, updated_agent}` - All directives were successfully applied
     - `{:error, reason}` - A directive failed to apply, with reason for failure
   """
-  @spec apply_directives(Agent.t(), Result.t(), keyword()) :: directive_result()
-  def apply_directives(agent, %Result{directives: directives}, opts \\ []) do
+  @spec apply_directives(Agent.t(), t() | [t()], keyword()) :: directive_result()
+  def apply_directives(agent, directives, opts \\ [])
+
+  def apply_directives(agent, directive, opts) when not is_list(directive) do
+    apply_directives(agent, [directive], opts)
+  end
+
+  def apply_directives(agent, directives, opts) when is_list(directives) do
     dbug("Applying #{length(directives)} directives to agent #{agent.id}",
       agent_id: agent.id,
       directive_count: length(directives)
     )
-
-    # Remove current instruction from queue
-    {agent, _} =
-      case :queue.out(agent.pending_instructions) do
-        {{:value, _}, remaining_queue} -> {%{agent | pending_instructions: remaining_queue}, nil}
-        {:empty, _} -> {agent, nil}
-      end
 
     # Process directives in order, stopping on first error
     Enum.reduce_while(directives, {:ok, agent}, fn directive, {:ok, current_agent} ->

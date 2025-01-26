@@ -217,7 +217,7 @@ defmodule JidoTest.TestSkills do
     end
 
     def handle_result(
-          %Result{status: :ok, state: %{weather_data: data}},
+          {:ok, %{weather_data: data}},
           "weather_monitor.data.received"
         ) do
       [
@@ -231,7 +231,7 @@ defmodule JidoTest.TestSkills do
     end
 
     def handle_result(
-          %Result{status: :ok, state: %{alert: true} = alert_data},
+          {:ok, %{alert: true} = alert_data},
           "weather_monitor.alert.**"
         ) do
       [
@@ -245,7 +245,7 @@ defmodule JidoTest.TestSkills do
     end
 
     def handle_result(
-          %Result{status: :ok, state: :no_alert_needed},
+          {:ok, :no_alert_needed},
           "weather_monitor.alert.**"
         ) do
       # No signals emitted when no alert is needed

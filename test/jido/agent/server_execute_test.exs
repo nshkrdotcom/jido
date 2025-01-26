@@ -61,75 +61,75 @@ defmodule JidoTest.Agent.Server.ExecuteTest do
       assert type == ServerSignal.cmd_success()
     end
 
-    #   test "emits queue overflow event on enqueue error", %{state: state} do
-    #     # Force an enqueue error by setting max queue size to 0
-    #     state = %{state | max_queue_size: 0}
+    test "emits queue overflow event on enqueue error", %{state: state} do
+      # Force an enqueue error by setting max queue size to 0
+      state = %{state | max_queue_size: 0}
 
-    #     {:ok, signal} =
-    #       ServerSignal.build_cmd(
-    #         state,
-    #         {TestActions.NoSchema, %{value: 1}},
-    #         %{},
-    #         apply_state: true
-    #       )
+      {:ok, signal} =
+        ServerSignal.build_cmd(
+          state,
+          {TestActions.NoSchema, %{value: 1}},
+          %{},
+          apply_state: true
+        )
 
-    #     assert {:error, :queue_overflow} = Execute.process_signal(state, signal)
+      assert {:error, :queue_overflow} = Execute.process_signal(state, signal)
 
-    #     assert_receive {:signal,
-    #                     %Signal{type: type, data: %{queue_size: 0, max_size: 0}} = _received}
+      assert_receive {:signal,
+                      %Signal{type: type, data: %{queue_size: 0, max_size: 0}} = _received}
 
-    #     assert type == ServerSignal.queue_overflow()
-    #   end
+      assert type == ServerSignal.queue_overflow()
+    end
   end
 
   describe "process_signal_queue/1" do
-    #   test "processes signals until queue is empty", %{state: state} do
-    #     # Create 3 test signals (reduced from 10 for clearer event tracking)
-    #     qty = 3
+    test "processes signals until queue is empty", %{state: state} do
+      # Create 3 test signals (reduced from 10 for clearer event tracking)
+      qty = 3
 
-    #     signals =
-    #       for i <- 1..qty do
-    #         {:ok, signal} =
-    #           ServerSignal.build_cmd(
-    #             state,
-    #             {TestActions.NoSchema, %{command: :"cmd#{i}"}},
-    #             %{},
-    #             apply_state: true
-    #           )
+      signals =
+        for i <- 1..qty do
+          {:ok, signal} =
+            ServerSignal.build_cmd(
+              state,
+              {TestActions.NoSchema, %{command: :"cmd#{i}"}},
+              %{},
+              apply_state: true
+            )
 
-    #         signal
-    #       end
+          signal
+        end
 
-    #     # Enqueue all signals
-    #     state_with_signals =
-    #       Enum.reduce(signals, state, fn signal, acc_state ->
-    #         {:ok, new_state} = State.enqueue(acc_state, signal)
-    #         new_state
-    #       end)
+      # Enqueue all signals
+      state_with_signals =
+        Enum.reduce(signals, state, fn signal, acc_state ->
+          {:ok, new_state} = State.enqueue(acc_state, signal)
+          new_state
+        end)
 
-    #     assert {:ok, final_state} = Execute.process_signal_queue(state_with_signals)
-    #     assert :queue.is_empty(final_state.pending_signals)
+      assert {:ok, final_state} = Execute.process_signal_queue(state_with_signals)
+      assert :queue.is_empty(final_state.pending_signals)
 
-    #     # Verify events for queue processing
-    #     assert_receive {:signal, %Signal{type: type, data: %{queue_size: ^qty}} = _received}
-    #     assert type == ServerSignal.queue_processing_started()
+      # Verify events for queue processing
+      assert_receive {:signal, %Signal{type: type, data: %{queue_size: ^qty}} = _received}
+      assert type == ServerSignal.queue_processing_started()
 
-    #     # Should receive state transitions for each signal
-    #     for _signal <- signals do
-    #       assert_receive {:signal,
-    #                       %Signal{type: type, data: %{from: :idle, to: :running}} = _received}
+      # Should receive state transitions for each signal
+      for _signal <- signals do
+        assert_receive {:signal,
+                        %Signal{type: type, data: %{from: :idle, to: :running}} = _received}
 
-    #       assert type == ServerSignal.transition_succeeded()
+        assert type == ServerSignal.transition_succeeded()
 
-    #       assert_receive {:signal,
-    #                       %Signal{type: type, data: %{from: :running, to: :idle}} = _received}
+        assert_receive {:signal,
+                        %Signal{type: type, data: %{from: :running, to: :idle}} = _received}
 
-    #       assert type == ServerSignal.transition_succeeded()
-    #     end
+        assert type == ServerSignal.transition_succeeded()
+      end
 
-    #     assert_receive {:signal, %Signal{type: type, data: %{}} = _received}
-    #     assert type == ServerSignal.cmd_success()
-    #   end
+      assert_receive {:signal, %Signal{type: type, data: %{}} = _received}
+      assert type == ServerSignal.cmd_success()
+    end
 
     test "ignores unknown signal types and continues processing", %{state: state} do
       # Create a mix of valid and invalid signals
@@ -167,60 +167,60 @@ defmodule JidoTest.Agent.Server.ExecuteTest do
           new_state
         end)
 
-      # assert {:ok, final_state} = Execute.process_signal_queue(state_with_signals)
-      # assert :queue.is_empty(final_state.pending_signals)
+      assert {:ok, final_state} = Execute.process_signal_queue(state_with_signals)
+      assert :queue.is_empty(final_state.pending_signals)
 
-      # # Verify events
-      # assert_receive {:signal, %Signal{type: type, data: %{queue_size: 3}} = _received}
-      # assert type == ServerSignal.queue_processing_started()
+      # Verify events
+      assert_receive {:signal, %Signal{type: type, data: %{queue_size: 3}} = _received}
+      assert type == ServerSignal.queue_processing_started()
 
-      # # First valid signal
-      # assert_receive {:signal,
-      #                 %Signal{type: type, data: %{from: :idle, to: :running}} = _received}
+      # First valid signal
+      assert_receive {:signal,
+                      %Signal{type: type, data: %{from: :idle, to: :running}} = _received}
 
-      # assert type == ServerSignal.transition_succeeded()
+      assert type == ServerSignal.transition_succeeded()
 
-      # assert_receive {:signal,
-      #                 %Signal{type: type, data: %{from: :running, to: :idle}} = _received}
+      assert_receive {:signal,
+                      %Signal{type: type, data: %{from: :running, to: :idle}} = _received}
 
-      # assert type == ServerSignal.transition_succeeded()
+      assert type == ServerSignal.transition_succeeded()
 
-      # assert_receive {:signal,
-      #                 %Signal{type: type, data: %{completed_signal: ^valid1}} = _received}
+      assert_receive {:signal,
+                      %Signal{type: type, data: %{completed_signal: ^valid1}} = _received}
 
-      # assert type == ServerSignal.queue_step_completed()
+      assert type == ServerSignal.queue_step_completed()
 
-      # # Invalid signal
-      # assert_receive {:signal,
-      #                 %Signal{
-      #                   type: type,
-      #                   data: %{
-      #                     ignored_signal: %{type: "invalid.type"},
-      #                     reason: {:unknown_signal_type, "invalid.type"}
-      #                   }
-      #                 } = _received}
+      # Invalid signal
+      assert_receive {:signal,
+                      %Signal{
+                        type: type,
+                        data: %{
+                          ignored_signal: %{type: "invalid.type"},
+                          reason: {:unknown_signal_type, "invalid.type"}
+                        }
+                      } = _received}
 
-      # assert type == ServerSignal.queue_step_ignored()
+      assert type == ServerSignal.queue_step_ignored()
 
-      # # Second valid signal
-      # assert_receive {:signal,
-      #                 %Signal{type: type, data: %{from: :idle, to: :running}} = _received}
+      # Second valid signal
+      assert_receive {:signal,
+                      %Signal{type: type, data: %{from: :idle, to: :running}} = _received}
 
-      # assert type == ServerSignal.transition_succeeded()
+      assert type == ServerSignal.transition_succeeded()
 
-      # assert_receive {:signal,
-      #                 %Signal{type: type, data: %{from: :running, to: :idle}} = _received}
+      assert_receive {:signal,
+                      %Signal{type: type, data: %{from: :running, to: :idle}} = _received}
 
-      # assert type == ServerSignal.transition_succeeded()
+      assert type == ServerSignal.transition_succeeded()
 
-      # assert_receive {:signal,
-      #                 %Signal{type: type, data: %{completed_signal: ^valid2}} = _received}
+      assert_receive {:signal,
+                      %Signal{type: type, data: %{completed_signal: ^valid2}} = _received}
 
-      # assert type == ServerSignal.queue_step_completed()
+      assert type == ServerSignal.queue_step_completed()
 
-      # # Queue completed
-      # assert_receive {:signal, %Signal{type: type, data: %{}} = _received}
-      # assert type == ServerSignal.cmd_success()
+      # Queue completed
+      assert_receive {:signal, %Signal{type: type, data: %{}} = _received}
+      assert type == ServerSignal.cmd_success()
     end
 
     test "processes unknown signal type with ignore event", %{state: state} do
@@ -436,7 +436,7 @@ defmodule JidoTest.Agent.Server.ExecuteTest do
     test "handles error in result", %{state: state} do
       updated_agent = %{
         state.agent
-        | result: %Result{
+        | result: %{
             status: :error,
             error: %Error{type: :test_error, message: "test error"}
           }
@@ -450,7 +450,7 @@ defmodule JidoTest.Agent.Server.ExecuteTest do
     test "handles state update result", %{state: state} do
       updated_agent = %{
         state.agent
-        | result: %Result{
+        | result: %{
             status: :ok,
             state: %{battery_level: 50, location: :work}
           }

@@ -11,7 +11,6 @@ defmodule Jido.Skill do
 
   alias Jido.Signal
   alias Jido.Error
-  alias Jido.Runner.Result
   require OK
   use TypedStruct
 
@@ -85,7 +84,6 @@ defmodule Jido.Skill do
     quote location: :keep do
       @behaviour Jido.Skill
       alias Jido.Skill
-      alias Jido.Runner.Result
       alias Jido.Signal
       require OK
 
@@ -127,25 +125,25 @@ defmodule Jido.Skill do
           def child_spec(_config), do: []
           def router, do: []
 
-          def handle_result(%Result{status: :ok} = result, _path) do
+          def handle_result({:ok, result}, _path) do
             [
               %Signal{
                 id: UUID.uuid4(),
                 source: "replace_agent_id",
                 type: "#{name()}.result",
-                data: result.result_state
+                data: result
               }
             ]
           end
 
-          def handle_result(%Result{status: :error} = result, _path) do
+          def handle_result({:error, error}, _path) do
             [
               %Signal{
                 id: UUID.uuid4(),
                 source: "replace_agent_id",
                 type: "#{name()}.error",
                 data: %{
-                  error: result.error
+                  error: error
                 }
               }
             ]
@@ -171,7 +169,7 @@ defmodule Jido.Skill do
   @callback initial_state() :: map()
   @callback child_spec(config :: map()) :: Supervisor.child_spec() | [Supervisor.child_spec()]
   @callback router() :: [map()]
-  @callback handle_result(Result.t(), String.t()) :: [Signal.t()]
+  @callback handle_result({:ok, map()} | {:error, term()}, String.t()) :: [Signal.t()]
 
   @doc """
   Skills should be defined at compile time, not runtime.

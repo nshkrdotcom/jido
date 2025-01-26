@@ -788,4 +788,27 @@ defmodule JidoTest.TestActions do
       )
     end
   end
+
+  defmodule MultiDirectiveAction do
+    use Jido.Action,
+      name: "multi_directive_action"
+
+    @impl true
+    def run(_params, _context) do
+      directives = [
+        %Jido.Agent.Directive.EnqueueDirective{
+          action: :action1,
+          params: %{},
+          context: %{}
+        },
+        %Jido.Agent.Directive.EnqueueDirective{
+          action: :action2,
+          params: %{},
+          context: %{}
+        }
+      ]
+
+      {:ok, %{}, directives}
+    end
+  end
 end

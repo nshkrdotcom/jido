@@ -1,7 +1,6 @@
 defmodule Jido.SkillDefinitionTest do
   use ExUnit.Case, async: true
   alias JidoTest.TestSkills.WeatherMonitorSkill
-  alias Jido.Runner.Result
 
   @moduletag :capture_log
 
@@ -119,35 +118,33 @@ defmodule Jido.SkillDefinitionTest do
 
   describe "handle_result/2" do
     test "handles successful weather data processing" do
-      result = %Result{
-        status: :ok,
-        state: %{
-          weather_data: %{
-            temperature: 75.0,
-            humidity: 45,
-            wind_speed: 10,
-            conditions: "sunny"
-          }
-        }
-      }
+      result =
+        {:ok,
+         %{
+           weather_data: %{
+             temperature: 75.0,
+             humidity: 45,
+             wind_speed: 10,
+             conditions: "sunny"
+           }
+         }}
 
       signals = WeatherMonitorSkill.handle_result(result, "weather_monitor.data.received")
       assert length(signals) == 1
       [signal] = signals
       assert signal.type == "weather_monitor.data.processed"
-      assert signal.data == result.state.weather_data
+      assert signal.data == elem(result, 1).weather_data
     end
 
     test "handles weather alert generation" do
-      result = %Result{
-        status: :ok,
-        state: %{
-          alert: true,
-          conditions: %{severe_weather: true},
-          severity: 5,
-          generated_at: ~U[2024-01-01 12:00:00Z]
-        }
-      }
+      result =
+        {:ok,
+         %{
+           alert: true,
+           conditions: %{severe_weather: true},
+           severity: 5,
+           generated_at: ~U[2024-01-01 12:00:00Z]
+         }}
 
       signals = WeatherMonitorSkill.handle_result(result, "weather_monitor.alert.**")
       assert length(signals) == 1
@@ -159,10 +156,7 @@ defmodule Jido.SkillDefinitionTest do
     end
 
     test "handles no alert needed case" do
-      result = %Result{
-        status: :ok,
-        state: :no_alert_needed
-      }
+      result = {:ok, :no_alert_needed}
 
       signals = WeatherMonitorSkill.handle_result(result, "weather_monitor.alert.**")
       assert signals == []

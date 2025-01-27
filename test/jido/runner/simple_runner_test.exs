@@ -1,9 +1,7 @@
 defmodule Jido.Runner.SimpleTest do
   use ExUnit.Case, async: true
   alias Jido.Runner.Simple
-  alias Jido.Error
   alias Jido.Instruction
-  alias Jido.Agent.Directive.EnqueueDirective
   alias JidoTest.TestActions.{Add, ErrorAction, CompensateAction}
   alias JidoTest.TestAgents.FullFeaturedAgent
 

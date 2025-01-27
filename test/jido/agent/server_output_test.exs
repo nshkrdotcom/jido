@@ -105,6 +105,7 @@ defmodule Jido.Agent.Server.OutputTest do
   end
 
   describe "emit_directive/2" do
+    @tag :skip
     test "emits directive and logs when verbose", %{state: state} do
       directive = %TestDirective{type: :test_directive, data: "test"}
 

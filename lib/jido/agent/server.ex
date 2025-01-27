@@ -53,10 +53,7 @@ defmodule Jido.Agent.Server do
   def init(
         %ServerState{
           agent: agent,
-          dispatch: dispatch,
-          max_queue_size: max_queue_size,
-          verbose: verbose,
-          mode: mode
+          dispatch: dispatch
         } = state
       ) do
     dbug("Initializing state", agent: agent, dispatch: dispatch)
@@ -174,31 +171,6 @@ defmodule Jido.Agent.Server do
       {:noreply, state, :hibernate}
     else
       {:noreply, state}
-    end
-  end
-
-  defp do_handle_info({:DOWN, pid, reason}, %ServerState{} = state) do
-    dbug("Child process down", pid: pid, reason: reason)
-    ServerOutput.emit_event(state, ServerSignal.process_terminated(), %{pid: pid, reason: reason})
-    {:noreply, state}
-  end
-
-  defp do_handle_info(:timeout, state) do
-    dbug("Received timeout")
-    {:noreply, state}
-  end
-
-  defp do_handle_info(:unhandled, state) do
-    error("Unhandled info")
-    {:noreply, state}
-  end
-
-  defp do_check_queue_size(state) do
-    if :queue.len(state.pending_signals) > state.max_queue_size do
-      ServerOutput.emit_event(state, ServerSignal.queue_overflow(), %{
-        queue_size: :queue.len(state.pending_signals),
-        max_size: state.max_queue_size
-      })
     end
   end
 

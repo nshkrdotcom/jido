@@ -288,6 +288,7 @@ defmodule JidoTest.TestAgents do
 
     require Logger
 
+    @impl true
     def start_link(opts) do
       agent_id = Keyword.get(opts, :id) || UUID.uuid4()
       initial_state = Keyword.get(opts, :initial_state, %{})

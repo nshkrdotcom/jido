@@ -1228,19 +1228,7 @@ defmodule Jido.Agent do
   Allows post-processing of execution results.
   """
   @callback on_after_run(agent :: t(), result :: map()) :: agent_result()
-
-  @doc """
-  Called after successful directive application.
-  Allows post-processing of directive results.
-  """
-
-  @doc """
-  Called when any error occurs during the agent lifecycle.
-  Provides error handling and recovery strategies.
-  """
   @callback on_error(agent :: t(), reason :: any()) :: {:ok, t()} | {:error, t()}
-
-  # Change these callback definitions
   @callback start_link(opts :: keyword()) :: {:ok, pid()} | {:error, any()}
 
   @callback child_spec(opts :: keyword()) :: Supervisor.child_spec()

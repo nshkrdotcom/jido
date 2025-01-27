@@ -7,7 +7,6 @@ defmodule JidoTest.Agent.Server.ExecuteTest do
   alias Jido.Agent.Server.Signal, as: ServerSignal
   alias Jido.Signal
   alias Jido.Error
-  alias Jido.Runner.Result
   alias JidoTest.TestAgents.{BasicAgent, ErrorHandlingAgent}
   alias JidoTest.TestActions
   alias Jido.Agent.Directive.SpawnDirective

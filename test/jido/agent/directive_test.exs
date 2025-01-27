@@ -9,15 +9,12 @@ defmodule JidoTest.DirectiveTest do
     RegisterActionDirective,
     DeregisterActionDirective,
     SpawnDirective,
-    KillDirective,
-    PublishDirective,
-    SubscribeDirective,
-    UnsubscribeDirective
+    KillDirective
   }
 
   alias Jido.Instruction
   alias JidoTest.TestAgents.FullFeaturedAgent
-  alias JidoTest.TestActions.{Add, ErrorAction}
+  alias JidoTest.TestActions.Add
 
   setup :verify_on_exit!
 
@@ -88,12 +85,6 @@ defmodule JidoTest.DirectiveTest do
     test "validates system directives" do
       assert :ok = Directive.validate_directives(%SpawnDirective{module: TestModule, args: []})
       assert :ok = Directive.validate_directives(%KillDirective{pid: self()})
-
-      assert :ok =
-               Directive.validate_directives(%PublishDirective{stream_id: "test", signal: :test})
-
-      assert :ok = Directive.validate_directives(%SubscribeDirective{stream_id: "test"})
-      assert :ok = Directive.validate_directives(%UnsubscribeDirective{stream_id: "test"})
     end
 
     test "returns error for invalid system directives" do
@@ -101,15 +92,6 @@ defmodule JidoTest.DirectiveTest do
                Directive.validate_directives(%SpawnDirective{module: nil, args: []})
 
       assert {:error, :invalid_pid} = Directive.validate_directives(%KillDirective{pid: nil})
-
-      assert {:error, :invalid_stream_id} =
-               Directive.validate_directives(%PublishDirective{stream_id: nil, signal: :test})
-
-      assert {:error, :invalid_stream_id} =
-               Directive.validate_directives(%SubscribeDirective{stream_id: nil})
-
-      assert {:error, :invalid_stream_id} =
-               Directive.validate_directives(%UnsubscribeDirective{stream_id: nil})
     end
   end
 

@@ -907,12 +907,10 @@ defmodule Jido.Bus.SubscriptionTestCase do
       wait_for_signal_store()
     end
 
-    # Optionally wait for the signal store
+    # Wait for the signal store
     defp wait_for_signal_store do
-      case signal_store_wait() do
-        nil -> :ok
-        wait -> :timer.sleep(wait)
-      end
+      wait = signal_store_wait()
+      :timer.sleep(wait)
     end
 
     defp assert_receive_signals(signal_store, signal_store_meta, subscription, opts) do

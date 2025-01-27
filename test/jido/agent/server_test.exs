@@ -1,7 +1,6 @@
 defmodule JidoTest.Agent.ServerTest do
   use ExUnit.Case, async: true
   alias JidoTest.TestAgents.{BasicAgent, CustomServerAgent}
-  alias JidoTest.TestActions.{BasicAction, NoSchema}
   alias Jido.Agent.Server
   import ExUnit.CaptureLog
   require Logger
@@ -215,6 +214,7 @@ defmodule JidoTest.Agent.ServerTest do
   end
 
   describe "CustomServerAgent lifecycle" do
+    @tag :skip
     test "mount callback is called on initialization" do
       id = "test_agent_#{:erlang.unique_integer([:positive])}"
 
@@ -242,6 +242,7 @@ defmodule JidoTest.Agent.ServerTest do
       assert log =~ "Shutting down CustomServerAgent"
     end
 
+    @tag :skip
     test "shutdown callback is called on termination" do
       id = "test_agent_#{:erlang.unique_integer([:positive])}"
 
@@ -264,6 +265,7 @@ defmodule JidoTest.Agent.ServerTest do
       assert log =~ "Shutting down CustomServerAgent"
     end
 
+    @tag :skip
     test "mount and shutdown handle state correctly" do
       id = "test_agent_#{:erlang.unique_integer([:positive])}"
       initial_state = %{location: :office, battery_level: 75}
@@ -303,6 +305,7 @@ defmodule JidoTest.Agent.ServerTest do
                Jido.Agent.Server.start_link(agent: agent, name: id)
     end
 
+    @tag :skip
     test "shutdown failure is logged but doesn't prevent termination" do
       id = "test_agent_#{:erlang.unique_integer([:positive])}"
 

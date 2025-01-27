@@ -12,7 +12,6 @@ defmodule Jido.Agent.Server.Signal do
   use ExDbug, enabled: false
 
   alias Jido.Signal
-  alias Jido.Signal.Dispatch
   alias Jido.Agent.Types
   alias UUID
 

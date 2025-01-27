@@ -130,31 +130,12 @@ defmodule Jido.Agent.Directive do
     field(:pid, pid(), enforce: true)
   end
 
-  typedstruct module: PublishDirective do
-    @moduledoc "Directive to broadcast a message"
-    field(:stream_id, String.t(), enforce: true)
-    field(:signal, term(), enforce: true)
-  end
-
-  typedstruct module: SubscribeDirective do
-    @moduledoc "Directive to subscribe to a topic"
-    field(:stream_id, String.t(), enforce: true)
-  end
-
-  typedstruct module: UnsubscribeDirective do
-    @moduledoc "Directive to unsubscribe from a topic"
-    field(:stream_id, String.t(), enforce: true)
-  end
-
   @type t ::
           EnqueueDirective.t()
           | RegisterActionDirective.t()
           | DeregisterActionDirective.t()
           | SpawnDirective.t()
           | KillDirective.t()
-          | PublishDirective.t()
-          | SubscribeDirective.t()
-          | UnsubscribeDirective.t()
 
   @type directive_result :: {:ok, Agent.t()} | {:error, term()}
 
@@ -192,18 +173,12 @@ defmodule Jido.Agent.Directive do
 
   def is_directive?({:ok, directive}) when is_struct(directive, SpawnDirective), do: true
   def is_directive?({:ok, directive}) when is_struct(directive, KillDirective), do: true
-  def is_directive?({:ok, directive}) when is_struct(directive, PublishDirective), do: true
-  def is_directive?({:ok, directive}) when is_struct(directive, SubscribeDirective), do: true
-  def is_directive?({:ok, directive}) when is_struct(directive, UnsubscribeDirective), do: true
 
   def is_directive?(directive) when is_struct(directive, EnqueueDirective), do: true
   def is_directive?(directive) when is_struct(directive, RegisterActionDirective), do: true
   def is_directive?(directive) when is_struct(directive, DeregisterActionDirective), do: true
   def is_directive?(directive) when is_struct(directive, SpawnDirective), do: true
   def is_directive?(directive) when is_struct(directive, KillDirective), do: true
-  def is_directive?(directive) when is_struct(directive, PublishDirective), do: true
-  def is_directive?(directive) when is_struct(directive, SubscribeDirective), do: true
-  def is_directive?(directive) when is_struct(directive, UnsubscribeDirective), do: true
   def is_directive?(_), do: false
 
   @doc """
@@ -311,39 +286,6 @@ defmodule Jido.Agent.Directive do
     end
   end
 
-  def apply_directive(agent, %PublishDirective{} = directive, _opts) do
-    case validate_directive(directive) do
-      :ok ->
-        dbug("Publishing message", agent_id: agent.id, stream_id: directive.stream_id)
-        Agent.publish(agent, directive.stream_id, directive.signal)
-
-      error ->
-        error
-    end
-  end
-
-  def apply_directive(agent, %SubscribeDirective{} = directive, _opts) do
-    case validate_directive(directive) do
-      :ok ->
-        dbug("Subscribing to topic", agent_id: agent.id, stream_id: directive.stream_id)
-        Agent.subscribe(agent, directive.stream_id)
-
-      error ->
-        error
-    end
-  end
-
-  def apply_directive(agent, %UnsubscribeDirective{} = directive, _opts) do
-    case validate_directive(directive) do
-      :ok ->
-        dbug("Unsubscribing from topic", agent_id: agent.id, stream_id: directive.stream_id)
-        Agent.unsubscribe(agent, directive.stream_id)
-
-      error ->
-        error
-    end
-  end
-
   # Private validation functions
   @spec validate_directive(t()) :: :ok | {:error, term()}
   defp validate_directive(%EnqueueDirective{action: nil}), do: {:error, :invalid_action}
@@ -363,23 +305,11 @@ defmodule Jido.Agent.Directive do
 
   defp validate_directive(%KillDirective{pid: pid}) when is_pid(pid), do: :ok
 
-  defp validate_directive(%PublishDirective{stream_id: stream_id}) when is_binary(stream_id),
-    do: :ok
-
-  defp validate_directive(%SubscribeDirective{stream_id: stream_id}) when is_binary(stream_id),
-    do: :ok
-
-  defp validate_directive(%UnsubscribeDirective{stream_id: stream_id}) when is_binary(stream_id),
-    do: :ok
-
   defp validate_directive(%EnqueueDirective{}), do: {:error, :invalid_action}
   defp validate_directive(%RegisterActionDirective{}), do: {:error, :invalid_action_module}
   defp validate_directive(%DeregisterActionDirective{}), do: {:error, :invalid_action_module}
   defp validate_directive(%SpawnDirective{}), do: {:error, :invalid_module}
   defp validate_directive(%KillDirective{}), do: {:error, :invalid_pid}
-  defp validate_directive(%PublishDirective{}), do: {:error, :invalid_stream_id}
-  defp validate_directive(%SubscribeDirective{}), do: {:error, :invalid_stream_id}
-  defp validate_directive(%UnsubscribeDirective{}), do: {:error, :invalid_stream_id}
   defp validate_directive(_), do: {:error, :invalid_directive}
 
   defp build_instruction(%EnqueueDirective{action: action, params: params, context: context}) do

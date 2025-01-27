@@ -60,30 +60,4 @@ defmodule JidoTest.Actions.DirectivesTest do
       assert directive.pid == pid
     end
   end
-
-  describe "Publish" do
-    test "creates publish directive" do
-      signal = %{type: "test", data: "value"}
-
-      assert {:ok, %{}, directive} =
-               Directives.Publish.run(%{stream_id: "test_stream", signal: signal}, %{})
-
-      assert directive.stream_id == "test_stream"
-      assert directive.signal == signal
-    end
-  end
-
-  describe "Subscribe" do
-    test "creates subscribe directive" do
-      assert {:ok, %{}, directive} = Directives.Subscribe.run(%{stream_id: "test_stream"}, %{})
-      assert directive.stream_id == "test_stream"
-    end
-  end
-
-  describe "Unsubscribe" do
-    test "creates unsubscribe directive" do
-      assert {:ok, %{}, directive} = Directives.Unsubscribe.run(%{stream_id: "test_stream"}, %{})
-      assert directive.stream_id == "test_stream"
-    end
-  end
 end

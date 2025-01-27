@@ -7,7 +7,6 @@ defmodule Jido.Agent.Server.Directive do
 
   alias Jido.Agent.Server.Process, as: ServerProcess
   alias Jido.Agent.Server.State, as: ServerState
-  alias Jido.Agent.Server.Signal, as: ServerSignal
   alias Jido.Instruction
 
   alias Jido.Agent.Directive.{
@@ -28,7 +27,7 @@ defmodule Jido.Agent.Server.Directive do
   """
   @spec execute(ServerState.t(), Directive.t()) :: {:ok, ServerState.t()} | {:error, Error.t()}
 
-  def execute(%ServerState{} = state, %EnqueueDirective{action: nil}) do
+  def execute(%ServerState{} = _state, %EnqueueDirective{action: nil}) do
     {:error, Error.validation_error("Invalid action", %{action: nil})}
   end
 
@@ -56,7 +55,7 @@ defmodule Jido.Agent.Server.Directive do
     end
   end
 
-  def execute(%ServerState{} = state, %RegisterActionDirective{action_module: module}) do
+  def execute(%ServerState{} = _state, %RegisterActionDirective{action_module: module}) do
     {:error, Error.validation_error("Invalid action module", %{module: module})}
   end
 
@@ -72,7 +71,7 @@ defmodule Jido.Agent.Server.Directive do
     end
   end
 
-  def execute(%ServerState{} = state, %DeregisterActionDirective{action_module: module}) do
+  def execute(%ServerState{} = _state, %DeregisterActionDirective{action_module: module}) do
     {:error, Error.validation_error("Invalid action module", %{module: module})}
   end
 

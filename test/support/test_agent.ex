@@ -286,23 +286,49 @@ defmodule JidoTest.TestAgents do
         battery_level: [type: :integer, default: 100]
       ]
 
-    def start_link(_opts) do
-      # agent_id = UUID.uuid4()
-      # agent = CustomServerAgent.new(agent_id)
+    require Logger
 
-      # Jido.Agent.Server.start_link("test_#{agent_id}",
-      #   name: "test_agent_server",
-      #   agent: agent,
-      #   skills: [
-      #     JidoTest.TestSkills.WeatherMonitorSkill
-      #   ],
-      #   schedule: [
-      #     {"*/15 * * * *", fn -> System.cmd("rm", ["/tmp/tmp_"]) end}
-      #   ],
-      #   child_spec: [
-      #     {BusSensor, %{name: "test_bus_sensor", bus: "test_bus"}}
-      #   ]
-      # )
+    def start_link(opts) do
+      agent_id = Keyword.get(opts, :id) || UUID.uuid4()
+      initial_state = Keyword.get(opts, :initial_state, %{})
+      agent = CustomServerAgent.new(agent_id, initial_state)
+
+      Jido.Agent.Server.start_link(
+        agent: agent,
+        name: agent_id,
+        skills: [
+          JidoTest.TestSkills.WeatherMonitorSkill
+        ],
+        schedule: [
+          {"*/15 * * * *", fn -> System.cmd("rm", ["/tmp/tmp_"]) end}
+        ]
+      )
+    end
+
+    @impl true
+    def mount(agent, opts) do
+      Logger.debug("Mounting CustomServerAgent", agent_id: agent.id, opts: opts)
+
+      # Validate battery level is positive
+      if agent.state.battery_level < 0 do
+        {:error, :invalid_battery_level}
+      else
+        # You can modify state here if needed
+        {:ok, agent}
+      end
+    end
+
+    @impl true
+    def shutdown(agent, reason) do
+      Logger.debug("Shutting down CustomServerAgent", agent_id: agent.id, reason: reason)
+
+      # Validate battery level is positive
+      if agent.state.battery_level < 0 do
+        {:error, :invalid_battery_level}
+      else
+        # Clean up any resources if needed
+        {:ok, agent}
+      end
     end
   end
 end

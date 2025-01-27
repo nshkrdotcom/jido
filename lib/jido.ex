@@ -22,10 +22,6 @@ defmodule Jido do
       # Send management commands
       {:ok, agent} = Jido.get_agent_by_id("agent-id")
       Jido.manage(agent, :pause)
-
-      # Subscribe to agent events
-      {:ok, topic} = Jido.get_agent_topic("agent-id")
-      Phoenix.PubSub.subscribe(MyApp.PubSub, topic)
   """
   @type component_metadata :: %{
           module: module(),
@@ -78,7 +74,6 @@ defmodule Jido do
       # Delegate high-level API methods to Jido module
       defdelegate cmd(agent, action, args \\ %{}, opts \\ []), to: Jido
       defdelegate get_agent(id), to: Jido
-      defdelegate get_agent_topic(agent_or_id), to: Jido
       defdelegate get_agent_status(agent_or_id), to: Jido
       defdelegate get_agent_supervisor(agent_or_id), to: Jido
       defdelegate get_agent_state(agent_or_id), to: Jido
@@ -174,41 +169,6 @@ defmodule Jido do
   end
 
   @doc """
-  Gets the PubSub topic for an agent.
-
-  ## Parameters
-
-  - `agent_or_id`: Agent pid, ID, or return value from get_agent
-
-  ## Returns
-
-  - `{:ok, topic}` with the agent's topic string
-  - `{:error, reason}` if topic couldn't be retrieved
-
-  ## Examples
-
-      iex> {:ok, topic} = Jido.get_agent_topic("my-agent")
-      {:ok, "jido.agent.my-agent"}
-
-      iex> {:ok, agent} = Jido.get_agent("my-agent")
-      iex> {:ok, topic} = Jido.get_agent_topic(agent)
-      {:ok, "jido.agent.my-agent"}
-  """
-  @spec get_agent_topic(pid() | {:ok, pid()} | String.t()) :: {:ok, String.t()} | {:error, term()}
-  def get_agent_topic({:ok, pid}), do: get_agent_topic(pid)
-
-  def get_agent_topic(pid) when is_pid(pid) do
-    Jido.Agent.Server.get_topic(pid)
-  end
-
-  def get_agent_topic(id) when is_binary(id) or is_atom(id) do
-    case get_agent(id) do
-      {:ok, pid} -> get_agent_topic(pid)
-      error -> error
-    end
-  end
-
-  @doc """
   Gets the status of an agent.
 
   ## Parameters
@@ -291,7 +251,7 @@ defmodule Jido do
   def get_agent_state({:ok, pid}), do: get_agent_state(pid)
 
   def get_agent_state(pid) when is_pid(pid) do
-    Jido.Agent.Server.get_state(pid)
+    Jido.Agent.Server.state(pid)
   end
 
   def get_agent_state(id) when is_binary(id) or is_atom(id) do
@@ -324,20 +284,30 @@ defmodule Jido do
           {:ok, pid()} | {:error, term()}
   def clone_agent(source_id, new_id, opts \\ []) do
     with {:ok, source_pid} <- get_agent(source_id),
-         {:ok, source_state} <- Jido.Agent.Server.get_state(source_pid) do
+         {:ok, source_state} <- Jido.Agent.Server.state(source_pid) do
       # Create new agent with updated ID but same config
-      agent = %{source_state.agent | id: new_id}
+      agent = %{source_state.agent | id: to_string(new_id)}
 
-      # Merge original options with any overrides
+      # Merge original options with any overrides, keeping source config
       new_opts =
-        opts
-        |> Keyword.merge(
-          agent: agent,
-          pubsub: source_state.pubsub,
-          # Let server generate new topic
-          topic: nil,
-          max_queue_size: source_state.max_queue_size
-        )
+        source_state
+        |> Map.take([
+          :max_queue_size,
+          :verbose,
+          :dispatch,
+          :mode
+        ])
+        |> Map.to_list()
+        |> Keyword.merge([agent: agent], fn _k, _v1, v2 -> v2 end)
+        |> Keyword.merge(opts, fn _k, _v1, v2 -> v2 end)
+
+      # Ensure we have required fields from server state
+      new_opts =
+        new_opts
+        |> Keyword.put_new(:max_queue_size, 10_000)
+        |> Keyword.put_new(:mode, :auto)
+        |> Keyword.put_new(:verbose, false)
+        |> Keyword.put_new(:dispatch, {:bus, [target: {:bus, :default}, stream: "agent"]})
 
       Jido.Agent.Server.start_link(new_opts)
     end

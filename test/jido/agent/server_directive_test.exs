@@ -12,6 +12,8 @@ defmodule Jido.Agent.Server.DirectiveTest do
     DeregisterActionDirective
   }
 
+  @moduletag :capture_log
+
   # Helper to compare Error structs ignoring stacktrace
   defp assert_error_match(actual, expected) do
     assert %Error{} = actual

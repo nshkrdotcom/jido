@@ -138,6 +138,7 @@ defmodule Jido.Agent do
   use TypedStruct
   alias Jido.Error
   alias Jido.Instruction
+  alias Jido.Agent.Server.Signal, as: ServerSignal
   require OK
 
   @type instruction :: Instruction.t() | module() | {module(), map()}
@@ -299,12 +300,25 @@ defmodule Jido.Agent do
           end
 
           @doc false
-          def start_link(id \\ nil, initial_state \\ %{}, opts \\ []) do
+          def start_link(opts \\ [])
+
+          def start_link(opts) when is_list(opts) do
+            id = Keyword.get(opts, :id, UUID.uuid4())
+            initial_state = Keyword.get(opts, :initial_state, %{})
             agent = new(id, initial_state)
-            name = Keyword.get(opts, :name, "#{__MODULE__}.#{id}")
-            dbug("Starting agent", agent: agent, name: name)
-            Jido.Agent.Server.start_link(Keyword.merge(opts, agent: agent, name: name))
+
+            opts =
+              opts
+              |> Keyword.delete(:initial_state)
+              |> Keyword.put(:agent, agent)
+
+            dbug("Starting agent", agent: agent)
+            Jido.Agent.Server.start_link(opts)
           end
+
+          # def start_link(name, args, opts) do
+          #   start_link(Keyword.merge(opts, [name: name] ++ args))
+          # end
 
           @doc false
           def child_spec(opts) do
@@ -316,6 +330,11 @@ defmodule Jido.Agent do
 
           @doc false
           def init(opts), do: OK.success(opts)
+
+          @doc false
+          def state(pid) when is_pid(pid) do
+            GenServer.call(pid, :state)
+          end
 
           @doc """
           Registers a new action module with the Agent at server.
@@ -459,8 +478,22 @@ defmodule Jido.Agent do
 
           See `Jido.Util.generate_id/0` for details on ID generation.
           """
-          @spec new(id :: String.t() | nil, initial_state :: map()) :: t()
-          def new(id \\ nil, initial_state \\ %{}) do
+          @spec new(id :: String.t() | atom() | nil | keyword(), initial_state :: map() | nil) ::
+                  t()
+          def new(opts) when is_list(opts) do
+            id = Keyword.get(opts, :id)
+            initial_state = Keyword.get(opts, :initial_state, %{})
+            new(id, initial_state)
+          end
+
+          def new(id \\ nil, initial_state \\ %{})
+
+          def new(id, initial_state) when is_atom(id) and not is_nil(id) do
+            new(Atom.to_string(id), initial_state)
+          end
+
+          def new(id, initial_state)
+              when (is_binary(id) or is_nil(id)) and is_map(initial_state) do
             dbug("Creating new #{__MODULE__.name()} agent",
               id: id,
               schema: @validated_opts[:schema],
@@ -539,8 +572,25 @@ defmodule Jido.Agent do
 
           See `validate/1` for validation details and `Jido.Agent` callbacks for lifecycle hooks.
           """
-          @spec set(t(), keyword(), keyword()) :: agent_result()
+          @spec set(t() | pid(), keyword() | map(), keyword()) :: agent_result()
           def set(agent, attrs, opts \\ [])
+
+          def set(server, attrs, opts)
+              when is_pid(server) or is_atom(server) or is_binary(server) do
+            with {:ok, pid} <- resolve_server(server),
+                 {:ok, signal} <- ServerSignal.build_set(%{agent: %{id: nil}}, attrs, opts) do
+              GenServer.call(pid, signal)
+            end
+          end
+
+          defp resolve_server(pid) when is_pid(pid), do: {:ok, pid}
+
+          defp resolve_server(name) when is_atom(name) or is_binary(name) do
+            case Process.whereis(name) do
+              nil -> {:error, :server_not_found}
+              pid -> {:ok, pid}
+            end
+          end
 
           def set(%__MODULE__{} = agent, attrs, opts) when is_list(attrs) do
             dbug("Setting agent state from keyword list", agent_id: agent.id, attrs: attrs)
@@ -649,6 +699,10 @@ defmodule Jido.Agent do
           @spec validate(t(), keyword()) :: agent_result()
 
           def validate(agent, opts \\ [])
+
+          def validate(pid, opts) when is_pid(pid) do
+            GenServer.call(pid, {:validate, opts})
+          end
 
           def validate(%__MODULE__{} = agent, opts) do
             dbug("Validating agent state", agent_id: agent.id)
@@ -790,8 +844,12 @@ defmodule Jido.Agent do
           See `registered_actions/1` for checking available actions and `run/2` for executing planned actions.
           """
 
-          @spec plan(t(), instructions(), map()) :: agent_result()
+          @spec plan(t() | pid(), instructions(), map()) :: agent_result()
           def plan(agent, instructions, context \\ %{})
+
+          def plan(pid, instructions, context) when is_pid(pid) do
+            GenServer.call(pid, {:plan, instructions, context})
+          end
 
           def plan(%__MODULE__{} = agent, instructions, context) do
             dbug("Planning instructions",
@@ -907,8 +965,12 @@ defmodule Jido.Agent do
 
           See `Jido.Runner` for implementing custom runners and `plan/2` for queueing actions.
           """
-          @spec run(t(), keyword()) :: agent_result()
+          @spec run(t() | pid(), keyword()) :: agent_result()
           def run(agent, opts \\ [])
+
+          def run(pid, opts) when is_pid(pid) do
+            GenServer.call(pid, {:run, opts})
+          end
 
           def run(%__MODULE__{} = agent, opts) do
             apply_state = Keyword.get(opts, :apply_state, true)
@@ -1010,8 +1072,12 @@ defmodule Jido.Agent do
                   # Handle execution error
               end
           """
-          @spec cmd(t(), instructions(), map(), keyword()) :: agent_result()
+          @spec cmd(t() | pid(), instructions(), map(), keyword()) :: agent_result()
           def cmd(agent, instructions, attrs \\ %{}, opts \\ [])
+
+          def cmd(pid, instructions, attrs, opts) when is_pid(pid) do
+            GenServer.call(pid, {:cmd, instructions, attrs, opts})
+          end
 
           def cmd(%__MODULE__{} = agent, instructions, attrs, opts) do
             apply_state? = Keyword.get(opts, :apply_state, true)
@@ -1109,7 +1175,7 @@ defmodule Jido.Agent do
           @spec shutdown(t(), reason :: any()) :: agent_result()
           def shutdown(agent, _reason), do: OK.success(agent)
 
-          defoverridable start_link: 3,
+          defoverridable start_link: 1,
                          child_spec: 1,
                          init: 1,
                          mount: 2,
@@ -1175,11 +1241,7 @@ defmodule Jido.Agent do
   @callback on_error(agent :: t(), reason :: any()) :: {:ok, t()} | {:error, t()}
 
   # Change these callback definitions
-  @callback start_link(
-              id :: String.t() | nil,
-              initial_state :: map(),
-              opts :: keyword()
-            ) :: {:ok, pid()} | {:error, any()}
+  @callback start_link(opts :: keyword()) :: {:ok, pid()} | {:error, any()}
 
   @callback child_spec(opts :: keyword()) :: Supervisor.child_spec()
 
@@ -1187,7 +1249,7 @@ defmodule Jido.Agent do
   @callback shutdown(agent :: t(), reason :: any()) :: {:ok, map()} | {:error, any()}
 
   @optional_callbacks [
-    start_link: 3,
+    start_link: 1,
     child_spec: 1,
     mount: 2,
     shutdown: 2,

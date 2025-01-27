@@ -13,6 +13,7 @@ defmodule Jido.Agent.Server.Execute do
 
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Agent.Server.Signal, as: ServerSignal
+  alias Jido.Agent.Server.Output, as: ServerOutput
   alias Jido.Signal
 
   @type signal_result ::
@@ -68,17 +69,17 @@ defmodule Jido.Agent.Server.Execute do
     #   - queue_processing_completed - When all signals processed successfully
     #   - queue_processing_failed - If queue processing fails
     defp process_signal_queue(%ServerState{} = state) do
-      ServerSignal.emit_event(state, ServerSignal.queue_processing_started(), %{
+      ServerOutput.emit_event(state, ServerSignal.queue_processing_started(), %{
         queue_size: :queue.len(state.pending_signals)
       })
 
       case process_queue_signals(state) do
         {:ok, final_state} ->
-          ServerSignal.emit_event(final_state, ServerSignal.queue_processing_completed(), %{})
+          ServerOutput.emit_event(final_state, ServerSignal.queue_processing_completed(), %{})
           {:ok, final_state}
 
         {:error, reason} = error ->
-          ServerSignal.emit_event(state, ServerSignal.queue_processing_failed(), %{reason: reason})
+          ServerOutput.emit_event(state, ServerSignal.queue_processing_failed(), %{reason: reason})
 
           error
       end
@@ -110,14 +111,14 @@ defmodule Jido.Agent.Server.Execute do
         {:ok, signal, new_state} ->
           case execute_signal(new_state, signal) do
             {:ok, updated_state} ->
-              ServerSignal.emit_event(updated_state, ServerSignal.queue_step_completed(), %{
+              ServerOutput.emit_event(updated_state, ServerSignal.queue_step_completed(), %{
                 completed_signal: signal
               })
 
               process_queue_signals(updated_state)
 
             {:ignore, reason} ->
-              ServerSignal.emit_event(new_state, ServerSignal.queue_step_ignored(), %{
+              ServerOutput.emit_event(new_state, ServerSignal.queue_step_ignored(), %{
                 ignored_signal: signal,
                 reason: reason
               })
@@ -125,7 +126,7 @@ defmodule Jido.Agent.Server.Execute do
               process_queue_signals(new_state)
 
             {:error, reason} = error ->
-              ServerSignal.emit_event(new_state, ServerSignal.queue_step_failed(), %{
+              ServerOutput.emit_event(new_state, ServerSignal.queue_step_failed(), %{
                 failed_signal: signal,
                 reason: reason
               })
@@ -325,7 +326,7 @@ defmodule Jido.Agent.Server.Execute do
         # Check if result map has error key
         match?(%{error: error} when not is_nil(error), result) ->
           error = result.error
-          ServerSignal.emit_event(state, ServerSignal.cmd_failed(), %{result: result})
+          ServerOutput.emit_event(state, ServerSignal.cmd_failed(), %{result: result})
           dbug("Action resulted in error", error: error)
           {:error, error}
 
@@ -335,7 +336,7 @@ defmodule Jido.Agent.Server.Execute do
             pending: :queue.len(agent_result.pending_instructions)
           )
 
-          ServerSignal.emit_event(state, ServerSignal.cmd_success_with_pending_instructions(), %{
+          ServerOutput.emit_event(state, ServerSignal.cmd_success_with_pending_instructions(), %{
             result: result
           })
 
@@ -344,7 +345,7 @@ defmodule Jido.Agent.Server.Execute do
         # Handle other results
         true ->
           dbug("Handling other result", result: result)
-          ServerSignal.emit_event(state, ServerSignal.cmd_success(), %{result: result})
+          ServerOutput.emit_event(state, ServerSignal.cmd_success(), %{result: result})
           {:ok, %{state | agent: agent_result}}
       end
     end

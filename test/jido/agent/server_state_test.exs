@@ -5,6 +5,8 @@ defmodule Jido.Agent.Server.StateTest do
   alias JidoTest.TestAgents.BasicAgent
   alias Jido.Signal
 
+  @moduletag :capture_log
+
   describe "new state" do
     test "creates state with required fields" do
       agent = BasicAgent.new("test")
@@ -13,6 +15,8 @@ defmodule Jido.Agent.Server.StateTest do
       assert state.agent == agent
       assert state.dispatch == {:bus, [target: {:bus, :default}, stream: "agent"]}
       assert state.status == :idle
+      assert state.verbose == :info
+      assert state.mode == :auto
       assert :queue.is_queue(state.pending_signals)
       assert :queue.is_empty(state.pending_signals)
     end
@@ -24,6 +28,20 @@ defmodule Jido.Agent.Server.StateTest do
 
       assert state.agent == agent
       assert state.dispatch == dispatch
+      assert state.status == :idle
+      assert state.verbose == :info
+      assert state.mode == :auto
+      assert :queue.is_queue(state.pending_signals)
+      assert :queue.is_empty(state.pending_signals)
+    end
+
+    test "creates state with custom verbose and mode settings" do
+      agent = BasicAgent.new("test")
+      state = %State{agent: agent, verbose: :debug, mode: :manual}
+
+      assert state.agent == agent
+      assert state.verbose == :debug
+      assert state.mode == :manual
       assert state.status == :idle
       assert :queue.is_queue(state.pending_signals)
       assert :queue.is_empty(state.pending_signals)

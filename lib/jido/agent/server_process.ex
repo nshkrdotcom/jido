@@ -5,6 +5,7 @@ defmodule Jido.Agent.Server.Process do
   use ExDbug, enabled: false
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Agent.Server.Signal, as: ServerSignal
+  alias Jido.Agent.Server.Output, as: ServerOutput
 
   @doc """
   Starts a child process under the Server's DynamicSupervisor.
@@ -22,7 +23,7 @@ defmodule Jido.Agent.Server.Process do
           child_spec: inspect(child_spec)
         )
 
-        ServerSignal.emit_event(state, ServerSignal.process_started(), %{
+        ServerOutput.emit_event(state, ServerSignal.process_started(), %{
           child_pid: pid,
           child_spec: child_spec
         })
@@ -36,7 +37,7 @@ defmodule Jido.Agent.Server.Process do
           child_spec: inspect(child_spec)
         )
 
-        ServerSignal.emit_event(state, ServerSignal.process_failed(), %{
+        ServerOutput.emit_event(state, ServerSignal.process_failed(), %{
           reason: reason,
           child_spec: child_spec
         })
@@ -70,7 +71,7 @@ defmodule Jido.Agent.Server.Process do
           child_pid: inspect(child_pid)
         )
 
-        ServerSignal.emit_event(state, ServerSignal.process_terminated(), %{
+        ServerOutput.emit_event(state, ServerSignal.process_terminated(), %{
           child_pid: child_pid
         })
 
@@ -107,7 +108,7 @@ defmodule Jido.Agent.Server.Process do
       result
     else
       error ->
-        ServerSignal.emit_event(state, ServerSignal.process_failed(), %{
+        ServerOutput.emit_event(state, ServerSignal.process_failed(), %{
           child_pid: child_pid,
           child_spec: child_spec,
           error: error

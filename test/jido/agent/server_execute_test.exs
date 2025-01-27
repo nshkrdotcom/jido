@@ -356,12 +356,19 @@ defmodule JidoTest.Agent.Server.ExecuteTest do
   end
 
   describe "agent_signal_cmd/2" do
-    setup do
+    setup context do
+      test_name = context.test
+      supervisor_name = Module.concat(__MODULE__, "#{test_name}.Supervisor")
+      {:ok, supervisor} = start_supervised({DynamicSupervisor, name: supervisor_name})
+
       basic_state = %ServerState{
         status: :running,
         agent: BasicAgent.new(),
         dispatch: {:pid, [target: self(), delivery_mode: :async]},
-        pending_signals: :queue.new()
+        pending_signals: :queue.new(),
+        child_supervisor: supervisor,
+        verbose: false,
+        mode: :auto
       }
 
       error_state = %ServerState{
@@ -427,7 +434,8 @@ defmodule JidoTest.Agent.Server.ExecuteTest do
         dispatch: {:pid, [target: self(), delivery_mode: :async]},
         pending_signals: :queue.new(),
         child_supervisor: supervisor,
-        subscriptions: []
+        verbose: false,
+        mode: :auto
       }
 
       {:ok, state: state}

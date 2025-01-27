@@ -26,6 +26,12 @@ defmodule Jido.Agent.Server.Signal do
   def cmd, do: @cmd_prefix
   def directive, do: @directive_prefix
 
+  # Agent cmd signals
+  def cmd_set, do: "#{@cmd_prefix}set"
+  def cmd_validate, do: "#{@cmd_prefix}validate"
+  def cmd_plan, do: "#{@cmd_prefix}plan"
+  def cmd_run, do: "#{@cmd_prefix}run"
+
   # Event signal types - Command results
   def cmd_failed, do: "#{@event_prefix}cmd.failed"
   def cmd_success, do: "#{@event_prefix}cmd.success"
@@ -57,21 +63,58 @@ defmodule Jido.Agent.Server.Signal do
   def transition_failed, do: "#{@event_prefix}transition.failed"
 
   @doc """
-  Dispatches a signal using the provided server state's dispatch configuration.
+  Creates a signal for setting agent state attributes.
   """
-  @spec dispatch(%{dispatch: Types.dispatch_config()}, Signal.t()) ::
-          :ok | {:ok, term()} | {:error, term()}
-  def dispatch(%{dispatch: {adapter, opts}} = state, %Signal{} = signal) do
-    Dispatch.dispatch(signal, {adapter, opts})
+  @spec build_set(%{agent: Types.agent_info()}, map(), Keyword.t()) ::
+          {:ok, Signal.t()} | {:error, term()}
+  def build_set(%{agent: agent}, attrs, opts \\ []) when is_binary(agent.id) do
+    build_base_signal(agent.id, cmd_set(), [{:set, attrs}], %{
+      strict_validation: Keyword.get(opts, :strict_validation, false)
+    })
   end
 
   @doc """
-  Dispatches a signal using the provided dispatch configuration.
+  Creates a signal for validating agent state.
   """
-  @spec dispatch(Signal.t(), Types.dispatch_config()) :: :ok | {:ok, term()} | {:error, term()}
-  def dispatch(%Signal{} = signal, {adapter, opts} = config)
-      when is_atom(adapter) and is_list(opts) do
-    Dispatch.dispatch(signal, config)
+  @spec build_validate(%{agent: Types.agent_info()}, Keyword.t()) ::
+          {:ok, Signal.t()} | {:error, term()}
+  def build_validate(%{agent: agent}, opts \\ []) when is_binary(agent.id) do
+    build_base_signal(agent.id, cmd_validate(), [{:validate, %{}}], %{
+      strict_validation: Keyword.get(opts, :strict_validation, false)
+    })
+  end
+
+  @doc """
+  Creates a signal for planning agent instructions.
+  """
+  @spec build_plan(%{agent: Types.agent_info()}, term(), map()) ::
+          {:ok, Signal.t()} | {:error, term()}
+  def build_plan(%{agent: agent}, instructions, context \\ %{}) when is_binary(agent.id) do
+    with {:ok, normalized} <- normalize_instruction(instructions, %{}) do
+      build_base_signal(agent.id, cmd_plan(), normalized, %{context: context})
+    end
+  end
+
+  @doc """
+  Creates a signal for running agent instructions.
+  """
+  @spec build_run(%{agent: Types.agent_info()}, Keyword.t()) ::
+          {:ok, Signal.t()} | {:error, term()}
+  def build_run(%{agent: agent}, opts \\ []) when is_binary(agent.id) do
+    build_base_signal(agent.id, cmd_run(), [{:run, %{}}], %{
+      runner: Keyword.get(opts, :runner, nil),
+      context: Keyword.get(opts, :context, %{})
+    })
+  end
+
+  # Private helper to DRY up signal building
+  @spec build_base_signal(String.t(), String.t(), list(), map()) ::
+          {:ok, Signal.t()} | {:error, term()}
+  defp build_base_signal(agent_id, signal_type, instructions, opts) do
+    build_signal(signal_type, agent_id, %{},
+      jido_instructions: instructions,
+      jido_opts: opts
+    )
   end
 
   @doc """
@@ -115,47 +158,6 @@ defmodule Jido.Agent.Server.Signal do
   def build_event(%{agent: agent}, type, payload \\ %{})
       when is_binary(type) do
     build_signal(type, agent.id, payload)
-  end
-
-  @doc """
-  Creates and dispatches a command signal in one step.
-  """
-  @spec emit_cmd(
-          %{agent: Types.agent_info(), dispatch: Types.dispatch_config()},
-          term(),
-          map(),
-          Keyword.t()
-        ) ::
-          :ok | {:ok, term()} | {:error, term()}
-  def emit_cmd(%{} = state, instruction, params \\ %{}, opts \\ []) do
-    with {:ok, signal} <- build_cmd(state, instruction, params, opts) do
-      dispatch(state, signal)
-    end
-  end
-
-  @doc """
-  Creates and dispatches a directive signal in one step.
-  """
-  @spec emit_directive(%{agent: Types.agent_info(), dispatch: Types.dispatch_config()}, struct()) ::
-          :ok | {:ok, term()} | {:error, term()}
-  def emit_directive(%{} = state, directive) do
-    with {:ok, signal} <- build_directive(state, directive) do
-      dispatch(state, signal)
-    end
-  end
-
-  @doc """
-  Creates and dispatches an event signal in one step.
-  """
-  @spec emit_event(
-          %{agent: Types.agent_info(), dispatch: Types.dispatch_config()},
-          String.t(),
-          map()
-        ) :: :ok | {:ok, term()} | {:error, term()}
-  def emit_event(%{} = state, type, payload \\ %{}) do
-    with {:ok, signal} <- build_event(state, type, payload) do
-      dispatch(state, signal)
-    end
   end
 
   @doc """

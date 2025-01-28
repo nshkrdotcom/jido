@@ -5,7 +5,7 @@ defmodule Jido.Agent.Server.Process do
   use ExDbug, enabled: false
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Agent.Server.Signal, as: ServerSignal
-  alias Jido.Agent.Server.PubSub
+  alias Jido.Agent.Server.Output, as: ServerOutput
 
   @doc """
   Starts a child process under the Server's DynamicSupervisor.
@@ -23,7 +23,7 @@ defmodule Jido.Agent.Server.Process do
           child_spec: inspect(child_spec)
         )
 
-        PubSub.emit_event(state, ServerSignal.process_started(), %{
+        ServerOutput.emit_event(state, ServerSignal.process_started(), %{
           child_pid: pid,
           child_spec: child_spec
         })
@@ -37,7 +37,7 @@ defmodule Jido.Agent.Server.Process do
           child_spec: inspect(child_spec)
         )
 
-        PubSub.emit_event(state, ServerSignal.process_start_failed(), %{
+        ServerOutput.emit_event(state, ServerSignal.process_failed(), %{
           reason: reason,
           child_spec: child_spec
         })
@@ -71,7 +71,7 @@ defmodule Jido.Agent.Server.Process do
           child_pid: inspect(child_pid)
         )
 
-        PubSub.emit_event(state, ServerSignal.process_terminated(), %{
+        ServerOutput.emit_event(state, ServerSignal.process_terminated(), %{
           child_pid: child_pid
         })
 
@@ -81,7 +81,7 @@ defmodule Jido.Agent.Server.Process do
         dbug("Failed to terminate child process",
           agent_id: state.agent.id,
           child_pid: inspect(child_pid),
-          reason: inspect(reason)
+          reason: inspect(error)
         )
 
         error
@@ -98,23 +98,17 @@ defmodule Jido.Agent.Server.Process do
   @spec restart(%ServerState{}, pid(), map()) :: {:ok, pid()} | {:error, term()}
   def restart(%ServerState{} = state, child_pid, child_spec) do
     with :ok <- terminate(state, child_pid),
-         {:ok, new_pid} = result <- start(state, child_spec) do
+         {:ok, _new_pid} = result <- start(state, child_spec) do
       dbug("Restarted child process",
         agent_id: state.agent.id,
         old_pid: inspect(child_pid),
-        new_pid: inspect(new_pid)
+        new_pid: inspect(result)
       )
-
-      PubSub.emit_event(state, ServerSignal.process_restart_succeeded(), %{
-        old_pid: child_pid,
-        new_pid: new_pid,
-        child_spec: child_spec
-      })
 
       result
     else
       error ->
-        PubSub.emit_event(state, ServerSignal.process_restart_failed(), %{
+        ServerOutput.emit_event(state, ServerSignal.process_failed(), %{
           child_pid: child_pid,
           child_spec: child_spec,
           error: error

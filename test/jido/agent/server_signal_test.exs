@@ -2,14 +2,15 @@ defmodule JidoTest.Agent.Server.SignalTest do
   use ExUnit.Case, async: true
   alias Jido.Agent.Server.Signal, as: ServerSignal
   alias Jido.Signal
+  alias JidoTest.TestActions.{BasicAction, NoSchema}
 
   describe "syscall_signal/3" do
     test "creates syscall signal with state" do
       state = %{agent: %{id: "agent-123"}}
-      {:ok, signal} = ServerSignal.syscall_signal(state, ServerSignal.process_start())
+      {:ok, signal} = ServerSignal.build_event(state, ServerSignal.process_started())
 
-      assert signal.type == ServerSignal.process_start()
-      assert signal.source == "jido"
+      assert signal.type == ServerSignal.process_started()
+      assert signal.source == "jido://agent/agent-123"
       assert signal.subject == "agent-123"
       assert signal.data == %{}
     end
@@ -18,10 +19,10 @@ defmodule JidoTest.Agent.Server.SignalTest do
   describe "event_signal/3" do
     test "creates event signal with state" do
       state = %{agent: %{id: "agent-123"}}
-      {:ok, signal} = ServerSignal.event_signal(state, ServerSignal.started())
+      {:ok, signal} = ServerSignal.build_event(state, ServerSignal.started())
 
       assert signal.type == ServerSignal.started()
-      assert signal.source == "jido"
+      assert signal.source == "jido://agent/agent-123"
       assert signal.subject == "agent-123"
       assert signal.data == %{}
     end
@@ -29,64 +30,143 @@ defmodule JidoTest.Agent.Server.SignalTest do
     test "creates event signal with payload" do
       state = %{agent: %{id: "agent-123"}}
       payload = %{key: "value"}
-      {:ok, signal} = ServerSignal.event_signal(state, ServerSignal.started(), payload)
+      {:ok, signal} = ServerSignal.build_event(state, ServerSignal.started(), payload)
 
       assert signal.data == payload
     end
   end
 
-  describe "action_signal/4" do
-    test "creates command signal with single action" do
-      {:ok, signal} = ServerSignal.action_signal("agent-123", :test_action)
+  describe "build_cmd/4" do
+    test "creates command signal with single instruction" do
+      state = %{agent: %{id: "agent-123"}}
+      {:ok, signal} = ServerSignal.build_cmd(state, BasicAction)
 
       assert signal.type == ServerSignal.cmd()
       assert signal.subject == "agent-123"
-      assert signal.jidoaction == [{:test_action, %{}}]
-      assert signal.jidoopts == %{apply_state: true}
+
+      assert signal.jido_instructions == [
+               %Jido.Instruction{
+                 opts: [],
+                 context: %{},
+                 params: %{},
+                 action: JidoTest.TestActions.BasicAction
+               }
+             ]
+
+      assert signal.jido_opts == %{apply_state: true}
     end
 
-    test "creates command signal with action tuple" do
-      action = {:test_action, %{arg: "value"}}
-      {:ok, signal} = ServerSignal.action_signal("agent-123", action)
+    test "creates command signal with instruction tuple" do
+      state = %{agent: %{id: "agent-123"}}
+      instruction = {BasicAction, %{arg: "value"}}
+      {:ok, signal} = ServerSignal.build_cmd(state, instruction)
 
-      assert signal.jidoaction == [{:test_action, %{arg: "value"}}]
+      assert signal.jido_instructions == [
+               %Jido.Instruction{
+                 opts: [],
+                 context: %{},
+                 params: %{arg: "value"},
+                 action: JidoTest.TestActions.BasicAction
+               }
+             ]
     end
 
-    test "creates command signal with action list" do
-      actions = [
-        {:action1, %{arg1: "val1"}},
-        {:action2, %{arg2: "val2"}}
+    test "creates command signal with instruction list" do
+      state = %{agent: %{id: "agent-123"}}
+
+      instructions = [
+        {BasicAction, %{arg1: "val1"}},
+        {NoSchema, %{arg2: "val2"}}
       ]
 
-      {:ok, signal} = ServerSignal.action_signal("agent-123", actions)
+      {:ok, signal} = ServerSignal.build_cmd(state, instructions)
 
-      assert signal.jidoaction == actions
+      assert signal.jido_instructions == [
+               %Jido.Instruction{
+                 opts: [],
+                 context: %{},
+                 params: %{arg1: "val1"},
+                 action: JidoTest.TestActions.BasicAction
+               },
+               %Jido.Instruction{
+                 opts: [],
+                 context: %{},
+                 params: %{arg2: "val2"},
+                 action: JidoTest.TestActions.NoSchema
+               }
+             ]
     end
 
-    test "accepts custom args and opts" do
-      args = %{custom: "value"}
+    test "accepts custom params and opts" do
+      state = %{agent: %{id: "agent-123"}}
+      params = %{custom: "value"}
       opts = [apply_state: false]
-      {:ok, signal} = ServerSignal.action_signal("agent-123", :test, args, opts)
+      {:ok, signal} = ServerSignal.build_cmd(state, BasicAction, params, opts)
 
-      assert signal.data == args
-      assert signal.jidoopts == %{apply_state: false}
+      assert signal.data == %{}
+      assert signal.jido_opts == %{apply_state: false}
+    end
+
+    test "returns error for invalid instruction format" do
+      state = %{agent: %{id: "agent-123"}}
+      assert {:error, "invalid instruction format"} = ServerSignal.build_cmd(state, "invalid")
+    end
+
+    test "returns error for invalid instruction tuple format" do
+      state = %{agent: %{id: "agent-123"}}
+
+      assert {:error, "invalid instruction format"} =
+               ServerSignal.build_cmd(state, {BasicAction, "invalid"})
+    end
+
+    test "returns error for invalid instruction list format" do
+      state = %{agent: %{id: "agent-123"}}
+      invalid_instructions = [{BasicAction, "invalid"}, {NoSchema, 123}]
+
+      assert {:error, "invalid instruction format"} =
+               ServerSignal.build_cmd(state, invalid_instructions)
     end
   end
 
-  describe "extract_actions/1" do
-    test "extracts actions and options from valid signal" do
+  describe "directive_signal" do
+    test "creates directive signal with valid directive" do
+      state = %{agent: %{id: "agent-123"}}
+
+      directive = %Jido.Agent.Directive.EnqueueDirective{
+        action: BasicAction,
+        params: %{value: 1},
+        context: %{}
+      }
+
+      {:ok, signal} = ServerSignal.build_directive(state, directive)
+
+      assert signal.type == ServerSignal.directive()
+      assert signal.subject == "agent-123"
+      assert signal.data == %{directive: directive}
+    end
+
+    test "returns error for invalid directive" do
+      state = %{agent: %{id: "agent-123"}}
+      invalid_directive = %{not: "a directive"}
+
+      assert {:error, :invalid_directive} = ServerSignal.build_directive(state, invalid_directive)
+    end
+  end
+
+  describe "extract_instructions/1" do
+    test "extracts instructions and options from valid signal" do
       signal = %Signal{
         id: "123",
         type: "jido.agent.cmd",
         source: "jido",
         subject: "agent-123",
-        jidoaction: [{:test_action, %{param: "value"}}],
-        jidoopts: %{apply_state: true},
+        jido_instructions: [{BasicAction, %{param: "value"}}],
+        jido_opts: %{apply_state: true},
         data: %{arg: "value"}
       }
 
-      assert {:ok, {actions, data, opts}} = ServerSignal.extract_actions(signal)
-      assert actions == [{:test_action, %{param: "value"}}]
+      assert {:ok, {instructions, data, opts}} = ServerSignal.extract_instructions(signal)
+      assert instructions == [{BasicAction, %{param: "value"}}]
       assert data == %{arg: "value"}
       assert opts == [apply_state: true]
     end
@@ -97,11 +177,11 @@ defmodule JidoTest.Agent.Server.SignalTest do
         type: "jido.agent.cmd",
         source: "jido",
         subject: "agent-123",
-        jidoaction: nil,
-        jidoopts: nil
+        jido_instructions: nil,
+        jido_opts: nil
       }
 
-      assert {:error, :invalid_signal_format} = ServerSignal.extract_actions(invalid_signal)
+      assert {:error, :invalid_signal_format} = ServerSignal.extract_instructions(invalid_signal)
     end
   end
 
@@ -118,12 +198,12 @@ defmodule JidoTest.Agent.Server.SignalTest do
       %{base_signal: base_signal}
     end
 
-    test "is_agent_signal?" do
+    test "is_cmd_signal?" do
       {:ok, agent_signal} =
         Signal.new(%{
           id: "123",
           source: "jido",
-          type: "jido.agent.test",
+          type: "jido.agent.cmd.test",
           subject: "test-agent"
         })
 
@@ -135,29 +215,8 @@ defmodule JidoTest.Agent.Server.SignalTest do
           subject: "test-agent"
         })
 
-      assert ServerSignal.is_agent_signal?(agent_signal)
-      refute ServerSignal.is_agent_signal?(other_signal)
-    end
-
-    test "is_syscall_signal?" do
-      {:ok, syscall_signal} =
-        Signal.new(%{
-          id: "123",
-          source: "jido",
-          type: "jido.agent.syscall.test",
-          subject: "test-agent"
-        })
-
-      {:ok, other_signal} =
-        Signal.new(%{
-          id: "123",
-          source: "jido",
-          type: "other",
-          subject: "test-agent"
-        })
-
-      assert ServerSignal.is_syscall_signal?(syscall_signal)
-      refute ServerSignal.is_syscall_signal?(other_signal)
+      assert ServerSignal.is_cmd_signal?(agent_signal)
+      refute ServerSignal.is_cmd_signal?(other_signal)
     end
 
     test "is_event_signal?" do
@@ -181,20 +240,12 @@ defmodule JidoTest.Agent.Server.SignalTest do
       refute ServerSignal.is_event_signal?(other_signal)
     end
 
-    test "is_process_signal?" do
-      {:ok, start_signal} =
+    test "is_directive_signal?" do
+      {:ok, directive_signal} =
         Signal.new(%{
           id: "123",
           source: "jido",
-          type: ServerSignal.process_start(),
-          subject: "test-agent"
-        })
-
-      {:ok, term_signal} =
-        Signal.new(%{
-          id: "123",
-          source: "jido",
-          type: ServerSignal.process_terminate(),
+          type: "jido.agent.cmd.directive.test",
           subject: "test-agent"
         })
 
@@ -206,9 +257,8 @@ defmodule JidoTest.Agent.Server.SignalTest do
           subject: "test-agent"
         })
 
-      assert ServerSignal.is_process_signal?(start_signal)
-      assert ServerSignal.is_process_signal?(term_signal)
-      refute ServerSignal.is_process_signal?(other_signal)
+      assert ServerSignal.is_directive_signal?(directive_signal)
+      refute ServerSignal.is_directive_signal?(other_signal)
     end
   end
 end

@@ -5,7 +5,6 @@ defmodule JidoTest.ServerExecDirectiveTest do
   alias Jido.Agent.Server.Execute
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Agent.Server.Signal, as: ServerSignal
-  alias Jido.Runner.Instruction
   alias JidoTest.TestActions
   alias JidoTest.TestAgents.BasicAgent
 
@@ -13,40 +12,33 @@ defmodule JidoTest.ServerExecDirectiveTest do
 
   describe "process_signal/2 with EnqueueDirective" do
     setup do
-      {:ok, _} = start_supervised({Phoenix.PubSub, name: TestPubSub})
       {:ok, supervisor} = start_supervised(DynamicSupervisor)
       agent = BasicAgent.new("test")
 
       state = %ServerState{
         agent: agent,
         child_supervisor: supervisor,
-        pubsub: TestPubSub,
-        topic: "test_topic",
+        dispatch: {:pid, [target: self(), delivery_mode: :async]},
         status: :idle,
         pending_signals: :queue.new()
       }
 
-      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
       {:ok, state: state}
     end
 
     test "processes and executes single enqueue directive", %{state: state} do
       {:ok, signal} =
-        ServerSignal.action_signal(
-          "test",
+        ServerSignal.build_cmd(
+          state,
           {TestActions.EnqueueAction,
-           %{action: TestActions.NoSchema, params: %{value: 4}, opts: %{apply_state: true}}}
+           %{action: TestActions.NoSchema, params: %{value: 4}, opts: %{apply_state: true}}},
+          %{},
+          apply_state: true
         )
 
       {:ok, final_state} = Execute.process_signal(state, signal)
       assert final_state.agent.state.result == 6
-
-      assert final_state.agent.result.instructions == [
-               %Instruction{
-                 action: TestActions.NoSchema,
-                 params: %{value: 4}
-               }
-             ]
+      assert final_state.agent.result == %{result: 6}
     end
 
     # test "processes multiple enqueue directives", %{state: state} do
@@ -96,20 +88,17 @@ defmodule JidoTest.ServerExecDirectiveTest do
 
   describe "handle_pending_instructions" do
     setup do
-      {:ok, _} = start_supervised({Phoenix.PubSub, name: TestPubSub})
       {:ok, supervisor} = start_supervised(DynamicSupervisor)
       agent = BasicAgent.new("test")
 
       state = %ServerState{
         agent: agent,
         child_supervisor: supervisor,
-        pubsub: TestPubSub,
-        topic: "test_topic",
+        dispatch: {:pid, [target: self(), delivery_mode: :async]},
         status: :idle,
         pending_signals: :queue.new()
       }
 
-      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
       {:ok, state: state}
     end
 
@@ -129,14 +118,18 @@ defmodule JidoTest.ServerExecDirectiveTest do
           }
         ])
 
-      agent_result = %Jido.Runner.Result{
-        initial_state: state.agent,
-        result_state: state.agent,
-        pending_instructions: instructions
+      # Update agent with pending instructions and result
+      agent = %{
+        state.agent
+        | pending_instructions: instructions,
+          # Initial result state
+          result: %{value: 10}
       }
 
+      state = %{state | agent: agent}
+
       # Call handle_pending_instructions
-      {:ok, new_state} = Execute.handle_pending_instructions(state, agent_result)
+      {:ok, new_state} = Execute.handle_pending_instructions(state, agent)
 
       # Verify pending instructions were cleared
       assert :queue.is_empty(new_state.agent.pending_instructions)
@@ -148,26 +141,42 @@ defmodule JidoTest.ServerExecDirectiveTest do
       [first, second] = signals
 
       assert first.type == ServerSignal.cmd()
-      assert first.jidoaction == [{TestActions.Add, %{value: 10, amount: 1}}]
-      assert first.jidoopts == %{apply_state: true}
-      assert first.data == %{apply_state: true}
-      assert first.source == "jido"
+
+      assert first.jido_instructions == [
+               %Jido.Instruction{
+                 opts: [],
+                 context: %{},
+                 params: %{value: 10, amount: 1},
+                 action: JidoTest.TestActions.Add
+               }
+             ]
+
+      assert first.jido_opts == %{apply_state: true}
+      assert first.data == %{}
+      assert first.source =~ "jido://agent/"
 
       assert second.type == ServerSignal.cmd()
-      assert second.jidoaction == [{TestActions.Multiply, %{amount: 2}}]
-      assert second.jidoopts == %{apply_state: true}
-      assert second.data == %{apply_state: true}
-      assert second.source == "jido"
+
+      assert second.jido_instructions == [
+               %Jido.Instruction{
+                 opts: [],
+                 context: %{},
+                 params: %{amount: 2},
+                 action: JidoTest.TestActions.Multiply
+               }
+             ]
+
+      assert second.jido_opts == %{apply_state: true}
+      assert second.data == %{}
+      assert second.source =~ "jido://agent/"
     end
 
     test "handles empty instruction queue", %{state: state} do
-      agent_result = %Jido.Runner.Result{
-        initial_state: state.agent,
-        result_state: state.agent,
-        pending_instructions: :queue.new()
-      }
+      # Update agent with empty instruction queue
+      agent = %{state.agent | pending_instructions: :queue.new()}
+      state = %{state | agent: agent}
 
-      {:ok, new_state} = Execute.handle_pending_instructions(state, agent_result)
+      {:ok, new_state} = Execute.handle_pending_instructions(state, agent)
 
       assert :queue.is_empty(new_state.agent.pending_instructions)
       assert :queue.is_empty(new_state.pending_signals)
@@ -186,13 +195,11 @@ defmodule JidoTest.ServerExecDirectiveTest do
           }
         ])
 
-      agent_result = %Jido.Runner.Result{
-        initial_state: state.agent,
-        result_state: state.agent,
-        pending_instructions: instructions
-      }
+      # Update agent with invalid instructions
+      agent = %{state.agent | pending_instructions: instructions}
+      state = %{state | agent: agent}
 
-      assert {:error, _reason} = Execute.handle_pending_instructions(state, agent_result)
+      assert {:error, _reason} = Execute.handle_pending_instructions(state, agent)
     end
   end
 end

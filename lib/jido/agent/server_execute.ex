@@ -11,10 +11,9 @@ defmodule Jido.Agent.Server.Execute do
   use Private
   use ExDbug, enabled: true
 
-  alias Jido.Error
   alias Jido.Agent.Server.State, as: ServerState
-  alias Jido.Agent.Server.{PubSub, Syscall}
   alias Jido.Agent.Server.Signal, as: ServerSignal
+  alias Jido.Agent.Server.Output, as: ServerOutput
   alias Jido.Signal
 
   @type signal_result ::
@@ -70,17 +69,18 @@ defmodule Jido.Agent.Server.Execute do
     #   - queue_processing_completed - When all signals processed successfully
     #   - queue_processing_failed - If queue processing fails
     defp process_signal_queue(%ServerState{} = state) do
-      PubSub.emit_event(state, ServerSignal.queue_processing_started(), %{
+      ServerOutput.emit_event(state, ServerSignal.queue_processing_started(), %{
         queue_size: :queue.len(state.pending_signals)
       })
 
       case process_queue_signals(state) do
         {:ok, final_state} ->
-          PubSub.emit_event(final_state, ServerSignal.queue_processing_completed(), %{})
+          ServerOutput.emit_event(final_state, ServerSignal.queue_processing_completed(), %{})
           {:ok, final_state}
 
         {:error, reason} = error ->
-          PubSub.emit_event(state, ServerSignal.queue_processing_failed(), %{reason: reason})
+          ServerOutput.emit_event(state, ServerSignal.queue_processing_failed(), %{reason: reason})
+
           error
       end
     end
@@ -111,14 +111,14 @@ defmodule Jido.Agent.Server.Execute do
         {:ok, signal, new_state} ->
           case execute_signal(new_state, signal) do
             {:ok, updated_state} ->
-              PubSub.emit_event(updated_state, ServerSignal.queue_step_completed(), %{
+              ServerOutput.emit_event(updated_state, ServerSignal.queue_step_completed(), %{
                 completed_signal: signal
               })
 
               process_queue_signals(updated_state)
 
             {:ignore, reason} ->
-              PubSub.emit_event(new_state, ServerSignal.queue_step_ignored(), %{
+              ServerOutput.emit_event(new_state, ServerSignal.queue_step_ignored(), %{
                 ignored_signal: signal,
                 reason: reason
               })
@@ -126,7 +126,7 @@ defmodule Jido.Agent.Server.Execute do
               process_queue_signals(new_state)
 
             {:error, reason} = error ->
-              PubSub.emit_event(new_state, ServerSignal.queue_step_failed(), %{
+              ServerOutput.emit_event(new_state, ServerSignal.queue_step_failed(), %{
                 failed_signal: signal,
                 reason: reason
               })
@@ -142,7 +142,7 @@ defmodule Jido.Agent.Server.Execute do
     # Executes a signal based on its type.
     #
     # This function handles the core signal execution logic by:
-    # 1. Determining the signal type (agent or syscall)
+    # 1. Determining the signal type (command or directive)
     # 2. Routing to the appropriate execution handler
     # 3. Providing error handling via try/rescue
     #
@@ -165,11 +165,11 @@ defmodule Jido.Agent.Server.Execute do
     defp execute_signal(%ServerState{} = state, %Signal{} = signal) do
       try do
         cond do
-          ServerSignal.is_agent_signal?(signal) ->
+          ServerSignal.is_cmd_signal?(signal) ->
             execute_agent_signal(state, signal)
 
-          ServerSignal.is_syscall_signal?(signal) ->
-            execute_syscall_signal(state, signal)
+          ServerSignal.is_directive_signal?(signal) ->
+            execute_directive_signal(state, signal)
 
           true ->
             {:ignore, {:unknown_signal_type, signal.type}}
@@ -181,66 +181,33 @@ defmodule Jido.Agent.Server.Execute do
       end
     end
 
-    # Executes a syscall signal to manage child processes.
+    # Executes a directive signal.
     #
-    # This function handles two types of syscall signals:
-    # - Process start: Spawns a new child process using the provided child spec
-    # - Process terminate: Kills an existing child process by PID
+    # This function handles directive signal execution by:
+    # 1. Extracting the directive from the signal
+    # 2. Executing the directive with the current state
+    # 3. Handling any errors that occur during execution
     #
     # ## Parameters
     #   - state: The current ServerState struct
-    #   - signal: The Signal struct containing the syscall details
+    #   - signal: The Signal struct containing the directive
     #
     # ## Returns
-    #   - `{:ok, state}` - Syscall executed successfully with updated state
-    #   - `{:error, reason}` - Syscall execution failed
-    #   - `{:ignore, {:unknown_server_signal, type}}` - Unknown signal type
-    #
-    # ## Signal Types
-    #   - `ServerSignal.process_start()` - Spawns a new child process
-    #   - `ServerSignal.process_terminate()` - Terminates an existing child process
-    #
-    # ## Examples
-    #     iex> execute_syscall_signal(state, start_signal)
-    #     {:ok, updated_state}
-    #
-    #     iex> execute_syscall_signal(state, terminate_signal)
-    #     {:ok, updated_state}
-    @spec execute_syscall_signal(ServerState.t(), Signal.t()) :: signal_result()
-    defp execute_syscall_signal(%ServerState{} = state, %Signal{} = signal) do
-      dbug("Processing syscall signal", signal: signal)
-
-      cond do
-        signal.type == ServerSignal.process_start() ->
-          dbug("Executing process start syscall", child_spec: signal.data.child_spec)
-
-          case Syscall.execute(state, {:spawn, signal.data.child_spec}) do
-            {:error, reason} ->
-              dbug("Process start failed", error: reason)
-              {:error, reason}
-
-            {result, new_state} ->
-              dbug("Process started successfully", result: result)
-              {:ok, new_state}
-          end
-
-        signal.type == ServerSignal.process_terminate() ->
-          dbug("Executing process terminate syscall", child_pid: signal.data.child_pid)
-
-          case Syscall.execute(state, {:kill, signal.data.child_pid}) do
-            {:error, reason} ->
-              dbug("Process termination failed", reason: reason)
-              {:error, reason}
-
-            {_result, new_state} ->
-              dbug("Process terminated successfully")
-              {:ok, new_state}
-          end
-
-        true ->
-          dbug("Unknown server signal", type: signal.type)
-          {:ignore, {:unknown_server_signal, signal.type}}
+    #   - `{:ok, state}` - Successfully executed the directive
+    #   - `{:error, reason}` - Directive execution failed
+    @spec execute_directive_signal(ServerState.t(), Signal.t()) :: signal_result()
+    defp execute_directive_signal(%ServerState{} = state, %Signal{data: %{directive: directive}}) do
+      with {:ok, state} <- ensure_running_state(state),
+           {:ok, agent_result} <- state.agent.__struct__.cmd(state.agent, directive, %{}, []),
+           {:ok, state} <- handle_agent_result(state, agent_result),
+           {:ok, idle_state} <- ServerState.transition(state, :idle) do
+        dbug("Directive signal executed successfully")
+        {:ok, idle_state}
       end
+    end
+
+    defp execute_directive_signal(_state, _signal) do
+      {:error, :invalid_directive_format}
     end
 
     # Executes an agent signal based on the server's current state.
@@ -290,7 +257,7 @@ defmodule Jido.Agent.Server.Execute do
     # Executes an agent command signal when the server is in the running state.
     #
     # This function handles the execution of agent commands by:
-    # 1. Extracting the action, parameters and options from the signal
+    # 1. Extracting the instructions and options from the signal
     # 2. Calling the agent's cmd/4 function with the extracted values
     # 3. Handling any errors that occur during execution
     #
@@ -304,19 +271,24 @@ defmodule Jido.Agent.Server.Execute do
     #   - `{:error, {:invalid_state, status}}` - Server was in invalid state
     @spec agent_signal_cmd(ServerState.t(), Signal.t()) :: {:ok, map()} | {:error, term()}
     defp agent_signal_cmd(%ServerState{status: :running} = state, %Signal{} = signal) do
-      {:ok, {action, params, opts}} = ServerSignal.extract_actions(signal)
-      dbug("Executing agent command", action: action, params: params, opts: opts)
+      case ServerSignal.extract_instructions(signal) do
+        {:ok, {instructions, data, opts}} ->
+          dbug("Executing agent command", instructions: instructions, data: data, opts: opts)
 
-      try do
-        state.agent.__struct__.cmd(state.agent, action, params, opts)
-      rescue
-        error ->
-          dbug("Action execution failed",
-            action: action,
-            error: Exception.format(:error, error, __STACKTRACE__)
-          )
+          try do
+            state.agent.__struct__.cmd(state.agent, instructions, data, opts)
+          rescue
+            error ->
+              dbug("Action execution failed",
+                instructions: instructions,
+                error: Exception.format(:error, error, __STACKTRACE__)
+              )
 
-          {:error, error}
+              {:error, error}
+          end
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end
 
@@ -331,16 +303,14 @@ defmodule Jido.Agent.Server.Execute do
     # It handles several cases in priority order:
     #
     # 1. Error results - If the result contains an error, returns the error
-    # 2. Syscalls - If the result contains syscalls, processes them via handle_syscalls/2
-    # 3. Pending instructions - If the agent has pending instructions, processes them via handle_pending_instructions/2
-    # 4. Other results - Updates the server state with the new agent state
+    # 2. Pending instructions - If the agent has pending instructions, processes them via handle_pending_instructions/2
+    # 3. Other results - Updates the server state with the new agent state
     #
     # ## Parameters
     #   - state: The current ServerState struct
     #   - agent_result: The result map from the agent action containing:
     #     - result: The actual result data
     #     - error: Optional error information
-    #     - syscalls: Optional list of syscalls to process
     #     - pending_instructions: Queue of pending instructions
     #
     # ## Returns
@@ -356,15 +326,9 @@ defmodule Jido.Agent.Server.Execute do
         # Check if result map has error key
         match?(%{error: error} when not is_nil(error), result) ->
           error = result.error
-          PubSub.emit_event(state, ServerSignal.cmd_failed(), %{result: result})
+          ServerOutput.emit_event(state, ServerSignal.cmd_failed(), %{result: result})
           dbug("Action resulted in error", error: error)
           {:error, error}
-
-        # Check if result map has syscalls key
-        match?(%{syscalls: syscalls} when is_list(syscalls) and length(syscalls) > 0, result) ->
-          dbug("Handling syscalls from result", syscalls: result.syscalls)
-          PubSub.emit_event(state, ServerSignal.cmd_success_with_syscall(), %{result: result})
-          handle_syscalls(state, result.syscalls)
 
         # Check if agent has pending instructions
         not :queue.is_empty(agent_result.pending_instructions) ->
@@ -372,7 +336,7 @@ defmodule Jido.Agent.Server.Execute do
             pending: :queue.len(agent_result.pending_instructions)
           )
 
-          PubSub.emit_event(state, ServerSignal.cmd_success_with_pending_instructions(), %{
+          ServerOutput.emit_event(state, ServerSignal.cmd_success_with_pending_instructions(), %{
             result: result
           })
 
@@ -381,7 +345,7 @@ defmodule Jido.Agent.Server.Execute do
         # Handle other results
         true ->
           dbug("Handling other result", result: result)
-          PubSub.emit_event(state, ServerSignal.cmd_success(), %{result: result})
+          ServerOutput.emit_event(state, ServerSignal.cmd_success(), %{result: result})
           {:ok, %{state | agent: agent_result}}
       end
     end
@@ -418,10 +382,10 @@ defmodule Jido.Agent.Server.Execute do
         |> :queue.to_list()
         |> Enum.reduce_while({:ok, %{state | agent: agent_result}}, fn instruction,
                                                                        {:ok, acc_state} ->
-          case ServerSignal.action_signal(
-                 acc_state.agent.id,
+          case ServerSignal.build_cmd(
+                 acc_state,
                  {instruction.action, instruction.params},
-                 Map.get(instruction, :opts, %{}),
+                 %{},
                  apply_state: true
                ) do
             {:ok, signal} ->
@@ -444,38 +408,6 @@ defmodule Jido.Agent.Server.Execute do
         error ->
           error
       end
-    end
-
-    # Executes a list of syscalls in sequence, halting on first error.
-    #
-    # This function takes a list of syscalls and executes them one by one using the Syscall module.
-    # If any syscall fails, execution is halted and the error is returned. Otherwise, the updated
-    # state after executing all syscalls is returned.
-    #
-    # ## Parameters
-    #   - state: The current ServerState struct
-    #   - syscalls: List of syscall structs to execute
-    #
-    # ## Returns
-    #   - `{:ok, state}` - All syscalls executed successfully
-    #   - `{:error, error}` - A syscall failed during execution
-    defp handle_syscalls(%ServerState{} = state, syscalls) when is_list(syscalls) do
-      dbug("Handling syscalls", syscalls: syscalls)
-
-      Enum.reduce_while(syscalls, {:ok, state}, fn syscall, {:ok, acc_state} ->
-        case Jido.Agent.Server.Syscall.execute(acc_state, syscall) do
-          {:ok, new_state} ->
-            {:cont, {:ok, new_state}}
-
-          {:error, error} ->
-            {:halt, {:error, error}}
-        end
-      end)
-    end
-
-    defp handle_syscalls(_state, invalid_syscalls) do
-      dbug("Invalid syscalls", syscalls: invalid_syscalls)
-      {:error, Error.validation_error("Invalid syscalls", %{syscalls: invalid_syscalls})}
     end
 
     # Ensures the server is in a running state by transitioning from idle if needed.

@@ -71,6 +71,22 @@ defmodule JidoTest.WorkflowExecuteTest do
                Workflow.execute_action_with_timeout(BasicAction, %{value: 5}, %{}, 1000)
     end
 
+    test "executes without forking a Task when timeout is zero" do
+      initial_process_count = length(Process.list())
+
+      result = Workflow.execute_action_with_timeout(BasicAction, %{value: 5}, %{}, 0)
+
+      # Verify the result is correct
+      assert {:ok, %{value: 5}} = result
+
+      # Give any potential tasks time to start (though there shouldn't be any)
+      Process.sleep(50)
+
+      # Verify no new processes were created
+      final_process_count = length(Process.list())
+      assert_in_delta initial_process_count, final_process_count, 1
+    end
+
     test "times out for slow action" do
       assert {:error, %Error{type: :timeout}} =
                Workflow.execute_action_with_timeout(DelayAction, %{delay: 1000}, %{}, 100)

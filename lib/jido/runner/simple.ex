@@ -7,15 +7,17 @@ defmodule Jido.Runner.Simple do
   The Simple Runner follows a sequential execution model:
   1. Dequeues a single instruction from the agent's pending queue
   2. Executes the instruction via its action module
-  3. Processes the result (either a directive, syscall or state update)
-  4. Returns a Result struct containing the execution outcome
+  3. Processes the result (either a state update, directive or both)
+  4. Applies state changes if configured
+  5. Returns the updated agent with the execution results
 
   ## Features
   * Single instruction execution
-  * Support for directives, syscalls and state results
+  * Support for directives and state results
   * Atomic execution guarantees
   * Comprehensive error handling
   * Debug logging at key execution points
+  * Optional state application
 
   ## Error Handling
   * Invalid instructions are rejected
@@ -25,14 +27,14 @@ defmodule Jido.Runner.Simple do
   """
   @behaviour Jido.Runner
 
-  use ExDbug, enabled: false, truncate: false
+  use ExDbug, enabled: true, truncate: false
 
-  alias Jido.Runner.{Instruction, Result}
-  alias Jido.Agent.{Directive, Syscall}
+  alias Jido.Instruction
   alias Jido.Error
+  alias Jido.Agent.Directive
 
-  @type run_opts :: keyword()
-  @type run_result :: {:ok, Result.t()} | {:error, Error.t() | String.t()}
+  @type run_opts :: [apply_state: boolean()]
+  @type run_result :: {:ok, Jido.Agent.t()} | {:error, Error.t() | String.t()}
 
   @doc """
   Executes a single instruction from the Agent's pending instructions queue.
@@ -41,8 +43,9 @@ defmodule Jido.Runner.Simple do
   1. Dequeues the oldest instruction from the agent's queue
   2. Creates a new Result struct to track execution
   3. Executes the instruction through its action module
-  4. Processes the execution result (directive, syscall or state)
-  5. Returns the final Result struct
+  4. Processes any directives from the execution
+  5. Optionally applies state changes
+  6. Returns the updated agent with execution results
 
   ## Parameters
     * `agent` - The agent struct containing:
@@ -50,44 +53,34 @@ defmodule Jido.Runner.Simple do
       * `state` - Current agent state
       * `id` - Agent identifier
     * `opts` - Optional keyword list of execution options:
-      * Currently unused but reserved for future extensions
+      * `apply_state` - Whether to apply state changes (default: true)
 
   ## Returns
-    * `{:ok, %Result{}}` - Successful execution with:
-      * `result_state` - Updated state map (for state results)
-      * `directives` - List of directives (for directive results)
-      * `syscalls` - List of syscalls (for syscall results)
-      * `status` - Set to :ok
-      * `error` - Set to nil
+    * `{:ok, updated_agent}` - Successful execution with:
+      * Updated state map (for state results)
+      * Updated pending instructions queue
+      * Any directives applied to the agent
     * `{:error, reason}` - Execution failed with:
       * String error for queue empty condition
-      * Result struct with error details for execution failures
+      * Error struct with details for execution failures
 
   ## Examples
 
       # Successful state update
-      {:ok, %Result{result_state: %{status: :complete}}} =
-        Runner.Simple.run(agent_with_state_update)
+      {:ok, updated_agent} = Runner.Simple.run(agent_with_state_update)
 
-      # Successful directive
-      {:ok, %Result{directives: [%EnqueueDirective{...}]}} =
-        Runner.Simple.run(agent_with_directive)
+      # Execute without applying state
+      {:ok, updated_agent} = Runner.Simple.run(agent_with_state_update, apply_state: false)
 
-      # Successful syscall
-      {:ok, %Result{syscalls: [%SpawnSyscall{...}]}} =
-        Runner.Simple.run(agent_with_syscall)
-
-      # Empty queue error
-      {:error, "No pending instructions"} =
-        Runner.Simple.run(agent_with_empty_queue)
+      # Empty queue - returns agent unchanged
+      {:ok, agent} = Runner.Simple.run(agent_with_empty_queue)
 
       # Execution error
-      {:error, %Result{error: error, status: :error}} =
-        Runner.Simple.run(agent_with_failing_action)
+      {:error, error} = Runner.Simple.run(agent_with_failing_action)
 
   ## Error Handling
     * Returns `{:error, "No pending instructions"}` for empty queue
-    * Returns `{:error, %Result{}}` with error details for execution failures
+    * Returns `{:error, error}` with error details for execution failures
     * All errors preserve the original agent state
     * Failed executions do not affect the remaining queue
 
@@ -100,10 +93,13 @@ defmodule Jido.Runner.Simple do
   """
   @impl true
   @spec run(Jido.Agent.t(), run_opts()) :: run_result()
-  def run(%{pending_instructions: instructions} = agent, _opts \\ []) do
+  def run(%{pending_instructions: instructions} = agent, opts \\ []) do
+    apply_state = Keyword.get(opts, :apply_state, true)
+
     dbug("Starting simple runner execution",
       agent_id: agent.id,
-      queue_size: :queue.len(instructions)
+      queue_size: :queue.len(instructions),
+      apply_state: apply_state
     )
 
     case :queue.out(instructions) do
@@ -114,100 +110,59 @@ defmodule Jido.Runner.Simple do
           remaining_count: :queue.len(remaining)
         )
 
-        execute_instruction(agent, instruction, remaining)
+        agent = %{agent | pending_instructions: remaining}
+        execute_instruction(agent, instruction, apply_state)
 
       {:empty, _} ->
         dbug("Execution skipped - empty instruction queue")
-
-        result = %Result{
-          initial_state: agent.state,
-          instructions: [],
-          result_state: agent.state,
-          directives: [],
-          syscalls: [],
-          status: :ok
-        }
-
-        {:ok, result}
+        {:ok, agent}
     end
   end
 
   @doc false
-  @spec execute_instruction(Jido.Agent.t(), Instruction.t(), :queue.queue()) :: run_result()
-  defp execute_instruction(agent, instruction, remaining) do
-    dbug("Preparing execution context",
-      agent_id: agent.id,
-      action: instruction.action,
-      params: instruction.params
-    )
-
-    # Initialize result tracking
-    result = %Result{
-      initial_state: agent.state,
-      instructions: [instruction],
-      pending_instructions: remaining
-    }
-
+  @spec execute_instruction(Jido.Agent.t(), Instruction.t(), boolean()) :: run_result()
+  defp execute_instruction(agent, instruction, apply_state) do
     dbug("Executing workflow action",
       agent_id: agent.id,
       action: instruction.action
     )
 
-    case Jido.Workflow.run(instruction.action, instruction.params, instruction.context) do
-      {:ok, result_value} ->
-        dbug("Workflow execution successful",
-          agent_id: agent.id,
-          result_type: get_result_type(result_value)
-        )
+    case Jido.Workflow.run(instruction) do
+      {:ok, state_map, directives} ->
+        handle_directive_result(agent, state_map, directives, apply_state)
 
-        handle_successful_execution(result, result_value)
+      {:ok, state_map} ->
+        maybe_apply_state(agent, state_map, apply_state)
+
+      {:error, reason} when is_binary(reason) ->
+        handle_directive_error(reason)
 
       {:error, error} ->
-        dbug("Workflow execution failed",
-          agent_id: agent.id,
-          error: error,
-          action: instruction.action
-        )
-
-        {:error, %{result | error: error, status: :error}}
+        {:error, error}
     end
   end
 
-  @doc false
-  @spec handle_successful_execution(Result.t(), term()) :: {:ok, Result.t()}
-  defp handle_successful_execution(result, result_value) do
-    dbug("Processing execution result",
-      result_type: get_result_type(result_value)
-    )
-
-    cond do
-      Directive.is_directive?(result_value) ->
-        dbug("Storing directive result")
-
-        {:ok,
-         %{
-           result
-           | result_state: result.initial_state,
-             directives: [result_value],
-             syscalls: [],
-             status: :ok
-         }}
-
-      Syscall.is_syscall?(result_value) ->
-        dbug("Storing syscall result")
-
-        {:ok,
-         %{
-           result
-           | result_state: result.initial_state,
-             directives: [],
-             syscalls: [result_value],
-             status: :ok
-         }}
-
-      true ->
-        dbug("Storing state result")
-        {:ok, %{result | result_state: result_value, directives: [], syscalls: [], status: :ok}}
+  @spec handle_directive_result(Jido.Agent.t(), map(), list(), boolean()) :: run_result()
+  defp handle_directive_result(agent, state_map, directives, apply_state) do
+    with :ok <- Directive.validate_directives(directives),
+         {:ok, agent_with_state} <- maybe_apply_state(agent, state_map, apply_state),
+         {:ok, updated_agent} <- Directive.apply_directives(agent_with_state, directives) do
+      {:ok, updated_agent}
     end
+  end
+
+  @spec handle_directive_error(String.t()) :: {:error, Error.t()}
+  defp handle_directive_error(_reason) do
+    {:error, Error.validation_error("Invalid directive", %{reason: :invalid_action})}
+  end
+
+  @doc false
+  @spec maybe_apply_state(Jido.Agent.t(), map(), boolean()) :: run_result()
+  defp maybe_apply_state(agent, state_map, true) do
+    {:ok, %{agent | state: Map.merge(agent.state, state_map), result: state_map}}
+  end
+
+  defp maybe_apply_state(agent, state_map, false) do
+    {:ok, %{agent | result: state_map}}
   end
 end

@@ -13,6 +13,8 @@ defmodule JidoTest.WorkflowRunTest do
 
   @attempts_table :workflow_run_test_attempts
 
+  @moduletag :capture_log
+
   setup :set_mimic_global
 
   setup do
@@ -45,6 +47,42 @@ defmodule JidoTest.WorkflowRunTest do
 
       assert log =~ "Action Elixir.JidoTest.TestActions.BasicAction start"
       assert log =~ "Action Elixir.JidoTest.TestActions.BasicAction complete"
+      verify!()
+    end
+
+    test "handles successful 3-item tuple with directive" do
+      expect(System, :monotonic_time, fn :microsecond -> 0 end)
+      expect(:telemetry, :execute, 2, fn _, _, _ -> :ok end)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, %{}, %Jido.Agent.Directive.EnqueueDirective{}} =
+                   Workflow.run(Jido.Actions.Directives.EnqueueAction, %{
+                     action: BasicAction,
+                     params: %{value: 5}
+                   })
+        end)
+
+      assert log =~ "Action Elixir.Jido.Actions.Directives.EnqueueAction start"
+      assert log =~ "Action Elixir.Jido.Actions.Directives.EnqueueAction complete"
+      verify!()
+    end
+
+    test "handles error 3-item tuple with directive" do
+      expect(System, :monotonic_time, fn :microsecond -> 0 end)
+      expect(:telemetry, :execute, 2, fn _, _, _ -> :ok end)
+
+      log =
+        capture_log(fn ->
+          assert {:error, %Error{}, %Jido.Agent.Directive.EnqueueDirective{}} =
+                   Workflow.run(JidoTest.TestActions.ErrorDirective, %{
+                     action: BasicAction,
+                     params: %{value: 5}
+                   })
+        end)
+
+      assert log =~ "Action Elixir.JidoTest.TestActions.ErrorDirective start"
+      assert log =~ "Action Elixir.JidoTest.TestActions.ErrorDirective error"
       verify!()
     end
 
@@ -212,7 +250,10 @@ defmodule JidoTest.WorkflowRunTest do
       {:error, %Error{type: :validation_error, message: error_message}} =
         Workflow.validate_params(BasicAction, %{invalid: "params"})
 
-      assert error_message =~ "Invalid parameters for Action"
+      assert error_message =~
+               "Invalid parameters for Action (Elixir.JidoTest.TestActions.BasicAction)"
+
+      assert error_message =~ "required :value option not found"
     end
   end
 end

@@ -146,11 +146,7 @@ defmodule JidoTest.TestAgents do
       new_state =
         agent.state
         |> Map.update!(:error_count, &(&1 + 1))
-        |> Map.put(:last_error, %{
-          type: result.error.__struct__,
-          message: result.error.message,
-          timestamp: DateTime.utc_now()
-        })
+        |> Map.put(:last_error, result)
 
       {:ok, %{agent | state: new_state}}
     end
@@ -218,8 +214,8 @@ defmodule JidoTest.TestAgents do
     end
 
     @impl true
-    def on_before_plan(agent, action, _params) do
-      agent = track_callback(agent, {:on_before_plan, action})
+    def on_before_plan(agent, _instructions, _context) do
+      agent = track_callback(agent, {:on_before_plan, nil})
       {:ok, agent}
     end
 
@@ -231,11 +227,6 @@ defmodule JidoTest.TestAgents do
     @impl true
     def on_after_run(agent, _result) do
       {:ok, track_callback(agent, :on_after_run)}
-    end
-
-    @impl true
-    def on_after_directives(agent, _result) do
-      {:ok, track_callback(agent, :on_after_directives)}
     end
 
     @impl true
@@ -252,21 +243,23 @@ defmodule JidoTest.TestAgents do
       actions: [JidoTest.TestActions.BasicAction]
   end
 
-  defmodule SyscallAgent do
-    @moduledoc "Agent that emits syscalls for testing server process management"
+  defmodule DirectiveAgent do
+    @moduledoc "Agent that emits directives for testing server process management"
     use Jido.Agent,
-      name: "syscall_agent",
-      description: "Tests syscall functionality",
+      name: "directive_agent",
+      description: "Tests directive functionality",
       category: "test",
-      tags: ["test", "syscalls"],
+      tags: ["test", "directives"],
       vsn: "1.0.0",
       actions: [
-        Jido.Actions.Syscall.Spawn,
-        Jido.Actions.Syscall.Kill,
-        Jido.Actions.Syscall.Broadcast,
-        Jido.Actions.Syscall.Subscribe,
-        Jido.Actions.Syscall.Unsubscribe,
-        Jido.Actions.Syscall.Checkpoint
+        Jido.Actions.Directives.EnqueueAction,
+        Jido.Actions.Directives.RegisterAction,
+        Jido.Actions.Directives.DeregisterAction,
+        Jido.Actions.Directives.Spawn,
+        Jido.Actions.Directives.Kill,
+        Jido.Actions.Directives.Publish,
+        Jido.Actions.Directives.Subscribe,
+        Jido.Actions.Directives.Unsubscribe
       ],
       schema: [
         processes: [
@@ -275,5 +268,68 @@ defmodule JidoTest.TestAgents do
           doc: "List of spawned process PIDs"
         ]
       ]
+  end
+
+  defmodule CustomServerAgent do
+    @moduledoc "Basic agent with simple schema and actions"
+    use Jido.Agent,
+      name: "basic_agent",
+      actions: [
+        JidoTest.TestActions.BasicAction,
+        JidoTest.TestActions.NoSchema,
+        JidoTest.TestActions.EnqueueAction,
+        JidoTest.TestActions.RegisterAction,
+        JidoTest.TestActions.DeregisterAction
+      ],
+      schema: [
+        location: [type: :atom, default: :home],
+        battery_level: [type: :integer, default: 100]
+      ]
+
+    require Logger
+
+    @impl true
+    def start_link(opts) do
+      agent_id = Keyword.get(opts, :id) || UUID.uuid4()
+      initial_state = Keyword.get(opts, :initial_state, %{})
+      agent = CustomServerAgent.new(agent_id, initial_state)
+
+      Jido.Agent.Server.start_link(
+        agent: agent,
+        name: agent_id,
+        skills: [
+          JidoTest.TestSkills.WeatherMonitorSkill
+        ],
+        schedule: [
+          {"*/15 * * * *", fn -> System.cmd("rm", ["/tmp/tmp_"]) end}
+        ]
+      )
+    end
+
+    @impl true
+    def mount(agent, opts) do
+      Logger.debug("Mounting CustomServerAgent", agent_id: agent.id, opts: opts)
+
+      # Validate battery level is positive
+      if agent.state.battery_level < 0 do
+        {:error, :invalid_battery_level}
+      else
+        # You can modify state here if needed
+        {:ok, agent}
+      end
+    end
+
+    @impl true
+    def shutdown(agent, reason) do
+      Logger.debug("Shutting down CustomServerAgent", agent_id: agent.id, reason: reason)
+
+      # Validate battery level is positive
+      if agent.state.battery_level < 0 do
+        {:error, :invalid_battery_level}
+      else
+        # Clean up any resources if needed
+        {:ok, agent}
+      end
+    end
   end
 end

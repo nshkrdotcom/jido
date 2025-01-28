@@ -7,19 +7,15 @@ defmodule Jido.Agent.Server.ProcessTest do
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Agent.Server.Signal, as: ServerSignal
   alias JidoTest.TestAgents.BasicAgent
-  alias Jido.Signal
 
   setup do
-    {:ok, _} = start_supervised({Phoenix.PubSub, name: TestPubSub})
-
     {:ok, supervisor} = start_supervised(DynamicSupervisor)
     agent = BasicAgent.new("test")
 
     state = %ServerState{
       agent: agent,
       child_supervisor: supervisor,
-      pubsub: TestPubSub,
-      topic: "test_topic",
+      dispatch: {:pid, [target: self(), delivery_mode: :async]},
       status: :idle,
       pending_signals: :queue.new()
     }
@@ -34,17 +30,13 @@ defmodule Jido.Agent.Server.ProcessTest do
         start: {Task, :start_link, [fn -> Process.sleep(:infinity) end]}
       }
 
-      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
-
       assert {:ok, pid} = ServerProcess.start(state, child_spec)
       assert Process.alive?(pid)
 
-      process_started = ServerSignal.process_started()
-
-      assert_receive %Signal{
-        type: ^process_started,
-        data: %{child_pid: ^pid, child_spec: ^child_spec}
-      }
+      assert_receive {:signal, signal}
+      assert signal.type == ServerSignal.process_started()
+      assert signal.data.child_pid == pid
+      assert signal.data.child_spec == child_spec
     end
 
     test "emits failure signal when start fails", %{state: state} do
@@ -53,18 +45,14 @@ defmodule Jido.Agent.Server.ProcessTest do
         start: {:not_a_module, :not_a_function, []}
       }
 
-      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
-
       capture_log(fn ->
         assert {:error, _reason} = ServerProcess.start(state, invalid_spec)
       end)
 
-      process_start_failed = ServerSignal.process_start_failed()
-
-      assert_receive %Signal{
-        type: ^process_start_failed,
-        data: %{child_spec: ^invalid_spec, reason: _reason}
-      }
+      assert_receive {:signal, signal}
+      assert signal.type == ServerSignal.process_failed()
+      assert signal.data.child_spec == invalid_spec
+      assert signal.data.reason != nil
     end
   end
 
@@ -107,17 +95,15 @@ defmodule Jido.Agent.Server.ProcessTest do
       {:ok, pid} = ServerProcess.start(state, child_spec)
       assert Process.alive?(pid)
 
-      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+      # Clear the start signal
+      assert_receive {:signal, _}
 
       assert :ok = ServerProcess.terminate(state, pid)
       refute Process.alive?(pid)
 
-      process_terminated = ServerSignal.process_terminated()
-
-      assert_receive %Signal{
-        type: ^process_terminated,
-        data: %{child_pid: ^pid}
-      }
+      assert_receive {:signal, signal}
+      assert signal.type == ServerSignal.process_terminated()
+      assert signal.data.child_pid == pid
     end
 
     test "returns error when terminating non-existent process", %{state: state} do
@@ -138,32 +124,23 @@ defmodule Jido.Agent.Server.ProcessTest do
       {:ok, old_pid} = ServerProcess.start(state, child_spec)
       assert Process.alive?(old_pid)
 
-      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
+      # Clear the start signal
+      assert_receive {:signal, _}
 
       {:ok, new_pid} = ServerProcess.restart(state, old_pid, child_spec)
       assert Process.alive?(new_pid)
       refute Process.alive?(old_pid)
       assert old_pid != new_pid
 
-      # Should receive terminated, started, and restart_succeeded signals
-      process_terminated = ServerSignal.process_terminated()
-      process_started = ServerSignal.process_started()
-      process_restart_succeeded = ServerSignal.process_restart_succeeded()
+      # Should receive terminated and started signals
+      assert_receive {:signal, signal1}
+      assert signal1.type == ServerSignal.process_terminated()
+      assert signal1.data.child_pid == old_pid
 
-      assert_receive %Signal{
-        type: ^process_terminated,
-        data: %{child_pid: ^old_pid}
-      }
-
-      assert_receive %Signal{
-        type: ^process_started,
-        data: %{child_pid: ^new_pid}
-      }
-
-      assert_receive %Signal{
-        type: ^process_restart_succeeded,
-        data: %{old_pid: ^old_pid, new_pid: ^new_pid, child_spec: ^child_spec}
-      }
+      assert_receive {:signal, signal2}
+      assert signal2.type == ServerSignal.process_started()
+      assert signal2.data.child_pid == new_pid
+      assert signal2.data.child_spec == child_spec
     end
 
     test "emits failure signal when restart fails", %{state: state} do
@@ -173,36 +150,27 @@ defmodule Jido.Agent.Server.ProcessTest do
       }
 
       {:ok, old_pid} = ServerProcess.start(state, child_spec)
+      # Clear the start signal
+      assert_receive {:signal, _}
 
       invalid_spec = %{
         id: :invalid_child,
         start: {:not_a_module, :not_a_function, []}
       }
 
-      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
-
       capture_log(fn ->
         assert {:error, _reason} = ServerProcess.restart(state, old_pid, invalid_spec)
       end)
 
-      process_terminated = ServerSignal.process_terminated()
-      process_start_failed = ServerSignal.process_start_failed()
-      process_restart_failed = ServerSignal.process_restart_failed()
+      # Should receive terminated and failed signals
+      assert_receive {:signal, signal1}
+      assert signal1.type == ServerSignal.process_terminated()
+      assert signal1.data.child_pid == old_pid
 
-      assert_receive %Signal{
-        type: ^process_terminated,
-        data: %{child_pid: ^old_pid}
-      }
-
-      assert_receive %Signal{
-        type: ^process_start_failed,
-        data: %{child_spec: ^invalid_spec}
-      }
-
-      assert_receive %Signal{
-        type: ^process_restart_failed,
-        data: %{child_pid: ^old_pid, child_spec: ^invalid_spec, error: _error}
-      }
+      assert_receive {:signal, signal2}
+      assert signal2.type == ServerSignal.process_failed()
+      assert signal2.data.child_spec == invalid_spec
+      assert signal2.data.reason != nil
     end
 
     test "fails to restart non-existent process", %{state: state} do
@@ -214,20 +182,13 @@ defmodule Jido.Agent.Server.ProcessTest do
         start: {Task, :start_link, [fn -> Process.sleep(:infinity) end]}
       }
 
-      :ok = Phoenix.PubSub.subscribe(TestPubSub, state.topic)
-
       assert {:error, :not_found} = ServerProcess.restart(state, non_existent_pid, child_spec)
 
-      process_restart_failed = ServerSignal.process_restart_failed()
-
-      assert_receive %Signal{
-        type: ^process_restart_failed,
-        data: %{
-          child_pid: ^non_existent_pid,
-          child_spec: ^child_spec,
-          error: {:error, :not_found}
-        }
-      }
+      assert_receive {:signal, signal}
+      assert signal.type == ServerSignal.process_failed()
+      assert signal.data.child_pid == non_existent_pid
+      assert signal.data.child_spec == child_spec
+      assert signal.data.error == {:error, :not_found}
     end
   end
 end

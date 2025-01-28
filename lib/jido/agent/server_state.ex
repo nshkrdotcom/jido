@@ -58,7 +58,8 @@ defmodule Jido.Agent.Server.State do
   require Logger
   alias Jido.Signal
   alias Jido.Agent.Server.Signal, as: ServerSignal
-  alias Jido.Agent.Server.PubSub
+  alias Jido.Agent.Server.Output, as: ServerOutput
+  alias Jido.Signal.Dispatch
   use ExDbug, enabled: false
 
   @typedoc """
@@ -74,13 +75,19 @@ defmodule Jido.Agent.Server.State do
 
   typedstruct do
     field(:agent, Jido.Agent.t(), enforce: true)
-    field(:pubsub, module())
-    field(:topic, String.t())
-    field(:subscriptions, [String.t()], default: [])
+
+    field(:dispatch, Dispatch.dispatch_config(),
+      default: {:bus, [target: {:bus, :default}, stream: "agent"]}
+    )
+
+    field(:verbose, :debug | :info | :warn | :error, default: :info)
+    field(:mode, :auto | :manual, default: :auto)
     field(:status, status(), default: :idle)
     field(:pending_signals, :queue.queue(), default: :queue.new())
     field(:max_queue_size, non_neg_integer(), default: 10_000)
     field(:child_supervisor, pid())
+    field(:correlation_id, String.t())
+    field(:causation_id, String.t())
   end
 
   # Define valid state transitions and their conditions
@@ -138,7 +145,11 @@ defmodule Jido.Agent.Server.State do
   def transition(%__MODULE__{status: current} = state, desired) do
     case @transitions[current][desired] do
       nil ->
-        PubSub.emit_event(state, ServerSignal.transition_failed(), from: current, to: desired)
+        ServerOutput.emit_event(state, ServerSignal.transition_failed(), %{
+          from: current,
+          to: desired
+        })
+
         {:error, {:invalid_transition, current, desired}}
 
       _reason ->
@@ -146,7 +157,11 @@ defmodule Jido.Agent.Server.State do
           "Agent state transition from #{current} to #{desired} (#{reason}) for agent #{state.agent.id}"
         )
 
-        PubSub.emit_event(state, ServerSignal.transition_succeeded(), from: current, to: desired)
+        ServerOutput.emit_event(state, ServerSignal.transition_succeeded(), %{
+          from: current,
+          to: desired
+        })
+
         {:ok, %{state | status: desired}}
     end
   end
@@ -188,10 +203,10 @@ defmodule Jido.Agent.Server.State do
         max_size: state.max_queue_size
       )
 
-      PubSub.emit_event(state, ServerSignal.queue_overflow(),
+      ServerOutput.emit_event(state, ServerSignal.queue_overflow(), %{
         queue_size: queue_size,
         max_size: state.max_queue_size
-      )
+      })
 
       {:error, :queue_overflow}
     else
@@ -256,9 +271,9 @@ defmodule Jido.Agent.Server.State do
   """
   @spec clear_queue(%__MODULE__{}) :: {:ok, %__MODULE__{}}
   def clear_queue(%__MODULE__{} = state) do
-    PubSub.emit_event(state, ServerSignal.queue_cleared(),
+    ServerOutput.emit_event(state, ServerSignal.queue_cleared(), %{
       queue_size: :queue.len(state.pending_signals)
-    )
+    })
 
     {:ok, %{state | pending_signals: :queue.new()}}
   end

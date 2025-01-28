@@ -1,40 +1,51 @@
 defmodule Jido.Agent.Server.Signal do
-  @moduledoc false
-  # Defines specialized signals for Agent Server communication and control.
+  @moduledoc """
+  Defines specialized signals for Agent Server communication and control.
 
-  # This module provides functions for creating standardized signals used by the Agent Server
-  # for operations like process management, state transitions, and command execution.
+  This module provides functions for creating standardized signals used by the Agent Server.
+  There are three main types of signals:
+
+  1. Command Signals (cmd) - Inbound signals that direct Agent behavior
+  2. Directive Signals - A specialized subset of command signals for state transitions
+  3. Event Signals - Outbound signals that report Agent activity
+  """
   use ExDbug, enabled: false
 
   alias Jido.Signal
+  alias Jido.Agent.Types
+  alias UUID
 
   # Signal type prefixes
   @agent_prefix "jido.agent."
   @cmd_prefix "#{@agent_prefix}cmd."
-  @syscall_prefix "#{@agent_prefix}syscall."
+  @directive_prefix "#{@cmd_prefix}directive."
   @event_prefix "#{@agent_prefix}event."
 
-  # Agent commands
-  def cmd, do: "#{@cmd_prefix}"
-  def get_topic, do: "#{@syscall_prefix}topic"
-  def process_start, do: "#{@syscall_prefix}start"
-  def process_list, do: "#{@syscall_prefix}list"
-  def process_terminate, do: "#{@syscall_prefix}terminate"
+  # Command signal types
+  def cmd, do: @cmd_prefix
+  def directive, do: @directive_prefix
 
-  # Events
+  # Agent cmd signals
+  def cmd_set, do: "#{@cmd_prefix}set"
+  def cmd_validate, do: "#{@cmd_prefix}validate"
+  def cmd_plan, do: "#{@cmd_prefix}plan"
+  def cmd_run, do: "#{@cmd_prefix}run"
+
+  # Event signal types - Command results
   def cmd_failed, do: "#{@event_prefix}cmd.failed"
-  def cmd_success_with_syscall, do: "#{@event_prefix}cmd.syscall"
-  def cmd_success_with_pending_instructions, do: "#{@event_prefix}cmd.pending_ix"
   def cmd_success, do: "#{@event_prefix}cmd.success"
+  def cmd_success_with_syscall, do: "#{@event_prefix}cmd.success.syscall"
+  def cmd_success_with_pending_instructions, do: "#{@event_prefix}cmd.success.pending"
 
-  # Events - Process lifecycle
+  # Event signal types - Process lifecycle
   def process_started, do: "#{@event_prefix}process.started"
   def process_terminated, do: "#{@event_prefix}process.terminated"
-  def process_restart_succeeded, do: "#{@event_prefix}process.restart.succeeded"
-  def process_restart_failed, do: "#{@event_prefix}process.restart.failed"
-  def process_start_failed, do: "#{@event_prefix}process.start.failed"
+  def process_failed, do: "#{@event_prefix}process.failed"
 
-  # Events - Queue processing
+  # Event signal types - Queue processing
+  def queue_started, do: "#{@event_prefix}queue.started"
+  def queue_completed, do: "#{@event_prefix}queue.completed"
+  def queue_failed, do: "#{@event_prefix}queue.failed"
   def queue_overflow, do: "#{@event_prefix}queue.overflow"
   def queue_cleared, do: "#{@event_prefix}queue.cleared"
   def queue_processing_started, do: "#{@event_prefix}queue.processing.started"
@@ -44,68 +55,134 @@ defmodule Jido.Agent.Server.Signal do
   def queue_step_ignored, do: "#{@event_prefix}queue.step.ignored"
   def queue_step_failed, do: "#{@event_prefix}queue.step.failed"
 
-  # Events - Signal execution
-  def signal_execution_started, do: "#{@event_prefix}signal.execution.started"
-  def signal_execution_completed, do: "#{@event_prefix}signal.execution.completed"
-  def signal_execution_failed, do: "#{@event_prefix}signal.execution.failed"
-
-  # Events - State transitions
+  # Event signal types - State transitions
   def started, do: "#{@event_prefix}started"
   def stopped, do: "#{@event_prefix}stopped"
   def transition_succeeded, do: "#{@event_prefix}transition.succeeded"
   def transition_failed, do: "#{@event_prefix}transition.failed"
 
-  def syscall_signal(state, type, payload \\ %{}) do
-    build_signal(type, state.agent.id, payload)
+  @doc """
+  Creates a signal for setting agent state attributes.
+  """
+  @spec build_set(%{agent: Types.agent_info()}, map(), Keyword.t()) ::
+          {:ok, Signal.t()} | {:error, term()}
+  def build_set(%{agent: agent}, attrs, opts \\ []) when is_binary(agent.id) do
+    build_base_signal(agent.id, cmd_set(), [{:set, attrs}], %{
+      strict_validation: Keyword.get(opts, :strict_validation, false)
+    })
+  end
+
+  @doc """
+  Creates a signal for validating agent state.
+  """
+  @spec build_validate(%{agent: Types.agent_info()}, Keyword.t()) ::
+          {:ok, Signal.t()} | {:error, term()}
+  def build_validate(%{agent: agent}, opts \\ []) when is_binary(agent.id) do
+    build_base_signal(agent.id, cmd_validate(), [{:validate, %{}}], %{
+      strict_validation: Keyword.get(opts, :strict_validation, false)
+    })
+  end
+
+  @doc """
+  Creates a signal for planning agent instructions.
+  """
+  @spec build_plan(%{agent: Types.agent_info()}, term(), map()) ::
+          {:ok, Signal.t()} | {:error, term()}
+  def build_plan(%{agent: agent}, instructions, context \\ %{}) when is_binary(agent.id) do
+    with {:ok, normalized} <- normalize_instruction(instructions, %{}) do
+      build_base_signal(agent.id, cmd_plan(), normalized, %{context: context})
+    end
+  end
+
+  @doc """
+  Creates a signal for running agent instructions.
+  """
+  @spec build_run(%{agent: Types.agent_info()}, Keyword.t()) ::
+          {:ok, Signal.t()} | {:error, term()}
+  def build_run(%{agent: agent}, opts \\ []) when is_binary(agent.id) do
+    build_base_signal(agent.id, cmd_run(), [{:run, %{}}], %{
+      runner: Keyword.get(opts, :runner, nil),
+      context: Keyword.get(opts, :context, %{})
+    })
+  end
+
+  # Private helper to DRY up signal building
+  @spec build_base_signal(String.t(), String.t(), list(), map()) ::
+          {:ok, Signal.t()} | {:error, term()}
+  defp build_base_signal(agent_id, signal_type, instructions, opts) do
+    build_signal(signal_type, agent_id, %{},
+      jido_instructions: instructions,
+      jido_opts: opts
+    )
+  end
+
+  @doc """
+  Creates a command signal with instructions. Returns {:ok, Signal.t()} | {:error, String.t()}.
+  """
+  @spec build_cmd(%{agent: Types.agent_info()}, term(), map(), Keyword.t()) ::
+          {:ok, Signal.t()} | {:error, term()}
+  def build_cmd(%{agent: agent}, instruction, params \\ %{}, opts \\ [])
+      when is_binary(agent.id) do
+    case normalize_instruction(instruction, params) do
+      {:ok, instructions} ->
+        build_signal(cmd(), agent.id, %{},
+          jido_instructions: instructions,
+          jido_opts: %{apply_state: Keyword.get(opts, :apply_state, true)}
+        )
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  @doc """
+  Creates a directive signal from a directive struct. Returns {:ok, Signal.t()} | {:error, String.t()}.
+  """
+  @spec build_directive(%{agent: Types.agent_info()}, struct()) ::
+          {:ok, Signal.t()} | {:error, term()}
+  def build_directive(%{agent: agent}, %_{} = directive)
+      when is_binary(agent.id) and is_struct(directive) do
+    build_signal(directive(), agent.id, %{directive: directive})
+  end
+
+  def build_directive(%{agent: agent}, _invalid) when is_binary(agent.id) do
+    {:error, :invalid_directive}
   end
 
   @doc """
   Creates an event signal from agent state. Returns {:ok, Signal.t()} | {:error, String.t()}.
   """
-  def event_signal(state, type, payload \\ %{}) do
-    build_signal(type, state.agent.id, payload)
-  end
-
-  @doc """
-  Converts actions into a command signal. Returns {:ok, Signal.t()} | {:error, String.t()}.
-  """
-  def action_signal(agent_id, action, args \\ %{}, opts \\ []) do
-    normalized_actions = normalize_actions(action)
-
-    build_signal(cmd(), agent_id, args,
-      jidoaction: normalized_actions,
-      jidoopts: %{apply_state: Keyword.get(opts, :apply_state, true)}
-    )
-  end
-
-  @doc """
-  Extracts actions and options from a signal.
-  """
-  def extract_actions(%Signal{} = signal) do
-    case {signal.jidoaction, signal.jidoopts} do
-      {actions, opts} when is_list(actions) and is_map(opts) ->
-        {:ok, {actions, signal.data, [apply_state: Map.get(opts, :apply_state, true)]}}
-
-      _ ->
-        {:error, :invalid_signal_format}
-    end
+  @spec build_event(%{agent: Types.agent_info()}, String.t(), map()) ::
+          {:ok, Signal.t()} | {:error, term()}
+  def build_event(%{agent: agent}, type, payload \\ %{})
+      when is_binary(type) do
+    build_signal(type, agent.id, payload)
   end
 
   @doc """
   Predicates for signal type checking.
   """
-  def is_agent_signal?(%Signal{type: @agent_prefix <> _}), do: true
-  def is_agent_signal?(_), do: false
+  def is_cmd_signal?(%Signal{type: @cmd_prefix <> _}), do: true
+  def is_cmd_signal?(_), do: false
 
-  def is_syscall_signal?(%Signal{type: @syscall_prefix <> _}), do: true
-  def is_syscall_signal?(_), do: false
+  def is_directive_signal?(%Signal{type: @directive_prefix <> _}), do: true
+  def is_directive_signal?(_), do: false
 
   def is_event_signal?(%Signal{type: @event_prefix <> _}), do: true
   def is_event_signal?(_), do: false
 
-  def is_process_signal?(%Signal{type: type}) do
-    type in [process_start(), process_terminate()]
+  @doc """
+  Extracts instructions, data and options from a command signal.
+  Returns {:ok, {instructions, data, opts}} | {:error, :invalid_signal_format}
+  """
+  @spec extract_instructions(Signal.t()) ::
+          {:ok, {list(), map(), Keyword.t()}} | {:error, :invalid_signal_format}
+  def extract_instructions(%Signal{jido_instructions: instructions, jido_opts: opts, data: data})
+      when is_list(instructions) and is_map(opts) do
+    {:ok, {instructions, data, Map.to_list(opts)}}
   end
+
+  def extract_instructions(_), do: {:error, :invalid_signal_format}
 
   # Private Helpers
   defp build_signal(type, subject, data, extra_fields \\ %{})
@@ -113,9 +190,10 @@ defmodule Jido.Agent.Server.Signal do
               (is_map(extra_fields) or is_list(extra_fields)) do
     base = %{
       type: type,
-      source: "jido",
+      source: "jido://agent/#{subject}",
       subject: subject,
-      data: if(is_list(data), do: Map.new(data), else: data)
+      data: if(is_list(data), do: Map.new(data), else: data),
+      id: "#{subject}_#{System.system_time(:nanosecond)}"
     }
 
     attrs = Map.merge(Map.new(extra_fields), base)
@@ -123,15 +201,24 @@ defmodule Jido.Agent.Server.Signal do
     Signal.new(attrs)
   end
 
-  defp normalize_actions(action) when is_atom(action), do: [{action, %{}}]
-
-  defp normalize_actions({action, args}) when is_atom(action) and is_map(args),
-    do: [{action, args}]
-
-  defp normalize_actions(actions) when is_list(actions) do
-    Enum.map(actions, fn
-      action when is_atom(action) -> {action, %{}}
-      {action, args} when is_atom(action) and is_map(args) -> {action, args}
-    end)
+  defp normalize_instruction(instruction, params) when is_atom(instruction) do
+    {:ok, [{instruction, params}]}
   end
+
+  defp normalize_instruction({action, params}, _) when is_atom(action) and is_map(params) do
+    {:ok, [{action, params}]}
+  end
+
+  defp normalize_instruction(instructions, _) when is_list(instructions) do
+    if Enum.all?(instructions, &valid_instruction?/1) do
+      {:ok, instructions}
+    else
+      {:error, "invalid instruction format"}
+    end
+  end
+
+  defp normalize_instruction(_, _), do: {:error, "invalid instruction format"}
+
+  defp valid_instruction?({action, params}) when is_atom(action) and is_map(params), do: true
+  defp valid_instruction?(_), do: false
 end

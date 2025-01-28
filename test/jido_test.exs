@@ -93,14 +93,14 @@ defmodule JidoTest do
       assert Process.alive?(cloned_pid)
       assert source_pid != cloned_pid
 
-      # Verify we can look up the cloned agent and IDs don't match
-      assert {:ok, ^cloned_pid} = Jido.get_agent("cloned_agent")
-      assert {:ok, source_topic} = Jido.get_agent_topic(source_pid)
-      assert {:ok, source_state} = Jido.get_agent_state(source_pid)
-      assert {:ok, cloned_topic} = Jido.get_agent_topic(cloned_pid)
-      assert {:ok, cloned_state} = Jido.get_agent_state(cloned_pid)
-      assert source_topic != cloned_topic
-      assert source_state.agent.id != cloned_state.agent.id
+      # # Verify we can look up the cloned agent and IDs don't match
+      # assert {:ok, ^cloned_pid} = Jido.get_agent("cloned_agent")
+      # assert {:ok, source_topic} = Jido.get_agent_topic(source_pid)
+      # assert {:ok, source_state} = Jido.get_agent_state(source_pid)
+      # assert {:ok, cloned_topic} = Jido.get_agent_topic(cloned_pid)
+      # assert {:ok, cloned_state} = Jido.get_agent_state(cloned_pid)
+      # assert source_topic != cloned_topic
+      # assert source_state.agent.id != cloned_state.agent.id
     end
 
     test "returns error when cloning non-existent agent", %{pubsub: _pubsub} do

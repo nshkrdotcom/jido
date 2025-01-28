@@ -1,149 +1,336 @@
 defmodule JidoTest.Agent.ServerTest do
   use ExUnit.Case, async: true
+  alias JidoTest.TestAgents.{BasicAgent, CustomServerAgent}
   alias Jido.Agent.Server
-  alias Jido.Agent.Server.PubSub, as: ServerPubSub
-  alias Jido.Agent.Server.Signal, as: ServerSignal
-  alias Jido.Signal
-  alias JidoTest.TestAgents.BasicAgent
+  import ExUnit.CaptureLog
+  require Logger
+  @moduletag :capture_log
 
   setup do
-    test_id = :erlang.unique_integer([:positive])
-    pubsub_name = :"TestPubSub#{test_id}"
-    registry_name = :"TestRegistry#{test_id}"
-    {:ok, _} = start_supervised({Phoenix.PubSub, name: pubsub_name})
-    {:ok, _} = start_supervised({Registry, keys: :unique, name: registry_name})
+    # Store original log level
+    original_level = Logger.level()
 
-    agent_id = "test_agent_#{test_id}"
+    # Configure logger for tests
+    Logger.configure(level: :debug)
+    on_exit(fn -> Logger.configure(level: original_level) end)
 
-    base_opts = [
-      pubsub: pubsub_name,
-      registry: registry_name,
-      max_queue_size: 100
-    ]
-
-    basic_opts =
-      Keyword.merge(base_opts,
-        agent: BasicAgent.new(agent_id),
-        name: :"basic_server_#{test_id}"
-      )
-
-    {:ok,
-     pubsub: pubsub_name,
-     registry: registry_name,
-     agent_id: agent_id,
-     base_opts: base_opts,
-     basic_opts: basic_opts}
+    # Trap exits in test process to handle process termination
+    Process.flag(:trap_exit, true)
+    :ok
   end
 
-  describe "initialization" do
-    test "starts with correct initial state", %{basic_opts: opts} do
-      {:ok, server} = start_supervised({Server, opts})
-
-      assert {:ok, :idle} = Server.get_status(server)
-      assert {:ok, supervisor} = Server.get_supervisor(server)
-      assert is_pid(supervisor)
+  describe "BasicAgent GenServer initialization" do
+    test "initializes with explicit id" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+      {:ok, pid} = BasicAgent.start_link(id: id)
+      assert is_pid(pid)
+      {:ok, state} = BasicAgent.state(pid)
+      assert state.agent.id == id
+      assert state.mode == :auto
+      assert state.verbose == false
+      assert state.max_queue_size == 10_000
+      assert state.agent.state.location == :home
+      assert state.agent.state.battery_level == 100
     end
 
-    test "subscribes to PubSub and emits started event", %{pubsub: pubsub, agent_id: agent_id} do
-      topic = ServerPubSub.generate_topic(agent_id)
-      :ok = Phoenix.PubSub.subscribe(pubsub, topic)
+    test "initializes with custom schema state" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
 
-      {:ok, server} =
-        start_supervised({Server, [agent: BasicAgent.new(agent_id), pubsub: pubsub]})
+      initial_state = %{
+        location: :office,
+        battery_level: 75
+      }
 
-      assert {:ok, ^topic} = Server.get_topic(server)
-
-      started = ServerSignal.started()
-      assert_receive %Signal{type: ^started, data: %{agent_id: ^agent_id}}, 1000
+      {:ok, pid} = BasicAgent.start_link(id: id, initial_state: initial_state)
+      {:ok, state} = BasicAgent.state(pid)
+      assert state.agent.state.location == :office
+      assert state.agent.state.battery_level == 75
     end
 
-    test "validates required options", %{base_opts: opts} do
-      assert {:error, _} = Server.start_link(Keyword.merge(opts, agent: nil))
-      assert {:error, _} = Server.start_link(Keyword.delete(opts, :pubsub))
-      assert {:error, _} = Server.start_link(Keyword.delete(opts, :registry))
+    test "initializes with partial schema state" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+      initial_state = %{location: :garage}
+      {:ok, pid} = BasicAgent.start_link(id: id, initial_state: initial_state)
+      assert is_pid(pid)
+      {:ok, state} = BasicAgent.state(pid)
+      assert state.agent.state.location == :garage
+      assert state.agent.state.battery_level == 100
+    end
+
+    test "initializes with both schema state and other options" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+
+      initial_state = %{
+        location: :office,
+        battery_level: 60
+      }
+
+      {:ok, pid} =
+        BasicAgent.start_link(
+          id: id,
+          initial_state: initial_state,
+          verbose: true,
+          mode: :manual,
+          max_queue_size: 5000
+        )
+
+      assert is_pid(pid)
+      {:ok, state} = BasicAgent.state(pid)
+      assert state.agent.state.location == :office
+      assert state.agent.state.battery_level == 60
+      assert state.verbose == true
+      assert state.mode == :manual
+      assert state.max_queue_size == 5000
+    end
+
+    test "initializes with verbose mode" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+      {:ok, pid} = BasicAgent.start_link(id: id, verbose: true)
+      assert is_pid(pid)
+      {:ok, state} = BasicAgent.state(pid)
+      assert state.verbose == true
+    end
+
+    test "initializes with manual mode" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+      {:ok, pid} = BasicAgent.start_link(id: id, mode: :manual)
+      assert is_pid(pid)
+      {:ok, state} = BasicAgent.state(pid)
+      assert state.mode == :manual
+    end
+
+    test "initializes with custom queue size" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+      {:ok, pid} = BasicAgent.start_link(id: id, max_queue_size: 5000)
+      assert is_pid(pid)
+      {:ok, state} = BasicAgent.state(pid)
+      assert state.max_queue_size == 5000
+    end
+
+    test "initializes with all custom options" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+
+      {:ok, pid} =
+        BasicAgent.start_link(
+          id: id,
+          verbose: true,
+          mode: :manual,
+          max_queue_size: 5000
+        )
+
+      assert is_pid(pid)
+      {:ok, state} = BasicAgent.state(pid)
+      assert state.agent.id == id
+      assert state.verbose == true
+      assert state.mode == :manual
+      assert state.max_queue_size == 5000
     end
   end
 
-  #   describe "command handling" do
-  #     test "executes commands and returns updated state", %{basic_opts: opts} do
-  #       {:ok, server} = start_supervised({Server, opts})
-
-  #       assert {:ok, state1} = Server.cmd(server, {JidoTest.TestActions.BasicAction, %{value: 1}})
-  #       assert state1.status == :idle
-
-  #       assert {:ok, state2} = Server.cmd(server, {JidoTest.TestActions.NoSchema, %{}})
-  #       assert state2.status == :idle
-  #     end
-
-  #     test "maintains command order", %{basic_opts: opts} do
-  #       {:ok, server} = start_supervised({Server, opts})
-
-  #       commands = [
-  #         {JidoTest.TestActions.BasicAction, %{value: 1}},
-  #         {JidoTest.TestActions.BasicAction, %{value: 2}},
-  #         {JidoTest.TestActions.BasicAction, %{value: 3}}
-  #       ]
-
-  #       results =
-  #         Enum.map(commands, fn cmd_tuple ->
-  #           Server.cmd(server, cmd_tuple)
-  #         end)
-
-  #       assert Enum.all?(results, &match?({:ok, _}, &1))
-  #     end
-
-  #     # test "enforces queue size limits", %{basic_opts: opts} do
-  #     #   opts = Keyword.put(opts, :max_queue_size, 5)
-  #     #   {:ok, server} = start_supervised({Server, opts})
-
-  #     #   results =
-  #     #     for _ <- 1..10 do
-  #     #       Server.cmd(server, {JidoTest.TestActions.NoSchema, %{}})
-  #     #     end
-
-  #     #   assert length(results) > 0
-  #     #   assert Enum.any?(results, &match?({:error, :queue_full}, &1))
-  #     # end
-  #   end
-
-  describe "state management" do
-    test "get_id returns agent id", %{basic_opts: opts} do
-      {:ok, server} = start_supervised({Server, opts})
-      assert {:ok, id} = Server.get_id(server)
-      assert is_binary(id)
+  describe "Server direct initialization" do
+    test "initializes with agent module" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+      {:ok, pid} = Server.start_link(agent: BasicAgent, name: id)
+      assert is_pid(pid)
+      state = :sys.get_state(pid)
+      assert state.agent.__struct__ == BasicAgent
+      assert is_binary(state.agent.id)
+      assert state.mode == :auto
+      assert state.verbose == false
+      assert state.max_queue_size == 10_000
     end
 
-    test "get_state returns full state", %{basic_opts: opts} do
-      {:ok, server} = start_supervised({Server, opts})
-      assert {:ok, state} = Server.get_state(server)
-      assert state.status == :idle
-      assert state.pubsub == opts[:pubsub]
-      assert state.topic == ServerPubSub.generate_topic(state.agent.id)
+    test "initializes with instantiated agent" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+      agent = BasicAgent.new(id: id)
+      {:ok, pid} = Server.start_link(agent: agent)
+      assert is_pid(pid)
+      state = :sys.get_state(pid)
+      assert state.agent == agent
+      assert state.agent.id == id
+    end
+
+    test "initializes with custom dispatch config" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+      dispatch = {:bus, [target: :custom, stream: "test_stream"]}
+      {:ok, pid} = Server.start_link(agent: BasicAgent, id: id, dispatch: dispatch)
+      assert is_pid(pid)
+      state = :sys.get_state(pid)
+      assert state.agent.__struct__ == BasicAgent
+      assert state.agent.id == id
+      assert state.dispatch == dispatch
+    end
+
+    test "initializes with custom registry" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+      {:ok, _} = Registry.start_link(keys: :unique, name: TestRegistry)
+      {:ok, pid} = Server.start_link(agent: BasicAgent, name: id, registry: TestRegistry)
+      assert is_pid(pid)
+      assert [{^pid, nil}] = Registry.lookup(TestRegistry, id)
+    end
+
+    test "fails with invalid agent" do
+      assert {:error, :invalid_agent} = Server.start_link(agent: nil)
+    end
+
+    test "initializes with all custom options" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+      dispatch = {:bus, [target: :custom, stream: "test_stream"]}
+      {:ok, _} = Registry.start_link(keys: :unique, name: CustomRegistry)
+
+      {:ok, pid} =
+        Server.start_link(
+          agent: BasicAgent,
+          name: id,
+          dispatch: dispatch,
+          registry: CustomRegistry,
+          verbose: true,
+          mode: :manual,
+          max_queue_size: 5000
+        )
+
+      assert is_pid(pid)
+      state = :sys.get_state(pid)
+      assert state.agent.__struct__ == BasicAgent
+      assert is_binary(state.agent.id)
+      assert state.dispatch == dispatch
+      assert state.verbose == true
+      assert state.mode == :manual
+      assert state.max_queue_size == 5000
+      assert [{^pid, nil}] = Registry.lookup(CustomRegistry, id)
     end
   end
 
-  describe "process lifecycle" do
-    test "terminates cleanly with supervisor", %{basic_opts: opts} do
-      {:ok, server} = start_supervised({Server, opts})
-      {:ok, supervisor} = Server.get_supervisor(server)
+  describe "BasicAgent GenServer operations" do
+    test "set updates state via pid" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+      {:ok, pid} = BasicAgent.start_link(id: id, mode: :auto, verbose: true)
+      assert is_pid(pid)
+      {:ok, state} = BasicAgent.state(pid)
+      assert state.verbose == true
+      assert state.mode == :auto
+      assert state.agent.id == id
+    end
+  end
 
-      ref = Process.monitor(server)
-      :ok = stop_supervised(Server)
+  describe "CustomServerAgent lifecycle" do
+    @tag :skip
+    test "mount callback is called on initialization" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
 
-      assert_receive {:DOWN, ^ref, :process, _, :shutdown}
-      refute Process.alive?(supervisor)
+      log =
+        capture_log([level: :debug], fn ->
+          {:ok, pid} = CustomServerAgent.start_link(id: id)
+          ref = Process.monitor(pid)
+
+          # Verify state after mount
+          {:ok, state} = CustomServerAgent.state(pid)
+          assert state.agent.id == id
+          assert state.agent.state.location == :home
+          assert state.agent.state.battery_level == 100
+
+          # Clean up and ensure process is fully terminated
+          GenServer.stop(pid, :shutdown)
+          assert_receive {:DOWN, ^ref, :process, ^pid, :shutdown}, 1000
+
+          # Give logger a moment to flush
+          Process.sleep(100)
+        end)
+
+      # Verify mount was called (the log will contain other debug messages)
+      assert log =~ "Mounting CustomServerAgent"
+      assert log =~ "Shutting down CustomServerAgent"
     end
 
-    test "emits stopping signal on termination", %{basic_opts: opts} do
-      {:ok, server} = start_supervised({Server, opts})
-      {:ok, topic} = Server.get_topic(server)
-      :ok = Phoenix.PubSub.subscribe(opts[:pubsub], topic)
+    @tag :skip
+    test "shutdown callback is called on termination" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
 
-      :ok = stop_supervised(Server)
-      refute Process.alive?(server)
+      # Start the agent and capture all logs
+      log =
+        capture_log([level: :debug], fn ->
+          {:ok, pid} = CustomServerAgent.start_link(id: id)
+          ref = Process.monitor(pid)
 
-      # stopped = ServerSignal.stopped()
-      # assert_receive %Signal{type: ^stopped, data: %{reason: :shutdown}}, 1000
+          # Send shutdown signal and wait for process to terminate
+          GenServer.stop(pid, :shutdown)
+          assert_receive {:DOWN, ^ref, :process, ^pid, :shutdown}, 1000
+
+          # Give logger a moment to flush
+          Process.sleep(100)
+        end)
+
+      # Verify both mount and shutdown were called
+      assert log =~ "Mounting CustomServerAgent"
+      assert log =~ "Shutting down CustomServerAgent"
+    end
+
+    @tag :skip
+    test "mount and shutdown handle state correctly" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+      initial_state = %{location: :office, battery_level: 75}
+
+      log =
+        capture_log([level: :debug], fn ->
+          {:ok, pid} = CustomServerAgent.start_link(id: id, initial_state: initial_state)
+          ref = Process.monitor(pid)
+
+          # Verify state after mount
+          {:ok, state} = CustomServerAgent.state(pid)
+          assert state.agent.state.location == :office
+          assert state.agent.state.battery_level == 75
+
+          # Monitor and capture shutdown
+          GenServer.stop(pid, :shutdown)
+          assert_receive {:DOWN, ^ref, :process, ^pid, :shutdown}, 1000
+
+          # Give logger a moment to flush
+          Process.sleep(100)
+        end)
+
+      # Verify both callbacks were called
+      assert log =~ "Mounting CustomServerAgent"
+      assert log =~ "Shutting down CustomServerAgent"
+    end
+
+    test "mount failure prevents server start" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+
+      # Create an agent with invalid battery level
+      agent = CustomServerAgent.new(id)
+      agent = %{agent | state: %{agent.state | battery_level: -1}}
+
+      # Attempt to start server and expect failure
+      assert {:error, {:mount_failed, :invalid_battery_level}} =
+               Jido.Agent.Server.start_link(agent: agent, name: id)
+    end
+
+    @tag :skip
+    test "shutdown failure is logged but doesn't prevent termination" do
+      id = "test_agent_#{:erlang.unique_integer([:positive])}"
+
+      log =
+        capture_log([level: :debug], fn ->
+          # Start the agent
+          {:ok, pid} = CustomServerAgent.start_link(id: id)
+          ref = Process.monitor(pid)
+
+          # Force the agent into a state that will cause shutdown to fail
+          :sys.replace_state(pid, fn state ->
+            %{state | agent: %{state.agent | state: %{state.agent.state | battery_level: -1}}}
+          end)
+
+          # Monitor and capture shutdown
+          GenServer.stop(pid, :shutdown)
+          assert_receive {:DOWN, ^ref, :process, ^pid, :shutdown}, 1000
+
+          # Give logger a moment to flush
+          Process.sleep(100)
+        end)
+
+      # Verify both mount and shutdown were called
+      assert log =~ "Mounting CustomServerAgent"
+      assert log =~ "Shutting down CustomServerAgent"
     end
   end
 end

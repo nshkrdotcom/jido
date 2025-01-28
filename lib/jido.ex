@@ -31,7 +31,8 @@ defmodule Jido do
           category: atom() | nil,
           tags: [atom()] | nil
         }
-
+  @type server ::
+          pid() | atom() | binary() | {name :: atom() | binary(), registry :: module()}
   @callback config() :: keyword()
 
   defmacro __using__(opts) do
@@ -349,6 +350,21 @@ defmodule Jido do
     path = :code.priv_dir(app)
     prompt_path = Path.join([path, "prompts", "#{name}.txt"])
     File.read!(prompt_path)
+  end
+
+  @spec resolve_pid(server()) :: {:ok, pid()} | {:error, :server_not_found}
+  def resolve_pid(pid) when is_pid(pid), do: {:ok, pid}
+
+  def resolve_pid({name, registry})
+      when (is_atom(name) or is_binary(name)) and is_atom(registry) do
+    case Registry.lookup(registry, name) do
+      [{pid, _}] -> {:ok, pid}
+      [] -> {:error, :server_not_found}
+    end
+  end
+
+  def resolve_pid(name) when is_atom(name) or is_binary(name) do
+    resolve_pid({name, Jido.AgentRegistry})
   end
 
   # Component Discovery

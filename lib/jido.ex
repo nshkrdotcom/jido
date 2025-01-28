@@ -357,6 +357,8 @@ defmodule Jido do
 
   def resolve_pid({name, registry})
       when (is_atom(name) or is_binary(name)) and is_atom(registry) do
+    name = if is_atom(name), do: Atom.to_string(name), else: name
+
     case Registry.lookup(registry, name) do
       [{pid, _}] -> {:ok, pid}
       [] -> {:error, :server_not_found}
@@ -364,6 +366,7 @@ defmodule Jido do
   end
 
   def resolve_pid(name) when is_atom(name) or is_binary(name) do
+    name = if is_atom(name), do: Atom.to_string(name), else: name
     resolve_pid({name, Jido.AgentRegistry})
   end
 

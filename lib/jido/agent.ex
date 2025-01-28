@@ -490,6 +490,10 @@ defmodule Jido.Agent do
           def new(id \\ nil, initial_state \\ %{})
 
           def new(id, initial_state) when is_atom(id) and not is_nil(id) do
+            Logger.warning(
+              "Agent IDs should always be strings, got atom #{inspect(id)}. Converting to string. Please update your code to pass string IDs directly."
+            )
+
             new(Atom.to_string(id), initial_state)
           end
 

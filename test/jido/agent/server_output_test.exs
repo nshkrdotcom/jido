@@ -39,16 +39,19 @@ defmodule Jido.Agent.Server.OutputTest do
 
   describe "emit_event/3" do
     test "emits event and logs when verbose", %{state: state} do
+      Logger.configure(level: :debug)
+
       log =
         capture_log(fn ->
           assert :ok = Output.emit_event(state, ServerSignal.cmd_success(), %{data: "test"})
         end)
 
-      assert log =~ "[info]"
+      assert log =~ "[debug]"
       assert log =~ "Emitting event"
     end
 
     test "emits event without logging when not verbose", %{state: state} do
+      Logger.configure(level: :debug)
       state = %{state | verbose: false}
 
       log =
@@ -60,6 +63,8 @@ defmodule Jido.Agent.Server.OutputTest do
     end
 
     test "handles error from build_event", %{state: state} do
+      Logger.configure(level: :debug)
+
       log =
         capture_log(fn ->
           assert {:error, _} =

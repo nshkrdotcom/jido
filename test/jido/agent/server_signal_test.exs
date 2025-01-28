@@ -43,7 +43,16 @@ defmodule JidoTest.Agent.Server.SignalTest do
 
       assert signal.type == ServerSignal.cmd()
       assert signal.subject == "agent-123"
-      assert signal.jido_instructions == [{BasicAction, %{}}]
+
+      assert signal.jido_instructions == [
+               %Jido.Instruction{
+                 opts: [],
+                 context: %{},
+                 params: %{},
+                 action: JidoTest.TestActions.BasicAction
+               }
+             ]
+
       assert signal.jido_opts == %{apply_state: true}
     end
 
@@ -52,7 +61,14 @@ defmodule JidoTest.Agent.Server.SignalTest do
       instruction = {BasicAction, %{arg: "value"}}
       {:ok, signal} = ServerSignal.build_cmd(state, instruction)
 
-      assert signal.jido_instructions == [{BasicAction, %{arg: "value"}}]
+      assert signal.jido_instructions == [
+               %Jido.Instruction{
+                 opts: [],
+                 context: %{},
+                 params: %{arg: "value"},
+                 action: JidoTest.TestActions.BasicAction
+               }
+             ]
     end
 
     test "creates command signal with instruction list" do
@@ -65,7 +81,20 @@ defmodule JidoTest.Agent.Server.SignalTest do
 
       {:ok, signal} = ServerSignal.build_cmd(state, instructions)
 
-      assert signal.jido_instructions == instructions
+      assert signal.jido_instructions == [
+               %Jido.Instruction{
+                 opts: [],
+                 context: %{},
+                 params: %{arg1: "val1"},
+                 action: JidoTest.TestActions.BasicAction
+               },
+               %Jido.Instruction{
+                 opts: [],
+                 context: %{},
+                 params: %{arg2: "val2"},
+                 action: JidoTest.TestActions.NoSchema
+               }
+             ]
     end
 
     test "accepts custom params and opts" do

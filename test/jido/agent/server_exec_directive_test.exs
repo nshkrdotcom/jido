@@ -141,13 +141,31 @@ defmodule JidoTest.ServerExecDirectiveTest do
       [first, second] = signals
 
       assert first.type == ServerSignal.cmd()
-      assert first.jido_instructions == [{TestActions.Add, %{value: 10, amount: 1}}]
+
+      assert first.jido_instructions == [
+               %Jido.Instruction{
+                 opts: [],
+                 context: %{},
+                 params: %{value: 10, amount: 1},
+                 action: JidoTest.TestActions.Add
+               }
+             ]
+
       assert first.jido_opts == %{apply_state: true}
       assert first.data == %{}
       assert first.source =~ "jido://agent/"
 
       assert second.type == ServerSignal.cmd()
-      assert second.jido_instructions == [{TestActions.Multiply, %{amount: 2}}]
+
+      assert second.jido_instructions == [
+               %Jido.Instruction{
+                 opts: [],
+                 context: %{},
+                 params: %{amount: 2},
+                 action: JidoTest.TestActions.Multiply
+               }
+             ]
+
       assert second.jido_opts == %{apply_state: true}
       assert second.data == %{}
       assert second.source =~ "jido://agent/"

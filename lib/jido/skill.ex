@@ -85,6 +85,7 @@ defmodule Jido.Skill do
       @behaviour Jido.Skill
       alias Jido.Skill
       alias Jido.Signal
+      alias Jido.Instruction
       require OK
 
       # Validate configuration at compile time

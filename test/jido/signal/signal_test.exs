@@ -2,6 +2,39 @@ defmodule JidoTest.SignalTest do
   use ExUnit.Case, async: true
   alias Jido.Signal
 
+  describe "new/1" do
+    test "creates a signal with default id and source" do
+      {:ok, signal} = Signal.new(%{type: "example.event"})
+
+      assert is_binary(signal.id)
+      # UUID length
+      assert String.length(signal.id) == 36
+      assert signal.source == "Elixir.JidoTest.SignalTest"
+      assert signal.type == "example.event"
+    end
+
+    test "allows overriding default id and source" do
+      {:ok, signal} =
+        Signal.new(%{
+          id: "custom-id",
+          source: "custom-source",
+          type: "example.event"
+        })
+
+      assert signal.id == "custom-id"
+      assert signal.source == "custom-source"
+    end
+
+    test "sets specversion and time defaults" do
+      {:ok, signal} = Signal.new(%{type: "example.event"})
+
+      assert signal.specversion == "1.0.2"
+      assert is_binary(signal.time)
+      # ISO8601 format
+      assert String.contains?(signal.time, "T")
+    end
+  end
+
   describe "from_map/1" do
     test "creates a valid Signal struct with required fields" do
       map = %{

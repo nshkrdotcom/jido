@@ -9,7 +9,7 @@ defmodule Jido.Signal do
 
   typedstruct do
     field(:specversion, String.t(), default: "1.0.2")
-    field(:id, String.t(), enforce: true)
+    field(:id, String.t(), enforce: true, default: UUID.uuid4())
     field(:source, String.t(), enforce: true)
     field(:type, String.t(), enforce: true)
     field(:subject, String.t())
@@ -44,10 +44,21 @@ defmodule Jido.Signal do
   """
   @spec new(map()) :: {:ok, t()} | {:error, String.t()}
   def new(attrs) when is_map(attrs) do
+    caller =
+      Process.info(self(), :current_stacktrace)
+      |> elem(1)
+      |> Enum.find(fn {mod, _fun, _arity, _info} ->
+        mod_str = to_string(mod)
+        mod_str != "Elixir.Jido.Signal" and mod_str != "Elixir.Process"
+      end)
+      |> elem(0)
+      |> to_string()
+
     defaults = %{
       "specversion" => "1.0.2",
-      "id" => Jido.Util.generate_id(),
-      "time" => DateTime.utc_now() |> DateTime.to_iso8601()
+      "id" => UUID.uuid4(),
+      "time" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "source" => caller
     }
 
     attrs

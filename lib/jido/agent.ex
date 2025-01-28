@@ -220,7 +220,8 @@ defmodule Jido.Agent do
       @type instructions :: Jido.Agent.instructions()
       @type agent_result :: Jido.Agent.agent_result()
       @type map_result :: Jido.Agent.map_result()
-
+      @type server ::
+              pid() | atom() | binary() | {name :: atom() | binary(), registry :: module()}
       @agent_server_schema [
         id: [
           type: :string,
@@ -315,10 +316,6 @@ defmodule Jido.Agent do
             dbug("Starting agent", agent: agent)
             Jido.Agent.Server.start_link(opts)
           end
-
-          # def start_link(name, args, opts) do
-          #   start_link(Keyword.merge(opts, [name: name] ++ args))
-          # end
 
           @doc false
           def child_spec(opts) do
@@ -572,25 +569,8 @@ defmodule Jido.Agent do
 
           See `validate/1` for validation details and `Jido.Agent` callbacks for lifecycle hooks.
           """
-          @spec set(t() | pid(), keyword() | map(), keyword()) :: agent_result()
+          @spec set(t() | server(), keyword() | map(), keyword()) :: agent_result()
           def set(agent, attrs, opts \\ [])
-
-          def set(server, attrs, opts)
-              when is_pid(server) or is_atom(server) or is_binary(server) do
-            with {:ok, pid} <- resolve_server(server),
-                 {:ok, signal} <- ServerSignal.build_set(%{agent: %{id: nil}}, attrs, opts) do
-              GenServer.call(pid, signal)
-            end
-          end
-
-          defp resolve_server(pid) when is_pid(pid), do: {:ok, pid}
-
-          defp resolve_server(name) when is_atom(name) or is_binary(name) do
-            case Process.whereis(name) do
-              nil -> {:error, :server_not_found}
-              pid -> {:ok, pid}
-            end
-          end
 
           def set(%__MODULE__{} = agent, attrs, opts) when is_list(attrs) do
             dbug("Setting agent state from keyword list", agent_id: agent.id, attrs: attrs)
@@ -629,6 +609,13 @@ defmodule Jido.Agent do
               "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
             )
             |> OK.failure()
+          end
+
+          def set(server, attrs, opts) do
+            with {:ok, pid} <- resolve_server(server),
+                 {:ok, signal} <- ServerSignal.build_set(%{agent: %{id: nil}}, attrs, opts) do
+              GenServer.call(pid, signal)
+            end
           end
 
           @spec do_set(map(), map() | keyword()) :: map_result()
@@ -696,13 +683,9 @@ defmodule Jido.Agent do
 
           See `NimbleOptions` documentation for supported validation rules.
           """
-          @spec validate(t(), keyword()) :: agent_result()
+          @spec validate(t() | server(), keyword()) :: agent_result()
 
           def validate(agent, opts \\ [])
-
-          def validate(pid, opts) when is_pid(pid) do
-            GenServer.call(pid, {:validate, opts})
-          end
 
           def validate(%__MODULE__{} = agent, opts) do
             dbug("Validating agent state", agent_id: agent.id)
@@ -724,6 +707,12 @@ defmodule Jido.Agent do
               "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
             )
             |> OK.failure()
+          end
+
+          def validate(server, opts) do
+            with {:ok, pid} <- resolve_server(server) do
+              GenServer.call(pid, {:validate, opts})
+            end
           end
 
           @spec do_validate(t(), map(), keyword()) :: map_result()
@@ -844,12 +833,8 @@ defmodule Jido.Agent do
           See `registered_actions/1` for checking available actions and `run/2` for executing planned actions.
           """
 
-          @spec plan(t() | pid(), instructions(), map()) :: agent_result()
+          @spec plan(t() | server(), instructions(), map()) :: agent_result()
           def plan(agent, instructions, context \\ %{})
-
-          def plan(pid, instructions, context) when is_pid(pid) do
-            GenServer.call(pid, {:plan, instructions, context})
-          end
 
           def plan(%__MODULE__{} = agent, instructions, context) do
             dbug("Planning instructions",
@@ -882,6 +867,12 @@ defmodule Jido.Agent do
               "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
             )
             |> OK.failure()
+          end
+
+          def plan(server, instructions, context) do
+            with {:ok, pid} <- resolve_server(server) do
+              GenServer.call(pid, {:plan, instructions, context})
+            end
           end
 
           defp enqueue_instructions(agent, instructions) do
@@ -965,12 +956,8 @@ defmodule Jido.Agent do
 
           See `Jido.Runner` for implementing custom runners and `plan/2` for queueing actions.
           """
-          @spec run(t() | pid(), keyword()) :: agent_result()
+          @spec run(t() | server(), keyword()) :: agent_result()
           def run(agent, opts \\ [])
-
-          def run(pid, opts) when is_pid(pid) do
-            GenServer.call(pid, {:run, opts})
-          end
 
           def run(%__MODULE__{} = agent, opts) do
             apply_state = Keyword.get(opts, :apply_state, true)
@@ -1001,6 +988,12 @@ defmodule Jido.Agent do
               "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
             )
             |> OK.failure()
+          end
+
+          def run(server, opts) do
+            with {:ok, pid} <- resolve_server(server) do
+              GenServer.call(pid, {:run, opts})
+            end
           end
 
           @doc """
@@ -1072,12 +1065,8 @@ defmodule Jido.Agent do
                   # Handle execution error
               end
           """
-          @spec cmd(t() | pid(), instructions(), map(), keyword()) :: agent_result()
+          @spec cmd(t() | server(), instructions(), map(), keyword()) :: agent_result()
           def cmd(agent, instructions, attrs \\ %{}, opts \\ [])
-
-          def cmd(pid, instructions, attrs, opts) when is_pid(pid) do
-            GenServer.call(pid, {:cmd, instructions, attrs, opts})
-          end
 
           def cmd(%__MODULE__{} = agent, instructions, attrs, opts) do
             apply_state? = Keyword.get(opts, :apply_state, true)
@@ -1121,6 +1110,12 @@ defmodule Jido.Agent do
               "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
             )
             |> OK.failure()
+          end
+
+          def cmd(server, instructions, attrs, opts) do
+            with {:ok, pid} <- resolve_server(server) do
+              GenServer.call(pid, {:cmd, instructions, attrs, opts})
+            end
           end
 
           @doc """
@@ -1186,6 +1181,21 @@ defmodule Jido.Agent do
                          on_before_run: 1,
                          on_after_run: 2,
                          on_error: 2
+
+          @spec resolve_server(server()) :: {:ok, pid()} | {:error, :server_not_found}
+          defp resolve_server(pid) when is_pid(pid), do: {:ok, pid}
+
+          defp resolve_server({name, registry})
+               when (is_atom(name) or is_binary(name)) and is_atom(registry) do
+            case Registry.lookup(registry, name) do
+              [{pid, _}] -> {:ok, pid}
+              [] -> {:error, :server_not_found}
+            end
+          end
+
+          defp resolve_server(name) when is_atom(name) or is_binary(name) do
+            resolve_server({name, Jido.AgentRegistry})
+          end
 
         {:error, error} ->
           message = Error.format_nimble_config_error(error, "Agent", __MODULE__)

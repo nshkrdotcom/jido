@@ -127,7 +127,8 @@ defmodule Jido.Instruction do
 
   # Already normalized instruction
   def normalize(%__MODULE__{} = instruction, context, opts) do
-    {:ok, [%{instruction | context: Map.merge(instruction.context, context), opts: opts}]}
+    merged_opts = if Enum.empty?(instruction.opts), do: opts, else: instruction.opts
+    {:ok, [%{instruction | context: Map.merge(instruction.context, context), opts: merged_opts}]}
   end
 
   # List containing instructions/actions
@@ -138,7 +139,8 @@ defmodule Jido.Instruction do
     |> Enum.reduce_while({:ok, []}, fn
       # Handle existing instruction struct
       %__MODULE__{} = inst, {:ok, acc} ->
-        merged = %{inst | context: Map.merge(inst.context, context), opts: opts}
+        merged_opts = if Enum.empty?(inst.opts), do: opts, else: inst.opts
+        merged = %{inst | context: Map.merge(inst.context, context), opts: merged_opts}
         {:cont, {:ok, [merged | acc]}}
 
       # Handle bare action module

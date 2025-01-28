@@ -41,7 +41,9 @@ defmodule JidoTest.SignalTest do
       assert signal.datacontenttype == "application/json"
       assert signal.dataschema == "https://example.com/schema"
       assert signal.data == %{"key" => "value"}
-      assert signal.jido_instructions == [{:action1, %{param1: "value1"}}]
+      assert [instruction] = signal.jido_instructions
+      assert instruction.action == :action1
+      assert instruction.params == %{param1: "value1"}
       assert signal.jido_opts == %{"opt1" => "value1"}
     end
 
@@ -100,8 +102,30 @@ defmodule JidoTest.SignalTest do
       }
 
       assert {:ok, signal} = Signal.from_map(map)
-      assert signal.jido_instructions == [{:action1, %{param1: "value1"}}]
+      assert [instruction] = signal.jido_instructions
+      assert instruction.action == :action1
+      assert instruction.params == %{param1: "value1"}
       assert signal.jido_opts == %{"opt1" => "value1"}
+    end
+
+    test "preserves instruction opts when normalizing instructions" do
+      instruction = %Jido.Instruction{
+        action: BasicAction,
+        params: %{value: 1},
+        opts: [timeout: 20_000]
+      }
+
+      map = %{
+        "specversion" => "1.0.2",
+        "type" => "example.event",
+        "source" => "/example",
+        "id" => "123",
+        "jido_instructions" => [instruction]
+      }
+
+      assert {:ok, signal} = Signal.from_map(map)
+      assert [normalized_instruction] = signal.jido_instructions
+      assert normalized_instruction.opts == [timeout: 20_000]
     end
 
     test "returns error for invalid jido_instructions format" do

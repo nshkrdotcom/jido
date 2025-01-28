@@ -4,6 +4,7 @@ defmodule Jido.Signal do
   Implements CloudEvents specification v1.0.2 with Jido-specific extensions.
   """
 
+  alias Jido.Instruction
   use TypedStruct
 
   typedstruct do
@@ -165,19 +166,14 @@ defmodule Jido.Signal do
 
   defp parse_jido_instructions(nil), do: {:ok, nil}
 
-  defp parse_jido_instructions(instructions) when is_list(instructions) do
-    if Enum.all?(instructions, &valid_instruction?/1),
-      do: {:ok, instructions},
-      else: {:error, "invalid instruction format"}
+  defp parse_jido_instructions(instructions) do
+    case Instruction.normalize(instructions) do
+      {:ok, normalized} -> {:ok, normalized}
+      {:error, _} -> {:error, "jido_instructions must be a list of instructions"}
+    end
   end
-
-  defp parse_jido_instructions(_),
-    do: {:error, "jido_instructions must be a list of instructions"}
 
   defp parse_jido_opts(nil), do: {:ok, %{}}
   defp parse_jido_opts(opts) when is_map(opts), do: {:ok, opts}
   defp parse_jido_opts(_), do: {:error, "jido_opts must be a map"}
-
-  defp valid_instruction?({action, params}) when is_atom(action) and is_map(params), do: true
-  defp valid_instruction?(_), do: false
 end

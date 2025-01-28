@@ -78,6 +78,17 @@ defmodule Jido.InstructionTest do
     test "returns error for invalid instruction format" do
       assert {:error, %Error{}} = Instruction.normalize(123)
     end
+
+    test "preserves options from original instruction struct" do
+      instruction = %Instruction{
+        action: BasicAction,
+        params: %{value: 1},
+        opts: [timeout: 20_000]
+      }
+
+      assert {:ok, [normalized]} = Instruction.normalize(instruction)
+      assert normalized.opts == [timeout: 20_000]
+    end
   end
 
   describe "validate_allowed_actions/2" do

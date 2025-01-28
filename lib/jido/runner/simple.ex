@@ -27,7 +27,7 @@ defmodule Jido.Runner.Simple do
   """
   @behaviour Jido.Runner
 
-  use ExDbug, enabled: false, truncate: false
+  use ExDbug, enabled: true, truncate: false
 
   alias Jido.Instruction
   alias Jido.Error
@@ -127,7 +127,7 @@ defmodule Jido.Runner.Simple do
       action: instruction.action
     )
 
-    case Jido.Workflow.run(instruction.action, instruction.params, instruction.context) do
+    case Jido.Workflow.run(instruction) do
       {:ok, state_map, directives} ->
         handle_directive_result(agent, state_map, directives, apply_state)
 

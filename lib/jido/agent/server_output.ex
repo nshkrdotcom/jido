@@ -24,7 +24,7 @@ defmodule Jido.Agent.Server.Output do
     set_logger_metadata(state)
 
     # Log if verbose level is info or lower
-    log_message(state, :info, "Emitting event #{event_type} with payload=#{inspect(payload)}")
+    log_message(state, :debug, "Emitting event #{event_type} with payload=#{inspect(payload)}")
 
     with {:ok, signal} <- ServerSignal.build_event(state, event_type, payload) do
       dispatch(state, signal)

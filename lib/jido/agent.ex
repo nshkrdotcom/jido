@@ -316,6 +316,11 @@ defmodule Jido.Agent do
             Jido.Agent.Server.start_link(opts)
           end
 
+          def start_link(_opts) do
+            agent = new()
+            Jido.Agent.Server.start_link(agent: agent)
+          end
+
           @doc false
           def child_spec(opts) do
             %{

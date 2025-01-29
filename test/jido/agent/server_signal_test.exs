@@ -132,7 +132,7 @@ defmodule JidoTest.Agent.Server.SignalTest do
     test "creates directive signal with valid directive" do
       state = %{agent: %{id: "agent-123"}}
 
-      directive = %Jido.Agent.Directive.EnqueueDirective{
+      directive = %Jido.Agent.Directive.Enqueue{
         action: BasicAction,
         params: %{value: 1},
         context: %{}

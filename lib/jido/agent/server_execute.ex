@@ -198,11 +198,12 @@ defmodule Jido.Agent.Server.Execute do
     @spec execute_directive_signal(ServerState.t(), Signal.t()) :: signal_result()
     defp execute_directive_signal(%ServerState{} = state, %Signal{data: %{directive: directive}}) do
       with {:ok, state} <- ensure_running_state(state),
-           {:ok, agent_result} <- state.agent.__struct__.cmd(state.agent, directive, %{}, []),
+           {:ok, agent_result, directives} <-
+             state.agent.__struct__.cmd(state.agent, directive, %{}, []),
            {:ok, state} <- handle_agent_result(state, agent_result),
            {:ok, idle_state} <- ServerState.transition(state, :idle) do
         dbug("Directive signal executed successfully")
-        {:ok, idle_state}
+        {:ok, idle_state, directives}
       end
     end
 
@@ -241,7 +242,7 @@ defmodule Jido.Agent.Server.Execute do
       dbug("Executing agent signal in #{status} state", signal: signal)
 
       with {:ok, state} <- ensure_running_state(state),
-           {:ok, agent_result} <- agent_signal_cmd(state, signal),
+           {:ok, agent_result, _directives} <- agent_signal_cmd(state, signal),
            {:ok, state} <- handle_agent_result(state, agent_result),
            {:ok, idle_state} <- ServerState.transition(state, :idle) do
         dbug("Agent signal executed successfully")

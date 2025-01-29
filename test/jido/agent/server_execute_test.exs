@@ -9,7 +9,7 @@ defmodule JidoTest.Agent.Server.ExecuteTest do
   alias Jido.Error
   alias JidoTest.TestAgents.{BasicAgent, ErrorHandlingAgent}
   alias JidoTest.TestActions
-  alias Jido.Agent.Directive.SpawnDirective
+  alias Jido.Agent.Directive.Spawn
 
   @moduletag :capture_log
 
@@ -389,7 +389,7 @@ defmodule JidoTest.Agent.Server.ExecuteTest do
           apply_state: true
         )
 
-      assert {:ok, agent} = Execute.agent_signal_cmd(state, signal)
+      assert {:ok, agent, _directives} = Execute.agent_signal_cmd(state, signal)
       # NoSchema adds 2 to the input value
       assert agent.state.result == 3
     end
@@ -399,7 +399,7 @@ defmodule JidoTest.Agent.Server.ExecuteTest do
       {:ok, signal} =
         ServerSignal.build_directive(
           state,
-          %SpawnDirective{module: Task, args: fn -> :ok end}
+          %Spawn{module: Task, args: fn -> :ok end}
         )
 
       assert {:ok, new_state} = Execute.execute_signal(state, signal)

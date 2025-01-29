@@ -26,7 +26,7 @@ defmodule Jido.Actions.Directives do
       params = Map.get(input, :params, %{})
       opts = Map.get(input, :opts, [])
 
-      directive = %Jido.Agent.Directive.EnqueueDirective{
+      directive = %Jido.Agent.Directive.Enqueue{
         action: action,
         params: params,
         context: context,
@@ -47,7 +47,7 @@ defmodule Jido.Actions.Directives do
       ]
 
     def run(%{action_module: action_module}, _context) do
-      directive = %Jido.Agent.Directive.RegisterActionDirective{
+      directive = %Jido.Agent.Directive.RegisterAction{
         action_module: action_module
       }
 
@@ -69,7 +69,7 @@ defmodule Jido.Actions.Directives do
       if action_module == __MODULE__ do
         {:error, :cannot_deregister_self}
       else
-        directive = %Jido.Agent.Directive.DeregisterActionDirective{
+        directive = %Jido.Agent.Directive.DeregisterAction{
           action_module: action_module
         }
 
@@ -89,9 +89,9 @@ defmodule Jido.Actions.Directives do
       ]
 
     @spec run(map(), map()) ::
-            {:ok, map(), Jido.Agent.Directive.SpawnDirective.t()} | {:error, term()}
+            {:ok, map(), Jido.Agent.Directive.Spawn.t()} | {:error, term()}
     def run(%{module: module, args: args}, _ctx) do
-      directive = %Jido.Agent.Directive.SpawnDirective{
+      directive = %Jido.Agent.Directive.Spawn{
         module: module,
         args: args
       }
@@ -110,9 +110,9 @@ defmodule Jido.Actions.Directives do
       ]
 
     @spec run(map(), map()) ::
-            {:ok, map(), Jido.Agent.Directive.KillDirective.t()} | {:error, term()}
+            {:ok, map(), Jido.Agent.Directive.Kill.t()} | {:error, term()}
     def run(%{pid: pid}, _ctx) do
-      directive = %Jido.Agent.Directive.KillDirective{pid: pid}
+      directive = %Jido.Agent.Directive.Kill{pid: pid}
       {:ok, %{}, directive}
     end
   end

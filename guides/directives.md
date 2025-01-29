@@ -6,9 +6,9 @@ In our previous guides, we explored how Agents provide stateful wrappers around 
 
 Directives are special instructions that allow agents to modify their own state and capabilities. Think of them as meta-actions that let agents:
 
-1. Queue up new actions to execute (EnqueueDirective)
-2. Learn new capabilities (RegisterActionDirective) 
-3. Remove capabilities (DeregisterActionDirective)
+1. Queue up new actions to execute (Enqueue)
+2. Learn new capabilities (RegisterAction) 
+3. Remove capabilities (DeregisterAction)
 
 This self-modification ability is crucial for building adaptive agents that can:
 - Respond to new situations by queueing appropriate actions
@@ -106,9 +106,9 @@ end
 
 Let's explore how our calculator can use directives to evolve its capabilities:
 
-### 1. Queueing New Operations (EnqueueDirective)
+### 1. Queueing New Operations (Enqueue)
 
-The EnqueueDirective lets an agent add new instructions to its pending queue. This is useful for building dynamic workflows:
+The Enqueue lets an agent add new instructions to its pending queue. This is useful for building dynamic workflows:
 
 ```elixir
 # Create our calculator
@@ -137,9 +137,9 @@ calculator = MyApp.AdaptiveCalculator.new()
 calculator.state.value #=> 35.0
 ```
 
-### 2. Learning New Operations (RegisterActionDirective)
+### 2. Learning New Operations (RegisterAction)
 
-The RegisterActionDirective lets an agent learn new capabilities at runtime:
+The RegisterAction lets an agent learn new capabilities at runtime:
 
 ```elixir
 # Our calculator doesn't know how to multiply yet
@@ -162,9 +162,9 @@ The RegisterActionDirective lets an agent learn new capabilities at runtime:
 calculator.state.value #=> 70.0  # (35 * 2)
 ```
 
-### 3. Removing Operations (DeregisterActionDirective)
+### 3. Removing Operations (DeregisterAction)
 
-The DeregisterActionDirective lets an agent remove capabilities it no longer needs:
+The DeregisterAction lets an agent remove capabilities it no longer needs:
 
 ```elixir
 # Remove multiplication if we don't need it anymore
@@ -194,12 +194,12 @@ defmodule MyApp.Actions.LearnAdvancedMath do
 
   def run(%{value: value}, _context) do
     # First register the power operation
-    power_directive = %Jido.Agent.Directive.RegisterActionDirective{
+    power_directive = %Jido.Agent.Directive.RegisterAction{
       action_module: MyApp.Actions.Power
     }
 
     # Then queue up a calculation using it
-    calculate_directive = %Jido.Agent.Directive.EnqueueDirective{
+    calculate_directive = %Jido.Agent.Directive.Enqueue{
       action: MyApp.Actions.Power,
       params: %{value: value, exponent: 2}
     }

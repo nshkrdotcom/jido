@@ -56,7 +56,7 @@ defmodule JidoTest.WorkflowRunTest do
 
       log =
         capture_log(fn ->
-          assert {:ok, %{}, %Jido.Agent.Directive.EnqueueDirective{}} =
+          assert {:ok, %{}, %Jido.Agent.Directive.Enqueue{}} =
                    Workflow.run(Jido.Actions.Directives.EnqueueAction, %{
                      action: BasicAction,
                      params: %{value: 5}
@@ -74,7 +74,7 @@ defmodule JidoTest.WorkflowRunTest do
 
       log =
         capture_log(fn ->
-          assert {:error, %Error{}, %Jido.Agent.Directive.EnqueueDirective{}} =
+          assert {:error, %Error{}, %Jido.Agent.Directive.Enqueue{}} =
                    Workflow.run(JidoTest.TestActions.ErrorDirective, %{
                      action: BasicAction,
                      params: %{value: 5}

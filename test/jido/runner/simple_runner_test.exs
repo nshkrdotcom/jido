@@ -18,7 +18,7 @@ defmodule Jido.Runner.SimpleTest do
       agent = FullFeaturedAgent.new("test-agent")
       agent = %{agent | pending_instructions: :queue.from_list([instruction])}
 
-      assert {:ok, updated_agent} = Simple.run(agent)
+      assert {:ok, %FullFeaturedAgent{} = updated_agent, []} = Simple.run(agent)
       assert updated_agent.state.value == 1
       assert updated_agent.result == %{value: 1}
       assert :queue.is_empty(updated_agent.pending_instructions)
@@ -50,7 +50,7 @@ defmodule Jido.Runner.SimpleTest do
         | pending_instructions: :queue.from_list([instruction1, instruction2, instruction3])
       }
 
-      assert {:ok, updated_agent} = Simple.run(agent)
+      assert {:ok, %FullFeaturedAgent{} = updated_agent, []} = Simple.run(agent)
       # First instruction executed
       assert updated_agent.state.value == 1
       assert updated_agent.result == %{value: 1}
@@ -81,7 +81,8 @@ defmodule Jido.Runner.SimpleTest do
 
     test "returns unchanged agent when no pending instructions" do
       agent = FullFeaturedAgent.new("test-agent")
-      assert {:ok, ^agent} = Simple.run(agent)
+      assert {:ok, %FullFeaturedAgent{} = updated_agent, []} = Simple.run(agent)
+      assert updated_agent == agent
     end
 
     test "executes only first instruction and preserves remaining in queue" do
@@ -100,7 +101,7 @@ defmodule Jido.Runner.SimpleTest do
       agent = FullFeaturedAgent.new("test-agent")
       agent = %{agent | pending_instructions: :queue.from_list([instruction1, instruction2])}
 
-      assert {:ok, updated_agent} = Simple.run(agent)
+      assert {:ok, %FullFeaturedAgent{} = updated_agent, []} = Simple.run(agent)
       assert updated_agent.state.value == 1
       assert updated_agent.result == %{value: 1}
       assert :queue.len(updated_agent.pending_instructions) == 1
@@ -124,14 +125,13 @@ defmodule Jido.Runner.SimpleTest do
       agent = FullFeaturedAgent.new("test-agent")
       agent = %{agent | pending_instructions: :queue.from_list([instruction])}
 
-      assert {:ok, updated_agent} = Simple.run(agent)
+      assert {:ok, %FullFeaturedAgent{} = updated_agent, []} = Simple.run(agent)
       assert updated_agent.result == %{}
+      # The enqueue directive adds a new instruction to the queue
       assert :queue.len(updated_agent.pending_instructions) == 1
-
-      # Verify enqueued instruction
-      {{:value, enqueued}, _} = :queue.out(updated_agent.pending_instructions)
-      assert enqueued.action == :next_action
-      assert enqueued.params == %{}
+      {{:value, next_instruction}, _} = :queue.out(updated_agent.pending_instructions)
+      assert next_instruction.action == :next_action
+      assert next_instruction.params == %{}
     end
 
     test "handles invalid directive returned from action" do
@@ -149,7 +149,9 @@ defmodule Jido.Runner.SimpleTest do
       agent = FullFeaturedAgent.new("test-agent")
       agent = %{agent | pending_instructions: :queue.from_list([instruction])}
 
-      assert {:error, :invalid_action} = Simple.run(agent)
+      assert {:error, %Jido.Error{} = error} = Simple.run(agent)
+      assert error.type == :validation_error
+      assert error.message == "Invalid directive"
     end
 
     test "does not apply state when apply_state is false" do
@@ -162,7 +164,9 @@ defmodule Jido.Runner.SimpleTest do
       agent = FullFeaturedAgent.new("test-agent")
       agent = %{agent | pending_instructions: :queue.from_list([instruction])}
 
-      assert {:ok, updated_agent} = Simple.run(agent, apply_state: false)
+      assert {:ok, %FullFeaturedAgent{} = updated_agent, []} =
+               Simple.run(agent, apply_state: false)
+
       # State unchanged
       assert updated_agent.state.value == 0
       # Result still set
@@ -171,9 +175,10 @@ defmodule Jido.Runner.SimpleTest do
     end
 
     test "handles multiple directives from action" do
+      # Two Server directives
       instruction = %Instruction{
         action: JidoTest.TestActions.MultiDirectiveAction,
-        params: %{},
+        params: %{type: :server},
         context: %{},
         opts: [timeout: 0]
       }
@@ -181,17 +186,15 @@ defmodule Jido.Runner.SimpleTest do
       agent = FullFeaturedAgent.new("test-agent")
       agent = %{agent | pending_instructions: :queue.from_list([instruction])}
 
-      assert {:ok, updated_agent} = Simple.run(agent)
-      assert :queue.len(updated_agent.pending_instructions) == 2
+      assert {:ok, %FullFeaturedAgent{} = updated_agent, directives} = Simple.run(agent)
+      assert length(directives) == 2
+      assert :queue.is_empty(updated_agent.pending_instructions)
 
-      # Verify enqueued instructions
-      {{:value, first}, queue} = :queue.out(updated_agent.pending_instructions)
-      assert first.action == :action1
-      assert first.params == %{}
-
-      {{:value, second}, _} = :queue.out(queue)
-      assert second.action == :action2
-      assert second.params == %{}
+      # Verify directives
+      [first, second] = directives
+      assert first.module == JidoTest.TestActions.MultiDirectiveAction
+      assert first.args == []
+      assert is_pid(second.pid)
     end
 
     test "handles runtime errors in action execution" do

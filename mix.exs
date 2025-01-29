@@ -102,14 +102,11 @@ defmodule Jido.MixProject do
         ],
         Directives: [
           Jido.Agent.Directive,
-          Jido.Agent.Directive.DeregisterActionDirective,
-          Jido.Agent.Directive.EnqueueDirective,
-          Jido.Agent.Directive.RegisterActionDirective,
-          Jido.Agent.Directive.SpawnDirective,
-          Jido.Agent.Directive.KillDirective,
-          Jido.Agent.Directive.PublishDirective,
-          Jido.Agent.Directive.SubscribeDirective,
-          Jido.Agent.Directive.UnsubscribeDirective
+          Jido.Agent.Directive.Enqueue,
+          Jido.Agent.Directive.RegisterAction,
+          Jido.Agent.Directive.DeregisterAction,
+          Jido.Agent.Directive.Spawn,
+          Jido.Agent.Directive.Kill
         ],
         Runner: [
           Jido.Runner,

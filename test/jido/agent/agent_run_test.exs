@@ -21,7 +21,7 @@ defmodule JidoTest.AgentRunTest do
       {:ok, planned} =
         FullFeaturedAgent.plan(agent, {TestActions.Add, %{value: 10, amount: 1}})
 
-      {:ok, final} = FullFeaturedAgent.run(planned)
+      {:ok, final, _directives} = FullFeaturedAgent.run(planned)
 
       assert final.result.value == 11
       assert final.state.status == :idle
@@ -32,7 +32,7 @@ defmodule JidoTest.AgentRunTest do
       {:ok, planned} =
         FullFeaturedAgent.plan(agent, {TestActions.Add, %{value: 10, amount: 1}})
 
-      {:ok, final} = FullFeaturedAgent.run(planned, apply_state: true)
+      {:ok, final, _directives} = FullFeaturedAgent.run(planned, apply_state: true)
 
       assert final.state.value == 11
       assert final.result.value == 11
@@ -43,7 +43,7 @@ defmodule JidoTest.AgentRunTest do
       {:ok, planned} =
         FullFeaturedAgent.plan(agent, {TestActions.Add, %{value: 10, amount: 5}})
 
-      {:ok, final} = FullFeaturedAgent.run(planned, apply_state: false)
+      {:ok, final, _directives} = FullFeaturedAgent.run(planned, apply_state: false)
 
       # Original state preserved
       assert final.state.value == 0
@@ -62,7 +62,7 @@ defmodule JidoTest.AgentRunTest do
           ]
         )
 
-      {:ok, final} = FullFeaturedAgent.run(planned, runner: Jido.Runner.Chain)
+      {:ok, final, _directives} = FullFeaturedAgent.run(planned, runner: Jido.Runner.Chain)
 
       # (10 + 1) * 2 + 8
       assert final.state.value == 30
@@ -81,7 +81,7 @@ defmodule JidoTest.AgentRunTest do
     test "tracks callbacks in correct order" do
       agent = CallbackTrackingAgent.new()
       {:ok, planned} = CallbackTrackingAgent.plan(agent, {TestActions.Add, %{value: 1}})
-      {:ok, final} = CallbackTrackingAgent.run(planned)
+      {:ok, final, _directives} = CallbackTrackingAgent.run(planned)
 
       callbacks = Enum.map(final.state.callback_log, & &1.callback)
       assert :on_before_run in callbacks
@@ -106,7 +106,7 @@ defmodule JidoTest.AgentRunTest do
       {:ok, agent} = ErrorHandlingAgent.set(agent, %{battery_level: 100, should_recover?: true})
 
       {:ok, planned} = ErrorHandlingAgent.plan(agent, {TestActions.ErrorAction, %{}})
-      {:ok, recovered_agent} = ErrorHandlingAgent.run(planned, apply_state: true)
+      {:ok, recovered_agent, []} = ErrorHandlingAgent.run(planned, apply_state: true)
 
       # Recovery should have incremented error count
       assert recovered_agent.state.error_count == 1
@@ -137,7 +137,7 @@ defmodule JidoTest.AgentRunTest do
 
     test "handles empty instruction queue gracefully", %{agent: _agent} do
       agent = BasicAgent.new()
-      {:ok, final} = BasicAgent.run(agent)
+      {:ok, final, _directives} = BasicAgent.run(agent)
       assert final.state == agent.state
     end
 
@@ -145,7 +145,7 @@ defmodule JidoTest.AgentRunTest do
       qty = 1000
       actions = List.duplicate({TestActions.Add, %{amount: 1}}, qty)
       {:ok, planned} = FullFeaturedAgent.plan(agent, actions)
-      {:ok, final} = FullFeaturedAgent.run(planned, runner: Jido.Runner.Chain)
+      {:ok, final, _directives} = FullFeaturedAgent.run(planned, runner: Jido.Runner.Chain)
 
       assert final.state.value == qty
     end
@@ -166,7 +166,7 @@ defmodule JidoTest.AgentRunTest do
         })
 
       # Run the enqueue action
-      {:ok, final} = BasicAgent.run(planned, runner: Jido.Runner.Simple)
+      {:ok, final, []} = BasicAgent.run(planned, runner: Jido.Runner.Simple)
 
       # Verify the directive was applied by checking the pending instructions
       assert :queue.len(final.pending_instructions) > 0
@@ -185,7 +185,7 @@ defmodule JidoTest.AgentRunTest do
         })
 
       # Run the register action
-      {:ok, final} = BasicAgent.run(planned)
+      {:ok, final, _directives} = BasicAgent.run(planned)
 
       # Verify the action module was registered
       assert final.actions |> Enum.member?(TestActions.BasicAction)
@@ -203,7 +203,7 @@ defmodule JidoTest.AgentRunTest do
           }
         })
 
-      {:ok, agent_with_registered_action} = BasicAgent.run(planned_register)
+      {:ok, agent_with_registered_action, _directives} = BasicAgent.run(planned_register)
 
       # Plan a deregister action
       {:ok, planned_deregister} =
@@ -215,7 +215,7 @@ defmodule JidoTest.AgentRunTest do
         })
 
       # Run the deregister action
-      {:ok, final} = BasicAgent.run(planned_deregister)
+      {:ok, final, _directives} = BasicAgent.run(planned_deregister)
       # Verify the action module was deregistered
       refute final.actions |> Enum.member?(TestActions.BasicAction)
     end

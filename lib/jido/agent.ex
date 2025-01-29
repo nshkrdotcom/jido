@@ -90,7 +90,7 @@ defmodule Jido.Agent do
   * `on_after_validate_state/1`  - Post-validation processing
   * `on_before_plan/3`           - Pre-planning processing with params
   * `on_before_run/1`            - Pre-execution validation/setup
-  * `on_after_run/2`             - Post-execution processing
+  * `on_after_run/3`             - Post-execution processing
   * `on_error/2`                 - Error handling and recovery
 
   Default implementations pass through the agent unchanged.
@@ -144,6 +144,7 @@ defmodule Jido.Agent do
   @type instruction :: Instruction.t() | module() | {module(), map()}
   @type instructions :: instruction() | [instruction()]
   @type agent_result :: {:ok, t()} | {:error, Error.t()}
+  @type agent_result_with_directives :: {:ok, t(), [Directive.t()]} | {:error, Error.t()}
   @type map_result :: {:ok, map()} | {:error, Error.t()}
 
   typedstruct do
@@ -219,6 +220,7 @@ defmodule Jido.Agent do
       @type instruction :: Jido.Agent.instruction()
       @type instructions :: Jido.Agent.instructions()
       @type agent_result :: Jido.Agent.agent_result()
+      @type agent_result_with_directives :: Jido.Agent.agent_result_with_directives()
       @type map_result :: Jido.Agent.map_result()
 
       @agent_server_schema [
@@ -902,7 +904,7 @@ defmodule Jido.Agent do
           ## Execution Flow
           1. Pre-execution callback (`on_before_run/1`)
           2. Runner execution of pending instructions
-          3. Post-execution callback (`on_after_run/2`)
+          3. Post-execution callback (`on_after_run/3`)
           4. Return agent with updated state and result
 
           ## Parameters
@@ -960,11 +962,11 @@ defmodule Jido.Agent do
 
           ## Callbacks
           * `on_before_run/1` - Pre-execution preparation
-          * `on_after_run/2` - Post-execution processing
+          * `on_after_run/3` - Post-execution processing
 
           See `Jido.Runner` for implementing custom runners and `plan/2` for queueing actions.
           """
-          @spec run(t() | Jido.server(), keyword()) :: agent_result()
+          @spec run(t() | Jido.server(), keyword()) :: agent_result_with_directives()
           def run(agent, opts \\ [])
 
           def run(%__MODULE__{} = agent, opts) do
@@ -981,9 +983,9 @@ defmodule Jido.Agent do
 
             with {:ok, validated_runner} <- Jido.Util.validate_runner(runner),
                  {:ok, agent} <- on_before_run(agent),
-                 {:ok, agent} <- validated_runner.run(agent, opts),
-                 {:ok, agent} <- on_after_run(agent, agent.result) do
-              OK.success(agent)
+                 {:ok, agent, directives} <- validated_runner.run(agent, opts),
+                 {:ok, agent} <- on_after_run(agent, agent.result, directives) do
+              {:ok, agent, directives}
             else
               {:error, reason} = error ->
                 agent_with_error = %{agent | result: reason}
@@ -1073,7 +1075,8 @@ defmodule Jido.Agent do
                   # Handle execution error
               end
           """
-          @spec cmd(t() | Jido.server(), instructions(), map(), keyword()) :: agent_result()
+          @spec cmd(t() | Jido.server(), instructions(), map(), keyword()) ::
+                  agent_result_with_directives()
           def cmd(agent, instructions, attrs \\ %{}, opts \\ [])
 
           def cmd(%__MODULE__{} = agent, instructions, attrs, opts) do
@@ -1093,14 +1096,15 @@ defmodule Jido.Agent do
 
             with {:ok, agent} <- set(agent, attrs, strict_validation: strict_validation),
                  {:ok, agent} <- plan(agent, instructions, context),
-                 {:ok, agent} <- run(agent, opts) do
+                 {:ok, agent, directives} <- run(agent, opts) do
               dbug("Cmd execution completed successfully",
                 agent_id: agent.id,
                 final_state: agent.state,
-                result: agent.result
+                result: agent.result,
+                directives: directives
               )
 
-              OK.success(agent)
+              {:ok, agent, directives}
             else
               {:error, reason} ->
                 dbug("Cmd execution failed",
@@ -1166,8 +1170,8 @@ defmodule Jido.Agent do
           @spec on_before_run(t()) :: agent_result()
           def on_before_run(agent), do: OK.success(agent)
 
-          @spec on_after_run(t(), map()) :: agent_result()
-          def on_after_run(agent, _result), do: OK.success(agent)
+          @spec on_after_run(t(), map(), [Directive.t()]) :: agent_result()
+          def on_after_run(agent, _result, _unapplied_directives), do: OK.success(agent)
 
           @spec on_error(t(), any()) :: agent_result()
           def on_error(agent, reason), do: OK.failure(reason)
@@ -1187,7 +1191,7 @@ defmodule Jido.Agent do
                          on_after_validate_state: 1,
                          on_before_plan: 3,
                          on_before_run: 1,
-                         on_after_run: 2,
+                         on_after_run: 3,
                          on_error: 2
 
         {:error, error} ->
@@ -1230,8 +1234,11 @@ defmodule Jido.Agent do
   Called after successful action execution.
   Allows post-processing of execution results.
   """
-  @callback on_after_run(agent :: t(), result :: map()) :: agent_result()
-  @callback on_error(agent :: t(), reason :: any()) :: {:ok, t()} | {:error, t()}
+  @callback on_after_run(agent :: t(), result :: map(), unapplied_directives :: [Directive.t()]) ::
+              agent_result()
+
+  @callback on_error(agent :: t(), reason :: any()) ::
+              {:ok, t()} | {:error, t()}
   @callback start_link(opts :: keyword()) :: {:ok, pid()} | {:error, any()}
 
   @callback child_spec(opts :: keyword()) :: Supervisor.child_spec()
@@ -1248,7 +1255,7 @@ defmodule Jido.Agent do
     on_after_validate_state: 1,
     on_before_plan: 3,
     on_before_run: 1,
-    on_after_run: 2,
+    on_after_run: 3,
     on_error: 2
   ]
 

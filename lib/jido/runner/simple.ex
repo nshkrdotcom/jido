@@ -9,7 +9,7 @@ defmodule Jido.Runner.Simple do
   2. Executes the instruction via its action module
   3. Processes the result (either a state update, directive or both)
   4. Applies state changes if configured
-  5. Returns the updated agent with the execution results
+  5. Returns the updated agent with the execution results and server directives
 
   ## Features
   * Single instruction execution
@@ -33,8 +33,16 @@ defmodule Jido.Runner.Simple do
   alias Jido.Error
   alias Jido.Agent.Directive
 
+  alias Jido.Agent.Directive.{
+    Enqueue,
+    RegisterAction,
+    DeregisterAction,
+    Spawn,
+    Kill
+  }
+
   @type run_opts :: [apply_state: boolean()]
-  @type run_result :: {:ok, Jido.Agent.t()} | {:error, Error.t() | String.t()}
+  @type run_result :: {:ok, Jido.Agent.t(), list()} | {:error, Error.t()}
 
   @doc """
   Executes a single instruction from the Agent's pending instructions queue.
@@ -45,7 +53,7 @@ defmodule Jido.Runner.Simple do
   3. Executes the instruction through its action module
   4. Processes any directives from the execution
   5. Optionally applies state changes
-  6. Returns the updated agent with execution results
+  6. Returns the updated agent with execution results and server directives
 
   ## Parameters
     * `agent` - The agent struct containing:
@@ -56,10 +64,10 @@ defmodule Jido.Runner.Simple do
       * `apply_state` - Whether to apply state changes (default: true)
 
   ## Returns
-    * `{:ok, updated_agent}` - Successful execution with:
+    * `{:ok, updated_agent, directives}` - Successful execution with:
       * Updated state map (for state results)
       * Updated pending instructions queue
-      * Any directives applied to the agent
+      * Any server directives from the execution
     * `{:error, reason}` - Execution failed with:
       * String error for queue empty condition
       * Error struct with details for execution failures
@@ -67,13 +75,13 @@ defmodule Jido.Runner.Simple do
   ## Examples
 
       # Successful state update
-      {:ok, updated_agent} = Runner.Simple.run(agent_with_state_update)
+      {:ok, updated_agent, directives} = Runner.Simple.run(agent_with_state_update)
 
       # Execute without applying state
-      {:ok, updated_agent} = Runner.Simple.run(agent_with_state_update, apply_state: false)
+      {:ok, updated_agent, directives} = Runner.Simple.run(agent_with_state_update, apply_state: false)
 
       # Empty queue - returns agent unchanged
-      {:ok, agent} = Runner.Simple.run(agent_with_empty_queue)
+      {:ok, agent, []} = Runner.Simple.run(agent_with_empty_queue)
 
       # Execution error
       {:error, error} = Runner.Simple.run(agent_with_failing_action)
@@ -115,7 +123,7 @@ defmodule Jido.Runner.Simple do
 
       {:empty, _} ->
         dbug("Execution skipped - empty instruction queue")
-        {:ok, agent}
+        {:ok, agent, []}
     end
   end
 
@@ -128,11 +136,15 @@ defmodule Jido.Runner.Simple do
     )
 
     case Jido.Workflow.run(instruction) do
-      {:ok, state_map, directives} ->
+      {:ok, state_map, directives} when is_list(directives) ->
         handle_directive_result(agent, state_map, directives, apply_state)
 
+      {:ok, state_map, directive} ->
+        handle_directive_result(agent, state_map, [directive], apply_state)
+
       {:ok, state_map} ->
-        maybe_apply_state(agent, state_map, apply_state)
+        agent_with_state = apply_state(agent, state_map, apply_state)
+        {:ok, agent_with_state, []}
 
       {:error, reason} when is_binary(reason) ->
         handle_directive_error(reason)
@@ -144,25 +156,30 @@ defmodule Jido.Runner.Simple do
 
   @spec handle_directive_result(Jido.Agent.t(), map(), list(), boolean()) :: run_result()
   defp handle_directive_result(agent, state_map, directives, apply_state) do
-    with :ok <- Directive.validate_directives(directives),
-         {:ok, agent_with_state} <- maybe_apply_state(agent, state_map, apply_state),
-         {:ok, updated_agent} <- Directive.apply_directives(agent_with_state, directives) do
-      {:ok, updated_agent}
+    agent_with_state = apply_state(agent, state_map, apply_state)
+
+    case Directive.apply_agent_directive(agent_with_state, directives) do
+      {:ok, updated_agent, server_directives} ->
+        {:ok, updated_agent, server_directives}
+
+      {:error, reason} ->
+        {:error,
+         %Error{type: :validation_error, message: "Invalid directive", details: %{reason: reason}}}
     end
   end
 
   @spec handle_directive_error(String.t()) :: {:error, Error.t()}
-  defp handle_directive_error(_reason) do
-    {:error, Error.validation_error("Invalid directive", %{reason: :invalid_action})}
+  defp handle_directive_error(reason) do
+    {:error, Error.validation_error("Invalid directive", %{reason: reason})}
   end
 
   @doc false
-  @spec maybe_apply_state(Jido.Agent.t(), map(), boolean()) :: run_result()
-  defp maybe_apply_state(agent, state_map, true) do
-    {:ok, %{agent | state: Map.merge(agent.state, state_map), result: state_map}}
+  @spec apply_state(Jido.Agent.t(), map(), boolean()) :: Jido.Agent.t()
+  defp apply_state(agent, state_map, true) do
+    %{agent | state: Map.merge(agent.state, state_map), result: state_map}
   end
 
-  defp maybe_apply_state(agent, state_map, false) do
-    {:ok, %{agent | result: state_map}}
+  defp apply_state(agent, state_map, false) do
+    %{agent | result: state_map}
   end
 end

@@ -135,5 +135,74 @@ defmodule Jido.Signal.DispatchTest do
       config = {:invalid_adapter, []}
       assert {:error, _} = Dispatch.validate_opts(config)
     end
+
+    test "validates multiple dispatch configurations with default" do
+      config = [
+        default: {:bus, [target: :test_bus, stream: "events"]},
+        audit: {:pubsub, [target: {:pubsub, :audit}, topic: "audit.events"]}
+      ]
+
+      assert {:ok, validated_config} = Dispatch.validate_opts(config)
+      assert Keyword.has_key?(validated_config, :default)
+      assert Keyword.has_key?(validated_config, :audit)
+    end
+
+    test "returns error when default dispatcher is missing" do
+      config = [
+        audit: {:pubsub, [target: :audit_pubsub, topic: "audit.events"]}
+      ]
+
+      assert {:error, :missing_default_dispatcher} = Dispatch.validate_opts(config)
+    end
+
+    test "returns error when any dispatcher in the list is invalid" do
+      config = [
+        default: {:bus, [target: :test_bus, stream: "events"]},
+        audit: {:invalid_adapter, []}
+      ]
+
+      assert {:error, _} = Dispatch.validate_opts(config)
+    end
+  end
+
+  describe "multiple dispatch" do
+    setup do
+      signal = %Jido.Signal{
+        id: "test_signal",
+        type: "test",
+        source: "test",
+        time: DateTime.utc_now(),
+        data: %{}
+      }
+
+      bus_name = :"test_bus_#{:erlang.unique_integer()}"
+      start_supervised!({Jido.Bus, name: bus_name})
+
+      {:ok, signal: signal, bus_name: bus_name}
+    end
+
+    test "delivers signal to multiple targets", %{signal: signal, bus_name: bus_name} do
+      config = [
+        default: {:bus, [target: bus_name, stream: "events"]},
+        pid: {:pid, [target: self(), delivery_mode: :async]}
+      ]
+
+      assert :ok = Dispatch.dispatch(signal, config)
+      assert_receive {:signal, ^signal}
+    end
+
+    test "returns error if any dispatcher fails", %{signal: signal, bus_name: bus_name} do
+      dead_pid = spawn(fn -> :ok end)
+      # Ensure process is dead
+      ref = Process.monitor(dead_pid)
+      assert_receive {:DOWN, ^ref, :process, ^dead_pid, _}
+
+      config = [
+        default: {:bus, [target: bus_name, stream: "events"]},
+        pid: {:pid, [target: dead_pid, delivery_mode: :async]}
+      ]
+
+      assert {:error, :process_not_alive} = Dispatch.dispatch(signal, config)
+    end
   end
 end

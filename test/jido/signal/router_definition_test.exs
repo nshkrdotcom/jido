@@ -68,6 +68,30 @@ defmodule Jido.Signal.RouterDefinitionTest do
               ]} = Router.normalize({path, match_fn, instruction, priority})
     end
 
+    test "normalizes {path, pid} tuple" do
+      path = "test.path"
+
+      test_pid =
+        spawn(fn ->
+          receive do
+            _ -> :ok
+          end
+        end)
+
+      assert {:ok,
+              [
+                %Router.Route{
+                  path: ^path,
+                  instruction: %Instruction{
+                    action: Jido.Signal.Dispatch.Pid,
+                    params: %{pid: ^test_pid}
+                  },
+                  priority: 0,
+                  match: nil
+                }
+              ]} = Router.normalize({path, test_pid})
+    end
+
     test "returns error for invalid route specification" do
       assert {:error, _} = Router.normalize({:invalid, "format"})
     end

@@ -30,7 +30,7 @@ defmodule Jido.Runner.ChainTest do
       agent = FullFeaturedAgent.new("test-agent")
       agent = %{agent | pending_instructions: :queue.from_list(instructions)}
 
-      assert {:ok, updated_agent} = Chain.run(agent)
+      assert {:ok, updated_agent, []} = Chain.run(agent)
       assert updated_agent.state.value == 4
       assert :queue.is_empty(updated_agent.pending_instructions)
     end
@@ -62,7 +62,7 @@ defmodule Jido.Runner.ChainTest do
       agent = FullFeaturedAgent.new("test-agent")
       agent = %{agent | pending_instructions: :queue.from_list(instructions)}
 
-      assert {:ok, updated_agent} = Chain.run(agent)
+      assert {:ok, updated_agent, []} = Chain.run(agent)
       # Verify all initial instructions executed
       assert updated_agent.state.value == 3
 
@@ -76,7 +76,7 @@ defmodule Jido.Runner.ChainTest do
     test "returns unchanged agent when no pending instructions" do
       agent = FullFeaturedAgent.new("test-agent")
       agent = %{agent | result: :ok}
-      assert {:ok, ^agent} = Chain.run(agent)
+      assert {:ok, ^agent, []} = Chain.run(agent)
     end
 
     test "propagates errors from actions" do
@@ -120,7 +120,7 @@ defmodule Jido.Runner.ChainTest do
       agent = FullFeaturedAgent.new("test-agent")
       agent = %{agent | pending_instructions: :queue.from_list(instructions)}
 
-      assert {:ok, updated_agent} = Chain.run(agent)
+      assert {:ok, updated_agent, []} = Chain.run(agent)
       assert :queue.len(updated_agent.pending_instructions) == 1
       {{:value, enqueued}, _} = :queue.out(updated_agent.pending_instructions)
       assert enqueued.action == :next_action
@@ -150,7 +150,7 @@ defmodule Jido.Runner.ChainTest do
       agent = FullFeaturedAgent.new("test-agent")
       agent = %{agent | pending_instructions: :queue.from_list(instructions)}
 
-      assert {:ok, updated_agent} = Chain.run(agent)
+      assert {:ok, updated_agent, []} = Chain.run(agent)
       assert :queue.len(updated_agent.pending_instructions) == 2
 
       # Verify enqueued instructions
@@ -183,7 +183,7 @@ defmodule Jido.Runner.ChainTest do
       agent = FullFeaturedAgent.new("test-agent")
       agent = %{agent | pending_instructions: :queue.from_list(instructions)}
 
-      assert {:ok, updated_agent} = Chain.run(agent)
+      assert {:ok, updated_agent, []} = Chain.run(agent)
       # State changes applied
       assert updated_agent.state.value == 1
       # Directive accumulated
@@ -220,7 +220,7 @@ defmodule Jido.Runner.ChainTest do
           pending_instructions: :queue.from_list(instructions)
       }
 
-      assert {:ok, updated_agent} = Chain.run(agent)
+      assert {:ok, updated_agent, []} = Chain.run(agent)
       assert updated_agent.state.value == 30
       assert :queue.is_empty(updated_agent.pending_instructions)
     end
@@ -346,7 +346,7 @@ defmodule Jido.Runner.ChainTest do
       agent = FullFeaturedAgent.new("test-agent")
       agent = %{agent | pending_instructions: :queue.from_list(instructions)}
 
-      assert {:ok, updated_agent} = Chain.run(agent)
+      assert {:ok, updated_agent, []} = Chain.run(agent)
       # Second instruction executed
       assert updated_agent.state.value == 1
       # Directive accumulated

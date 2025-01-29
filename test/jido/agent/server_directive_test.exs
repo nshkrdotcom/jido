@@ -5,11 +5,11 @@ defmodule Jido.Agent.Server.DirectiveTest do
   alias Jido.Error
 
   alias Jido.Agent.Directive.{
-    SpawnDirective,
-    KillDirective,
-    EnqueueDirective,
-    RegisterActionDirective,
-    DeregisterActionDirective
+    Spawn,
+    Kill,
+    Enqueue,
+    RegisterAction,
+    DeregisterAction
   }
 
   @moduletag :capture_log
@@ -39,7 +39,7 @@ defmodule Jido.Agent.Server.DirectiveTest do
 
   describe "instruction queue directives" do
     test "enqueue adds instruction to queue", %{state: state} do
-      directive = %EnqueueDirective{
+      directive = %Enqueue{
         action: :test_action,
         params: %{value: 42},
         context: %{user: "test"},
@@ -58,7 +58,7 @@ defmodule Jido.Agent.Server.DirectiveTest do
     end
 
     test "enqueue fails with invalid action", %{state: state} do
-      directive = %EnqueueDirective{action: nil}
+      directive = %Enqueue{action: nil}
       {:error, error} = Directive.execute(state, directive)
 
       assert_error_match(error, %Error{
@@ -75,7 +75,7 @@ defmodule Jido.Agent.Server.DirectiveTest do
     end
 
     test "register adds action module", %{state: state} do
-      directive = %RegisterActionDirective{action_module: TestAction}
+      directive = %RegisterAction{action_module: TestAction}
       {:ok, new_state} = Directive.execute(state, directive)
 
       # Verify action was registered
@@ -83,7 +83,7 @@ defmodule Jido.Agent.Server.DirectiveTest do
     end
 
     test "register fails with invalid module", %{state: state} do
-      directive = %RegisterActionDirective{action_module: :not_a_module}
+      directive = %RegisterAction{action_module: :not_a_module}
       {:error, error} = Directive.execute(state, directive)
 
       assert_error_match(error, %Error{
@@ -96,10 +96,10 @@ defmodule Jido.Agent.Server.DirectiveTest do
     test "deregister removes action module", %{state: state} do
       # First register the action
       {:ok, state_with_action} =
-        Directive.execute(state, %RegisterActionDirective{action_module: TestAction})
+        Directive.execute(state, %RegisterAction{action_module: TestAction})
 
       # Then deregister it
-      directive = %DeregisterActionDirective{action_module: TestAction}
+      directive = %DeregisterAction{action_module: TestAction}
       {:ok, final_state} = Directive.execute(state_with_action, directive)
 
       # Verify action was removed
@@ -107,7 +107,7 @@ defmodule Jido.Agent.Server.DirectiveTest do
     end
 
     test "deregister fails with invalid module", %{state: state} do
-      directive = %DeregisterActionDirective{action_module: :not_a_module}
+      directive = %DeregisterAction{action_module: :not_a_module}
       {:error, error} = Directive.execute(state, directive)
 
       assert_error_match(error, %Error{
@@ -121,7 +121,7 @@ defmodule Jido.Agent.Server.DirectiveTest do
   describe "process management directives" do
     test "spawn creates a new child process", %{state: state} do
       task = fn -> Process.sleep(1000) end
-      directive = %SpawnDirective{module: Task, args: task}
+      directive = %Spawn{module: Task, args: task}
       {:ok, new_state} = Directive.execute(state, directive)
       assert state == new_state
 
@@ -140,7 +140,7 @@ defmodule Jido.Agent.Server.DirectiveTest do
 
     test "kill terminates a specific process", %{state: state} do
       task = fn -> Process.sleep(1000) end
-      spawn_directive = %SpawnDirective{module: Task, args: task}
+      spawn_directive = %Spawn{module: Task, args: task}
       {:ok, state} = Directive.execute(state, spawn_directive)
 
       # Clear the spawn signal
@@ -150,7 +150,7 @@ defmodule Jido.Agent.Server.DirectiveTest do
       pid = DynamicSupervisor.which_children(state.child_supervisor) |> hd() |> elem(1)
       assert Process.alive?(pid)
 
-      kill_directive = %KillDirective{pid: pid}
+      kill_directive = %Kill{pid: pid}
       {:ok, new_state} = Directive.execute(state, kill_directive)
       refute Process.alive?(pid)
       assert state == new_state
@@ -165,7 +165,7 @@ defmodule Jido.Agent.Server.DirectiveTest do
       non_existent_pid = spawn(fn -> :ok end)
       Process.exit(non_existent_pid, :kill)
 
-      directive = %KillDirective{pid: non_existent_pid}
+      directive = %Kill{pid: non_existent_pid}
       {:error, error} = Directive.execute(state, directive)
 
       assert_error_match(error, %Error{

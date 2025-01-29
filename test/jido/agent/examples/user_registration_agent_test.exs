@@ -140,7 +140,7 @@ defmodule JidoTest.Examples.UserAgentTest do
       {:ok, planned_agent} =
         UserAgent.plan(initial_agent, {FormatUser, initial_agent.state})
 
-      {:ok, result_agent} = UserAgent.run(planned_agent, apply_state: true)
+      {:ok, result_agent, _directives} = UserAgent.run(planned_agent, apply_state: true)
 
       # Agent state is updated by the action
       assert result_agent.state.formatted_name == "John Doe"
@@ -160,7 +160,7 @@ defmodule JidoTest.Examples.UserAgentTest do
         ])
 
       # Set the chain runner to combine the results of each action
-      {:ok, result_agent} =
+      {:ok, result_agent, _directives} =
         UserAgent.run(planned_agent, apply_state: true, runner: Jido.Runner.Chain)
 
       # From FormatUser
@@ -178,7 +178,7 @@ defmodule JidoTest.Examples.UserAgentTest do
           EnrichUserData
         ])
 
-      {:ok, result_agent} =
+      {:ok, result_agent, _directives} =
         UserAgent.run(planned_agent, apply_state: false, runner: Jido.Runner.Chain)
 
       # State is not updated
@@ -193,7 +193,7 @@ defmodule JidoTest.Examples.UserAgentTest do
 
     test "requires prior planning", %{agent: agent} do
       # Run without planning
-      {:ok, agent} = UserAgent.run(agent)
+      {:ok, agent, _directives} = UserAgent.run(agent)
 
       # State unchanged - nothing to run
       assert agent.state.formatted_name == nil
@@ -202,7 +202,7 @@ defmodule JidoTest.Examples.UserAgentTest do
 
     test "clears instructions after run", %{agent: initial_agent} do
       {:ok, planned_agent} = UserAgent.plan(initial_agent, {FormatUser, initial_agent.state})
-      {:ok, agent} = UserAgent.run(planned_agent)
+      {:ok, agent, _directives} = UserAgent.run(planned_agent)
 
       assert :queue.is_empty(agent.pending_instructions)
     end
@@ -216,7 +216,7 @@ defmodule JidoTest.Examples.UserAgentTest do
     end
 
     test "can be used to set, plan and run instructions", %{agent: agent} do
-      {:ok, agent} =
+      {:ok, agent, _directives} =
         UserAgent.cmd(agent, [{FormatUser, agent.state}, EnrichUserData], %{age: 30},
           apply_state: true,
           runner: Jido.Runner.Chain

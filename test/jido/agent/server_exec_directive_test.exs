@@ -7,10 +7,12 @@ defmodule JidoTest.ServerExecDirectiveTest do
   alias Jido.Agent.Server.Signal, as: ServerSignal
   alias JidoTest.TestActions
   alias JidoTest.TestAgents.BasicAgent
+  alias Jido.Agent.Directive.Enqueue
+  alias Jido.Signal
 
   @moduletag :capture_log
 
-  describe "process_signal/2 with EnqueueDirective" do
+  describe "process_signal/2 with Enqueue" do
     setup do
       {:ok, supervisor} = start_supervised(DynamicSupervisor)
       agent = BasicAgent.new("test")
@@ -41,49 +43,51 @@ defmodule JidoTest.ServerExecDirectiveTest do
       assert final_state.agent.result == %{result: 6}
     end
 
-    # test "processes multiple enqueue directives", %{state: state} do
-    #   directives = [
-    #     %EnqueueDirective{
-    #       action: TestActions.Add,
-    #       params: %{value: 10, amount: 1}
-    #     },
-    #     %EnqueueDirective{
-    #       action: TestActions.Multiply,
-    #       params: %{amount: 2}
-    #     },
-    #     %EnqueueDirective{
-    #       action: TestActions.Add,
-    #       params: %{amount: 8}
-    #     }
-    #   ]
+    @tag :skip
+    test "processes multiple enqueue directives", %{state: state} do
+      directives = [
+        %Enqueue{
+          action: TestActions.Add,
+          params: %{value: 10, amount: 1}
+        },
+        %Enqueue{
+          action: TestActions.Multiply,
+          params: %{amount: 2}
+        },
+        %Enqueue{
+          action: TestActions.Add,
+          params: %{amount: 8}
+        }
+      ]
 
-    #   signals = Enum.map(directives, fn directive ->
-    #     %Signal{
-    #       type: :directive,
-    #       data: directive
-    #     }
-    #   end)
+      signals =
+        Enum.map(directives, fn directive ->
+          Signal.new(%{
+            type: :directive,
+            data: directive
+          })
+        end)
 
-    #   final_state =
-    #     Enum.reduce(signals, state, fn signal, acc_state ->
-    #       {:ok, new_state} = Execute.process_signal(acc_state, signal)
-    #       new_state
-    #     end)
+      final_state =
+        Enum.reduce(signals, state, fn signal, acc_state ->
+          {:ok, new_state} = Execute.process_signal(acc_state, signal)
+          new_state
+        end)
 
-    #   # Verify instructions were enqueued in order
-    #   {:value, first} = :queue.peek(final_state.agent.pending_instructions)
-    #   assert first.action == TestActions.Add
-    #   assert first.params == %{value: 10, amount: 1}
+      # Verify instructions were enqueued in order
+      {:value, first} = :queue.peek(final_state.agent.pending_instructions)
+      assert first.action == TestActions.Add
+      assert first.params == %{value: 10, amount: 1}
 
-    #   instructions = :queue.to_list(final_state.agent.pending_instructions)
-    #   assert length(instructions) == 3
+      instructions = :queue.to_list(final_state.agent.pending_instructions)
+      assert length(instructions) == 3
 
-    #   [first, second, third] = instructions
-    #   assert second.action == TestActions.Multiply
-    #   assert second.params == %{amount: 2}
-    #   assert third.action == TestActions.Add
-    #   assert third.params == %{amount: 8}
-    # end
+      [first, second, third] = instructions
+      assert second.action == TestActions.Multiply
+      assert second.params == %{amount: 2}
+      assert third.action == TestActions.Add
+      assert third.params == %{amount: 8}
+    end
   end
 
   describe "handle_pending_instructions" do

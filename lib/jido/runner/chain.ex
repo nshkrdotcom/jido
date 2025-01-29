@@ -28,7 +28,7 @@ defmodule Jido.Runner.Chain do
   alias Jido.Agent.Directive
   alias Jido.Error
 
-  @type chain_result :: {:ok, Jido.Agent.t()} | {:error, Error.t() | String.t()}
+  @type chain_result :: {:ok, Jido.Agent.t(), [Directive.t()]} | {:error, Error.t() | String.t()}
   @type chain_opts :: [continue_on_directive: boolean()]
 
   @doc """
@@ -37,8 +37,10 @@ defmodule Jido.Runner.Chain do
   ## Execution Flow
   1. Instructions are executed in sequence
   2. Results from each instruction feed into the next
-  3. Directives are accumulated in the final queue
-  4. State changes are accumulated through the chain
+  3. Directives are accumulated throughout the chain
+  4. At the end of the chain:
+     - Agent directives are applied to the agent
+     - Server directives are returned with the result
 
   ## Parameters
     - agent: The agent struct containing pending instructions
@@ -46,17 +48,17 @@ defmodule Jido.Runner.Chain do
       - :merge_results - boolean, merges map results into subsequent instruction params (default: true)
 
   ## Returns
-    - `{:ok, updated_agent}` - Chain completed successfully
+    - `{:ok, updated_agent, server_directives}` - Chain completed successfully
       - Updated state map
       - Queue containing any directives from execution
-      - List of encountered directives
+      - List of server directives
     - `{:error, error}` - Chain execution failed
       - Contains error details
 
   ## Examples
 
       # Basic chain execution
-      {:ok, updated_agent} = Chain.run(agent)
+      {:ok, updated_agent, server_directives} = Chain.run(agent)
 
       # Handle execution error
       {:error, error} = Chain.run(agent_with_failing_instruction)
@@ -73,7 +75,7 @@ defmodule Jido.Runner.Chain do
       [] ->
         dbug("No instructions found")
         # Return success result even when no instructions
-        {:ok, %{agent | pending_instructions: :queue.new(), result: :ok}}
+        {:ok, %{agent | pending_instructions: :queue.new(), result: :ok}, []}
 
       instructions_list ->
         dbug("Found #{length(instructions_list)} instructions to execute")
@@ -88,21 +90,33 @@ defmodule Jido.Runner.Chain do
 
     # Clear pending instructions since we're executing them all
     agent = %{agent | pending_instructions: :queue.new()}
-    execute_chain_step(instructions_list, agent, chain_opts)
+    execute_chain_step(instructions_list, agent, [], chain_opts)
   end
 
-  @spec execute_chain_step([Instruction.t()], Jido.Agent.t(), keyword()) :: chain_result()
-  defp execute_chain_step([], agent, _opts) do
-    dbug("Chain execution completed successfully")
-    {:ok, agent}
+  @spec execute_chain_step([Instruction.t()], Jido.Agent.t(), [Directive.t()], keyword()) ::
+          chain_result()
+  defp execute_chain_step([], agent, accumulated_directives, _opts) do
+    dbug("Chain execution completed, applying accumulated directives",
+      directive_count: length(accumulated_directives)
+    )
+
+    case Directive.apply_agent_directive(agent, accumulated_directives) do
+      {:ok, updated_agent, server_directives} ->
+        {:ok, updated_agent, server_directives}
+
+      {:error, reason} ->
+        {:error,
+         %Error{type: :validation_error, message: "Invalid directive", details: %{reason: reason}}}
+    end
   end
 
-  defp execute_chain_step([instruction | remaining], agent, opts) do
+  defp execute_chain_step([instruction | remaining], agent, accumulated_directives, opts) do
     dbug("Executing chain step",
       instruction: instruction,
       current_state: agent.state,
       instruction_params: instruction.params,
-      remaining_count: length(remaining)
+      remaining_count: length(remaining),
+      accumulated_directives: length(accumulated_directives)
     )
 
     case execute_instruction(instruction, agent.state, opts) do
@@ -112,7 +126,9 @@ defmodule Jido.Runner.Chain do
           directive: directive
         )
 
-        handle_directive_result(directive, remaining, %{agent | state: state_map}, opts)
+        # Add directive to accumulated list
+        updated_directives = accumulated_directives ++ List.wrap(directive)
+        handle_state_result(state_map, remaining, agent, updated_directives, opts)
 
       {:ok, state_map} ->
         dbug("Instruction executed successfully with state",
@@ -120,7 +136,7 @@ defmodule Jido.Runner.Chain do
           state: state_map
         )
 
-        handle_state_result(state_map, remaining, agent, opts)
+        handle_state_result(state_map, remaining, agent, accumulated_directives, opts)
 
       {:error, error} ->
         dbug("Chain step failed",
@@ -176,34 +192,24 @@ defmodule Jido.Runner.Chain do
     end
   end
 
-  @spec handle_directive_result(Directive.t(), [Instruction.t()], Jido.Agent.t(), keyword()) ::
-          chain_result()
-  defp handle_directive_result(directive, remaining, agent, opts) do
-    dbug("Handling directive in chain",
-      directive: directive,
-      remaining_instructions: length(remaining),
-      directive_type: directive.__struct__
-    )
-
-    # Get new instructions from directive
-    case Directive.apply_directives(agent, directive) do
-      {:ok, updated_agent} ->
-        # Continue chain execution with remaining instructions
-        # and keep any new instructions from directive in the queue
-        execute_chain_step(remaining, updated_agent, opts)
-
-      {:error, error} ->
-        {:error, error}
-    end
+  @doc false
+  @spec apply_state(Jido.Agent.t(), map(), boolean()) :: Jido.Agent.t()
+  defp apply_state(agent, state_map, true) do
+    %{agent | state: Map.merge(agent.state, state_map), result: state_map}
   end
 
-  @spec handle_state_result(map(), [Instruction.t()], Jido.Agent.t(), keyword()) ::
+  defp apply_state(agent, state_map, false) do
+    %{agent | result: state_map}
+  end
+
+  @spec handle_state_result(map(), [Instruction.t()], Jido.Agent.t(), [Directive.t()], keyword()) ::
           chain_result()
-  defp handle_state_result(new_state, remaining, agent, opts) do
+  defp handle_state_result(new_state, remaining, agent, accumulated_directives, opts) do
     dbug("Handling state transition in chain",
       previous_state: agent.state,
       new_state: new_state,
-      remaining_count: length(remaining)
+      remaining_count: length(remaining),
+      accumulated_directives: length(accumulated_directives)
     )
 
     apply_state = Keyword.get(opts, :apply_state, true)
@@ -221,6 +227,6 @@ defmodule Jido.Runner.Chain do
       remaining_instructions: length(remaining)
     )
 
-    execute_chain_step(remaining, updated_agent, opts)
+    execute_chain_step(remaining, updated_agent, accumulated_directives, opts)
   end
 end

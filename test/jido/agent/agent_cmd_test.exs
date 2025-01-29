@@ -18,7 +18,7 @@ defmodule JidoTest.AgentCmdTest do
     end
 
     test "executes single action with params", %{agent: agent} do
-      {:ok, final} =
+      {:ok, final, []} =
         FullFeaturedAgent.cmd(
           agent,
           {TestActions.Add, %{value: 10, amount: 5}},
@@ -36,7 +36,8 @@ defmodule JidoTest.AgentCmdTest do
         {TestActions.Add, %{amount: 8}}
       ]
 
-      {:ok, final} = FullFeaturedAgent.cmd(agent, instructions, %{}, runner: Jido.Runner.Chain)
+      {:ok, final, []} =
+        FullFeaturedAgent.cmd(agent, instructions, %{}, runner: Jido.Runner.Chain)
 
       assert final.state.value == 30
     end
@@ -46,7 +47,7 @@ defmodule JidoTest.AgentCmdTest do
       assert agent.state.location == :home
       assert agent.state.value == 0
 
-      {:ok, final} =
+      {:ok, final, []} =
         FullFeaturedAgent.cmd(
           agent,
           {TestActions.Add, %{value: 42}},
@@ -78,7 +79,7 @@ defmodule JidoTest.AgentCmdTest do
       assert error.message =~ "unknown_field"
 
       # Verify same command works without strict validation
-      {:ok, final} =
+      {:ok, final, []} =
         FullFeaturedAgent.cmd(
           agent,
           {TestActions.Add, %{value: 10}},
@@ -102,7 +103,7 @@ defmodule JidoTest.AgentCmdTest do
     test "tracks callbacks in correct order" do
       agent = CallbackTrackingAgent.new()
 
-      {:ok, final} =
+      {:ok, final, []} =
         CallbackTrackingAgent.cmd(
           agent,
           {TestActions.Add, %{value: 10, amount: 5}},
@@ -156,7 +157,7 @@ defmodule JidoTest.AgentCmdTest do
       agent = ErrorHandlingAgent.new()
       {:ok, agent} = ErrorHandlingAgent.set(agent, %{battery_level: 100, should_recover?: true})
 
-      {:ok, recovered} =
+      {:ok, recovered, []} =
         ErrorHandlingAgent.cmd(
           agent,
           {TestActions.ErrorAction, %{}},
@@ -179,7 +180,7 @@ defmodule JidoTest.AgentCmdTest do
     end
 
     test "handles empty instruction list", %{agent: agent} do
-      {:ok, final} = FullFeaturedAgent.cmd(agent, [], %{}, runner: Jido.Runner.Chain)
+      {:ok, final, []} = FullFeaturedAgent.cmd(agent, [], %{}, runner: Jido.Runner.Chain)
 
       # State should remain unchanged
       assert final.state.location == :home
@@ -201,7 +202,7 @@ defmodule JidoTest.AgentCmdTest do
     end
 
     test "handles empty attributes", %{agent: agent} do
-      {:ok, final} =
+      {:ok, final, []} =
         FullFeaturedAgent.cmd(
           agent,
           {TestActions.Add, %{value: 1}},
@@ -213,7 +214,7 @@ defmodule JidoTest.AgentCmdTest do
     end
 
     test "handles nil context in opts", %{agent: agent} do
-      {:ok, final} =
+      {:ok, final, []} =
         FullFeaturedAgent.cmd(
           agent,
           {TestActions.Add, %{value: 1}},
@@ -267,7 +268,7 @@ defmodule JidoTest.AgentCmdTest do
           {TestActions.Add, %{amount: i}}
         end)
 
-      {:ok, final} =
+      {:ok, final, []} =
         FullFeaturedAgent.cmd(
           agent,
           large_instruction_list,
@@ -310,7 +311,7 @@ defmodule JidoTest.AgentCmdTest do
          }}
       ]
 
-      {:ok, final} =
+      {:ok, final, []} =
         FullFeaturedAgent.cmd(
           agent,
           recursive_instructions,
@@ -333,7 +334,7 @@ defmodule JidoTest.AgentCmdTest do
         {TestActions.Add, nil}
       ]
 
-      {:ok, final} =
+      {:ok, final, []} =
         FullFeaturedAgent.cmd(
           agent,
           mixed_instructions,

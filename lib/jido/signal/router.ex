@@ -20,6 +20,7 @@ defmodule Jido.Signal.Router do
           | {String.t(), Instruction.t(), priority()}
           | {String.t(), match(), Instruction.t()}
           | {String.t(), match(), Instruction.t(), priority()}
+          | {String.t(), pid()}
 
   typedstruct module: HandlerInfo do
     @default_priority 0
@@ -112,6 +113,14 @@ defmodule Jido.Signal.Router do
         route = %Route{path: path, instruction: instruction}
         {:cont, {:ok, [route | acc]}}
 
+      {path, pid}, {:ok, acc} when is_pid(pid) ->
+        route = %Route{
+          path: path,
+          instruction: %Instruction{action: Jido.Signal.Dispatch.Pid, params: %{pid: pid}}
+        }
+
+        {:cont, {:ok, [route | acc]}}
+
       {path, %Instruction{} = instruction, priority}, {:ok, acc}
       when is_integer(priority) ->
         route = %Route{path: path, instruction: instruction, priority: priority}
@@ -148,6 +157,7 @@ defmodule Jido.Signal.Router do
   end
 
   def normalize({_path, %Instruction{}} = route), do: normalize([route])
+  def normalize({_path, pid} = route) when is_pid(pid), do: normalize([route])
   def normalize({_path, %Instruction{}, _priority} = route), do: normalize([route])
 
   def normalize({_path, match_fn, %Instruction{}} = route) when is_function(match_fn, 1),

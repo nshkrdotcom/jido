@@ -95,7 +95,7 @@ defmodule JidoTest.TestAgents do
     end
 
     @impl true
-    def on_after_run(agent, result) do
+    def on_after_run(agent, result, _directives) do
       # Update status and store result summary
       new_state =
         agent.state
@@ -148,7 +148,7 @@ defmodule JidoTest.TestAgents do
         |> Map.update!(:error_count, &(&1 + 1))
         |> Map.put(:last_error, result)
 
-      {:ok, %{agent | state: new_state}}
+      {:ok, %{agent | state: new_state}, []}
     end
 
     @impl true
@@ -225,7 +225,7 @@ defmodule JidoTest.TestAgents do
     end
 
     @impl true
-    def on_after_run(agent, _result) do
+    def on_after_run(agent, _result, _directives) do
       {:ok, track_callback(agent, :on_after_run)}
     end
 
@@ -301,7 +301,7 @@ defmodule JidoTest.TestAgents do
           JidoTest.TestSkills.WeatherMonitorSkill
         ],
         schedule: [
-          {"*/15 * * * *", fn -> System.cmd("rm", ["/tmp/tmp_"]) end}
+          {"*/15 * * * *", Signal.new(%{type: "example.event", data: %{}})}
         ]
       )
     end

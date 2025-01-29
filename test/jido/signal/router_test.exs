@@ -8,6 +8,13 @@ defmodule Jido.Signal.RouterTest do
   @moduletag :capture_log
 
   setup do
+    test_pid =
+      spawn(fn ->
+        receive do
+          _ -> :ok
+        end
+      end)
+
     routes = [
       # Static route - adds 1 to value
       {"user.created", %Instruction{action: Add}},
@@ -27,11 +34,14 @@ defmodule Jido.Signal.RouterTest do
         fn signal -> Map.has_key?(signal.data, :email) end,
         %Instruction{action: EnrichUserData},
         90
-      }
+      },
+
+      # PID route - forwards signal to pid
+      {"user.forward", test_pid}
     ]
 
     {:ok, router} = Router.new(routes)
-    {:ok, %{router: router}}
+    {:ok, %{router: router, test_pid: test_pid}}
   end
 
   describe "route/2" do
@@ -124,6 +134,20 @@ defmodule Jido.Signal.RouterTest do
       assert {:error, error} = Router.route(router, signal)
       assert error.type == :routing_error
       assert error.message == :no_handler
+    end
+
+    test "routes pid signal", %{router: router} do
+      signal = %Signal{
+        id: UUID.uuid4(),
+        source: "/test",
+        type: "user.forward",
+        data: %{value: 5}
+      }
+
+      assert {:ok, [%Instruction{action: Jido.Signal.Dispatch.Pid, params: %{pid: pid}}]} =
+               Router.route(router, signal)
+
+      assert is_pid(pid)
     end
   end
 

@@ -23,7 +23,7 @@ defmodule JidoTest.AgentDirectiveTest do
     end
 
     test "successfully enqueues valid action via cmd", %{agent: agent} do
-      {:ok, final} =
+      {:ok, final, []} =
         BasicAgent.cmd(
           agent,
           {EnqueueAction,
@@ -47,7 +47,7 @@ defmodule JidoTest.AgentDirectiveTest do
         {EnqueueAction, %{action: BasicAction, params: %{id: 2}}}
       ]
 
-      {:ok, final} = BasicAgent.cmd(agent, instructions, %{}, runner: Chain)
+      {:ok, final, []} = BasicAgent.cmd(agent, instructions, %{}, runner: Chain)
 
       # Verify queue order
       {{:value, first}, queue} = :queue.out(final.pending_instructions)
@@ -74,7 +74,7 @@ defmodule JidoTest.AgentDirectiveTest do
       {:ok, planned} =
         BasicAgent.plan(agent, {RegisterAction, %{action_module: BasicAction}})
 
-      {:ok, final} = BasicAgent.run(planned)
+      {:ok, final, []} = BasicAgent.run(planned)
 
       # Verify action was registered
       assert BasicAction in final.actions
@@ -88,7 +88,7 @@ defmodule JidoTest.AgentDirectiveTest do
         {RegisterAction, %{action_module: NoSchema}}
       ]
 
-      {:ok, final} = BasicAgent.cmd(agent, instructions, %{}, runner: Chain)
+      {:ok, final, []} = BasicAgent.cmd(agent, instructions, %{}, runner: Chain)
 
       # Verify actions were registered
       assert BasicAction in final.actions
@@ -103,7 +103,7 @@ defmodule JidoTest.AgentDirectiveTest do
         {RegisterAction, %{action_module: BasicAction}}
       ]
 
-      {:ok, final} = BasicAgent.cmd(agent, instructions, %{}, runner: Chain)
+      {:ok, final, []} = BasicAgent.cmd(agent, instructions, %{}, runner: Chain)
 
       # Verify action was registered only once
       assert length(final.actions) == 2
@@ -120,7 +120,7 @@ defmodule JidoTest.AgentDirectiveTest do
     end
 
     test "successfully deregisters existing action module", %{agent: agent} do
-      {:ok, final} =
+      {:ok, final, []} =
         BasicAgent.cmd(
           agent,
           {DeregisterAction, %{action_module: BasicAction}},
@@ -133,7 +133,7 @@ defmodule JidoTest.AgentDirectiveTest do
     end
 
     test "safely handles deregistering non-existent module", %{agent: agent} do
-      {:ok, final} =
+      {:ok, final, []} =
         BasicAgent.cmd(
           agent,
           {DeregisterAction, %{action_module: UnknownModule}},

@@ -10,11 +10,11 @@ defmodule Jido.Agent.Server.Directive do
   alias Jido.Instruction
 
   alias Jido.Agent.Directive.{
-    SpawnDirective,
-    KillDirective,
-    EnqueueDirective,
-    RegisterActionDirective,
-    DeregisterActionDirective
+    Spawn,
+    Kill,
+    Enqueue,
+    RegisterAction,
+    DeregisterAction
   }
 
   alias Jido.{Agent.Directive, Error}
@@ -27,11 +27,11 @@ defmodule Jido.Agent.Server.Directive do
   """
   @spec execute(ServerState.t(), Directive.t()) :: {:ok, ServerState.t()} | {:error, Error.t()}
 
-  def execute(%ServerState{} = _state, %EnqueueDirective{action: nil}) do
+  def execute(%ServerState{} = _state, %Enqueue{action: nil}) do
     {:error, Error.validation_error("Invalid action", %{action: nil})}
   end
 
-  def execute(%ServerState{} = state, %EnqueueDirective{} = directive) do
+  def execute(%ServerState{} = state, %Enqueue{} = directive) do
     instruction = %Instruction{
       action: directive.action,
       params: directive.params,
@@ -43,7 +43,7 @@ defmodule Jido.Agent.Server.Directive do
     {:ok, %{state | pending_signals: new_queue}}
   end
 
-  def execute(%ServerState{} = state, %RegisterActionDirective{action_module: module})
+  def execute(%ServerState{} = state, %RegisterAction{action_module: module})
       when is_atom(module) do
     case Code.ensure_loaded(module) do
       {:module, _} ->
@@ -55,11 +55,11 @@ defmodule Jido.Agent.Server.Directive do
     end
   end
 
-  def execute(%ServerState{} = _state, %RegisterActionDirective{action_module: module}) do
+  def execute(%ServerState{} = _state, %RegisterAction{action_module: module}) do
     {:error, Error.validation_error("Invalid action module", %{module: module})}
   end
 
-  def execute(%ServerState{} = state, %DeregisterActionDirective{action_module: module})
+  def execute(%ServerState{} = state, %DeregisterAction{action_module: module})
       when is_atom(module) do
     case Code.ensure_loaded(module) do
       {:module, _} ->
@@ -71,11 +71,11 @@ defmodule Jido.Agent.Server.Directive do
     end
   end
 
-  def execute(%ServerState{} = _state, %DeregisterActionDirective{action_module: module}) do
+  def execute(%ServerState{} = _state, %DeregisterAction{action_module: module}) do
     {:error, Error.validation_error("Invalid action module", %{module: module})}
   end
 
-  def execute(%ServerState{} = state, %SpawnDirective{module: module, args: args}) do
+  def execute(%ServerState{} = state, %Spawn{module: module, args: args}) do
     child_spec = build_child_spec({module, args})
 
     case ServerProcess.start(state, child_spec) do
@@ -87,7 +87,7 @@ defmodule Jido.Agent.Server.Directive do
     end
   end
 
-  def execute(%ServerState{} = state, %KillDirective{pid: pid}) do
+  def execute(%ServerState{} = state, %Kill{pid: pid}) do
     case ServerProcess.terminate(state, pid) do
       :ok ->
         {:ok, state}

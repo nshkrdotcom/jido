@@ -6,5 +6,5 @@ defmodule Jido.Runner do
   @type action :: module() | {module(), map()}
 
   @callback run(agent :: struct(), opts :: keyword()) ::
-              {:ok, struct()} | {:error, Jido.Error.t()}
+              {:ok, struct(), list()} | {:error, Jido.Error.t()}
 end

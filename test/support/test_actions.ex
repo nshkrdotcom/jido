@@ -619,7 +619,7 @@ defmodule JidoTest.TestActions do
       ]
 
     def run(%{action: action, params: params}, _context) do
-      directive = %Jido.Agent.Directive.EnqueueDirective{
+      directive = %Jido.Agent.Directive.Enqueue{
         action: action,
         params: params,
         context: %{}
@@ -639,7 +639,7 @@ defmodule JidoTest.TestActions do
       ]
 
     def run(%{action_module: action_module}, _context) do
-      directive = %Jido.Agent.Directive.RegisterActionDirective{
+      directive = %Jido.Agent.Directive.RegisterAction{
         action_module: action_module
       }
 
@@ -661,12 +661,50 @@ defmodule JidoTest.TestActions do
       if action_module == __MODULE__ do
         {:error, :cannot_deregister_self}
       else
-        directive = %Jido.Agent.Directive.DeregisterActionDirective{
+        directive = %Jido.Agent.Directive.DeregisterAction{
           action_module: action_module
         }
 
         {:ok, %{}, directive}
       end
+    end
+  end
+
+  defmodule SpawnChild do
+    @moduledoc false
+    use Action,
+      name: "spawn_child",
+      description: "Spawns a child process under the agent's supervisor",
+      schema: [
+        module: [type: :atom, required: true],
+        args: [type: :any, required: true]
+      ]
+
+    def run(%{module: module, args: args}, _context) do
+      directive = %Jido.Agent.Directive.Spawn{
+        module: module,
+        args: args
+      }
+
+      {:ok, %{}, directive}
+    end
+  end
+
+  defmodule KillChild do
+    @moduledoc false
+    use Action,
+      name: "kill_child",
+      description: "Terminates a child process",
+      schema: [
+        pid: [type: :pid, required: true]
+      ]
+
+    def run(%{pid: pid}, _context) do
+      directive = %Jido.Agent.Directive.Kill{
+        pid: pid
+      }
+
+      {:ok, %{}, directive}
     end
   end
 
@@ -678,7 +716,7 @@ defmodule JidoTest.TestActions do
       schema: []
 
     def run(%{action: action, params: params}, _context) do
-      directive = %Jido.Agent.Directive.EnqueueDirective{
+      directive = %Jido.Agent.Directive.Enqueue{
         action: action,
         params: params,
         context: %{}
@@ -793,15 +831,17 @@ defmodule JidoTest.TestActions do
     use Jido.Action,
       name: "multi_directive_action"
 
+    alias Jido.Agent.Directive.{Enqueue, Spawn, Kill}
+
     @impl true
-    def run(_params, _context) do
+    def run(%{type: :agent}, _context) do
       directives = [
-        %Jido.Agent.Directive.EnqueueDirective{
+        %Enqueue{
           action: :action1,
           params: %{},
           context: %{}
         },
-        %Jido.Agent.Directive.EnqueueDirective{
+        %Enqueue{
           action: :action2,
           params: %{},
           context: %{}
@@ -809,6 +849,41 @@ defmodule JidoTest.TestActions do
       ]
 
       {:ok, %{}, directives}
+    end
+
+    def run(%{type: :server}, _context) do
+      directives = [
+        %Spawn{
+          module: __MODULE__,
+          args: []
+        },
+        %Kill{
+          pid: self()
+        }
+      ]
+
+      {:ok, %{}, directives}
+    end
+
+    def run(%{type: :mixed}, _context) do
+      directives = [
+        %Enqueue{
+          action: :action1,
+          params: %{},
+          context: %{}
+        },
+        %Spawn{
+          module: __MODULE__,
+          args: []
+        }
+      ]
+
+      {:ok, %{}, directives}
+    end
+
+    def run(_params, _context) do
+      # Default to agent directives for backwards compatibility
+      run(%{type: :agent}, %{})
     end
   end
 end

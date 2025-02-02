@@ -190,7 +190,7 @@ defmodule Jido.MixProject do
       {:typed_struct_nimble_options, "~> 0.1.1"},
       {:quantum, "~> 3.5"},
       # {:ex_dbug, "~> 2.0"},
-      {:ex_dbug, path: "../../../OSS/ex_dbug"},
+      {:ex_dbug, "~> 2.0"},
       # Skill & Action Dependencies for examples
       {:abacus, "~> 2.1"},
 

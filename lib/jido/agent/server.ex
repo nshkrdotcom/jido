@@ -1,288 +1,299 @@
 defmodule Jido.Agent.Server do
+  @moduledoc """
+  GenServer implementation for managing agent processes.
+
+  This server handles the lifecycle and runtime execution of agents, including:
+  - Agent initialization and startup
+  - Signal processing and routing
+  - State management and transitions
+  - Child process supervision
+  - Graceful shutdown
+
+  The server can be started in different modes (`:auto` or `:manual`) and supports
+  both synchronous (call) and asynchronous (cast) signal handling.
+  """
+
   use GenServer
   use ExDbug, enabled: true
+  @decorate_all dbug()
 
-  alias Jido.Agent.Server.Execute
+  alias Jido.Agent.Server.Callback, as: ServerCallback
+  alias Jido.Agent.Server.Options, as: ServerOptions
   alias Jido.Agent.Server.Output, as: ServerOutput
+  alias Jido.Agent.Server.Process, as: ServerProcess
+  alias Jido.Agent.Server.Router, as: ServerRouter
+  alias Jido.Agent.Server.Runtime, as: ServerRuntime
   alias Jido.Agent.Server.Signal, as: ServerSignal
+  alias Jido.Agent.Server.Skills, as: ServerSkills
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Signal
 
-  require Logger
+  @cmd_state ServerSignal.cmd_state()
+  @cmd_queue_size ServerSignal.cmd_queue_size()
 
-  @default_max_queue_size 10_000
-  @queue_check_interval 10_000
+  @type start_option ::
+          {:id, String.t()}
+          | {:agent, module() | struct()}
+          | {:initial_state, map()}
+          | {:registry, module()}
+          | {:mode, :auto | :manual}
+          | {:output, pid() | {module(), term()}}
+          | {:log_level, Logger.level()}
+          | {:max_queue_size, non_neg_integer()}
 
+  @doc """
+  Starts a new agent server process.
+
+  ## Options
+    * `:id` - Unique identifier for the agent (auto-generated if not provided)
+    * `:agent` - Agent module or struct to be managed
+    * `:initial_state` - Initial state map for the agent
+    * `:registry` - Registry for process registration
+    * `:mode` - Operation mode (`:auto` or `:manual`)
+    * `:output` - Output destination for agent signals
+    * `:log_level` - Logging level
+    * `:max_queue_size` - Maximum size of pending signals queue
+
+  ## Returns
+    * `{:ok, pid}` - Successfully started server process
+    * `{:error, reason}` - Failed to start server
+  """
+  @spec start_link([start_option()]) :: GenServer.on_start()
   def start_link(opts) do
-    dbug("Starting Agent Server", opts: opts)
+    opts = Keyword.put_new(opts, :id, UUID.uuid4())
 
     with {:ok, agent} <- build_agent(opts),
-         {:ok, config} <- build_config(opts, agent) do
-      dbug("Agent and config built successfully", agent: agent, config: config)
+         opts = Keyword.put(opts, :agent, agent),
+         {:ok, opts} <- ServerOptions.validate_server_opts(opts) do
+      agent_id = Keyword.get(opts, :agent).id
+      registry = Keyword.get(opts, :registry)
 
       GenServer.start_link(
         __MODULE__,
-        %ServerState{
-          agent: agent,
-          dispatch: config.dispatch,
-          max_queue_size: config.max_queue_size,
-          status: :initializing,
-          verbose: config.verbose,
-          mode: config.mode
-        },
-        name: via_tuple(config.name, config.registry)
+        opts,
+        name: via_tuple(agent_id, registry)
       )
     end
   end
 
+  @doc """
+  Returns a child specification for starting the server under a supervisor.
+  """
+  @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts) do
-    dbug("Building child spec", opts: opts)
     id = Keyword.get(opts, :id, __MODULE__)
 
     %{
       id: id,
       start: {__MODULE__, :start_link, [opts]},
-      shutdown: 5000,
+      shutdown: :infinity,
       restart: :permanent,
-      type: :worker
+      type: :supervisor
     }
   end
 
-  def state(pid) when is_pid(pid) do
-    dbug("Getting server state", pid: pid)
-    GenServer.call(pid, :state)
+  @doc """
+  Gets the current state of an agent.
+  """
+  @spec state(pid() | atom() | {atom(), node()}) :: {:ok, ServerState.t()} | {:error, term()}
+  def state(agent) do
+    with {:ok, pid} <- Jido.resolve_pid(agent),
+         {:ok, signal} <- Signal.new(%{type: ServerSignal.cmd_state()}) do
+      GenServer.call(pid, {:signal, signal})
+    end
+  end
+
+  @doc """
+  Sends a synchronous signal to an agent and waits for the response.
+  """
+  @spec call(pid() | atom() | {atom(), node()}, Signal.t()) ::
+          {:ok, Signal.t()} | {:error, term()}
+  def call(agent, signal, timeout \\ 5000) do
+    correlation_id = signal.jido_correlation_id || UUID.uuid4()
+    signal = %{signal | jido_correlation_id: correlation_id}
+
+    with {:ok, pid} <- Jido.resolve_pid(agent) do
+      case GenServer.call(pid, {:signal, signal}, timeout) do
+        {:ok, response} ->
+          {:ok, response}
+
+        other ->
+          other
+      end
+    end
+  end
+
+  @doc """
+  Sends an asynchronous signal to an agent.
+  """
+  @spec cast(pid() | atom() | {atom(), node()}, Signal.t()) ::
+          {:ok, String.t()} | {:error, term()}
+  def cast(agent, signal) do
+    correlation_id = signal.jido_correlation_id || UUID.uuid4()
+    signal = %{signal | jido_correlation_id: correlation_id}
+
+    with {:ok, pid} <- Jido.resolve_pid(agent) do
+      GenServer.cast(pid, {:signal, signal})
+      {:ok, correlation_id}
+    end
   end
 
   @impl true
-  def init(
-        %ServerState{
-          agent: agent,
-          dispatch: dispatch
-        } = state
-      ) do
-    dbug("Initializing state", agent: agent, dispatch: dispatch)
+  def init(opts) do
+    opts = Keyword.put_new(opts, :id, UUID.uuid4())
 
-    with :ok <- ServerState.validate_state(state),
-         {:ok, supervisor} <- DynamicSupervisor.start_link(strategy: :one_for_one),
-         {:ok, state} <- ServerState.transition(%{state | child_supervisor: supervisor}, :idle),
-         # Call mount callback if defined
-         {:ok, mounted_agent} <- call_mount_callback(agent, state),
-         {:ok, mounted_state} <- {:ok, %{state | agent: mounted_agent}} do
-      dbug("State validation successful", state: state)
-      dbug("Supervisor started", supervisor: supervisor)
-      dbug("State transitioned to idle")
-      dbug("Agent mounted successfully", mounted_agent: mounted_agent)
-
-      ServerOutput.emit_event(mounted_state, ServerSignal.started(), %{agent_id: mounted_agent.id})
-
-      dbug("Server initialized successfully", state: mounted_state)
-      {:ok, mounted_state}
+    with {:ok, agent} <- build_agent(opts),
+         opts = Keyword.put(opts, :agent, agent),
+         {:ok, opts} <- ServerOptions.validate_server_opts(opts),
+         {:ok, state} <- build_initial_state_from_opts(opts),
+         {:ok, state} <- ServerProcess.start_supervisor(state),
+         {:ok, state, opts} <- ServerSkills.build(state, opts),
+         {:ok, state} <- ServerRouter.build(state, opts),
+         {:ok, state, _pids} <- ServerProcess.start(state, opts[:child_specs]),
+         {:ok, state} <- ServerCallback.mount(state),
+         {:ok, state} <- ServerState.transition(state, :idle),
+         :ok <- ServerOutput.emit_log(state, ServerSignal.started(), %{agent_id: state.agent.id}) do
+      {:ok, state}
     else
       {:error, reason} ->
-        error("Failed to initialize worker", reason: reason)
         {:stop, reason}
     end
   end
 
   @impl true
-  def handle_call(:state, _from, state) do
-    dbug("Handling state request", current_state: state)
+  def handle_call({:signal, %Signal{type: @cmd_state}}, _from, %ServerState{} = state) do
     {:reply, {:ok, state}, state}
   end
 
-  def handle_call(:check_queue_size, _from, %ServerState{} = state) do
-    queue_size = :queue.len(state.pending_signals)
-    dbug("Checking queue size", current_size: queue_size, max_size: state.max_queue_size)
+  def handle_call(
+        {:signal, %Signal{type: @cmd_queue_size} = _signal},
+        _from,
+        %ServerState{} = state
+      ) do
+    case ServerState.check_queue_size(state) do
+      {:ok, _queue_size} ->
+        {:reply, {:ok, state}, state}
 
-    if queue_size > state.max_queue_size do
-      dbug("Queue overflow detected", queue_size: queue_size)
-
-      ServerOutput.emit_event(state, ServerSignal.queue_overflow(), %{
-        queue_size: queue_size,
-        max_size: state.max_queue_size
-      })
-
-      {:reply, {:error, :queue_overflow}, state}
-    else
-      {:reply, {:ok, queue_size}, state}
+      {:error, :queue_overflow} ->
+        {:reply, {:error, :queue_overflow}, state}
     end
   end
 
-  def handle_call(%Signal{} = signal, _from, %ServerState{} = state) do
-    dbug("Handling signal call", signal: signal, state: state)
+  def handle_call({:signal, %Signal{} = signal}, _from, %ServerState{} = state) do
+    case ServerRuntime.execute(state, signal) do
+      {:ok, new_state, result} ->
+        {:reply, {:ok, result}, new_state}
 
-    if :queue.len(state.pending_signals) >= state.max_queue_size do
-      dbug("Queue size exceeded, stopping server", queue_size: :queue.len(state.pending_signals))
-      ServerOutput.emit_event(state, ServerSignal.stopped(), %{reason: :queue_size_exceeded})
-      {:stop, :queue_size_exceeded, {:error, :queue_full}, state}
-    else
-      dbug("Processing signal", signal: signal)
-
-      case Execute.process_signal(state, signal) do
-        {:ok, new_state} ->
-          dbug("Signal processed successfully", new_state: new_state)
-          {:reply, {:ok, new_state}, new_state}
-
-        {:error, reason} ->
-          dbug("Signal processing failed", error: reason)
-          {:reply, {:error, reason}, state}
-      end
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
   def handle_call(_unhandled, _from, state) do
-    dbug("Received unhandled call", unhandled: _unhandled, state: state)
     {:reply, {:error, :unhandled_call}, state}
   end
 
   @impl true
-  def handle_cast(%Signal{} = signal, %ServerState{} = state) do
-    dbug("Handling signal cast", signal: signal, state: state)
+  def handle_cast({:signal, %Signal{} = signal}, %ServerState{} = state) do
+    case ServerRuntime.enqueue_and_execute(state, signal) do
+      {:ok, state} ->
+        {:noreply, state}
 
-    case Execute.process_signal(state, signal) do
-      {:ok, new_state} ->
-        dbug("Cast signal processed successfully", new_state: new_state)
-        {:noreply, new_state}
-
-      {:error, reason} ->
-        dbug("Cast signal processing failed", error: reason)
-        {:stop, reason, state}
+      {:error, _reason} ->
+        {:noreply, state}
     end
   end
 
   def handle_cast(_unhandled, state) do
-    dbug("Received unhandled cast", state: state)
-    {:reply, {:error, :unhandled_cast}, state}
+    {:noreply, state}
   end
 
   @impl true
-  def handle_info(%Signal{} = signal, %ServerState{} = state) do
-    dbug("Handling info signal", signal: signal, state: state)
-    do_handle_info(signal, state)
+  def handle_info(
+        {:signal, %Signal{type: @cmd_queue_size} = _signal},
+        %ServerState{} = state
+      ) do
+    case ServerState.check_queue_size(state) do
+      {:ok, _queue_size} ->
+        {:noreply, state}
+
+      {:error, :queue_overflow} ->
+        {:noreply, state}
+    end
   end
 
-  def handle_info(:check_queue_size, %ServerState{} = state) do
-    dbug("Handling queue size check", state: state)
-    do_handle_info(:check_queue_size, state)
+  def handle_info({:signal, %Signal{} = signal}, %ServerState{} = state) do
+    case ServerRuntime.enqueue_and_execute(state, signal) do
+      {:ok, state} ->
+        {:noreply, state}
+
+      {:error, _reason} ->
+        {:noreply, state}
+    end
   end
 
   def handle_info({:EXIT, _pid, reason}, %ServerState{} = state) do
-    dbug("Handling EXIT message", reason: reason, state: state)
     {:stop, reason, state}
   end
 
   def handle_info({:DOWN, _ref, :process, pid, reason}, %ServerState{} = state) do
-    dbug("Handling DOWN message", pid: pid, reason: reason, state: state)
-    ServerOutput.emit_event(state, ServerSignal.process_terminated(), %{pid: pid, reason: reason})
+    ServerOutput.emit_log(state, ServerSignal.process_terminated(), %{pid: pid, reason: reason})
     {:noreply, state}
   end
 
   def handle_info(:timeout, state) do
-    dbug("Handling timeout", state: state)
-    {:reply, {:error, :unhandled_info}, state}
+    {:noreply, state}
   end
 
   def handle_info(_unhandled, state) do
-    dbug("Received unhandled info", state: state)
-    {:reply, {:error, :unhandled_info}, state}
+    {:noreply, state}
   end
 
-  defp do_handle_info(%Signal{} = signal, %ServerState{} = state) do
-    dbug("Processing info signal", signal: signal, state: state)
+  @impl true
+  def terminate(reason, %ServerState{} = state) do
+    require Logger
+    stacktrace = Process.info(self(), :current_stacktrace)
 
-    if ServerSignal.is_event_signal?(signal) do
-      dbug("Ignoring event signal")
-      {:noreply, state}
-    else
-      case Execute.process_signal(state, signal) do
-        {:ok, new_state} ->
-          dbug("Info signal processed successfully", new_state: new_state)
-          {:noreply, new_state}
+    # Format the error message in a more readable way
+    error_msg = """
+    #{state.agent.__struct__} server terminating
 
-        {:error, reason} ->
-          dbug("Info signal processing failed", error: reason)
-          {:stop, reason, state}
-      end
-    end
-  end
+    Reason:
+    #{Exception.format_banner(:error, reason)}
 
-  defp do_handle_info(:check_queue_size, %ServerState{} = state) do
-    queue_size = :queue.len(state.pending_signals)
-    dbug("Checking queue size", current_size: queue_size, max_size: state.max_queue_size)
+    Stacktrace:
+    #{Exception.format_stacktrace(elem(stacktrace, 1))}
 
-    if queue_size > state.max_queue_size do
-      dbug("Queue overflow detected", queue_size: queue_size)
+    Agent State:
+    - ID: #{state.agent.id}
+    - Status: #{state.status}
+    - Queue Size: #{:queue.len(state.pending_signals)}
+    - Mode: #{state.mode}
+    """
 
-      ServerOutput.emit_event(state, ServerSignal.queue_overflow(), %{
-        queue_size: queue_size,
-        max_size: state.max_queue_size
-      })
+    Logger.error(error_msg)
 
-      Process.send_after(self(), :check_queue_size, @queue_check_interval)
-      {:noreply, state, :hibernate}
-    else
-      {:noreply, state}
+    case ServerCallback.shutdown(state, reason) do
+      {:ok, new_state} ->
+        ServerOutput.emit_log(state, ServerSignal.stopped(), %{
+          reason: reason
+        })
+
+        ServerProcess.stop_supervisor(new_state)
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
   @impl true
-  def terminate(reason, %ServerState{child_supervisor: supervisor, agent: agent} = state)
-      when is_pid(supervisor) do
-    dbug("Server terminating",
-      reason: inspect(reason),
-      agent_id: state.agent.id,
-      status: state.status
-    )
-
-    # Call shutdown callback before cleanup
-    dbug("Calling shutdown callback")
-    shutdown_result = call_shutdown_callback(agent, reason)
-    dbug("Shutdown callback completed", result: shutdown_result)
-
-    # Emit stopped signal before cleanup
-    dbug("Emitting stopped signal")
-
-    ServerOutput.emit_event(state, ServerSignal.stopped(), %{
-      reason: reason,
-      shutdown_result: shutdown_result
-    })
-
-    # Cleanup processes
-    dbug("Cleaning up processes")
-    cleanup_processes(supervisor)
-
-    # Return :ok to allow normal termination
-    :ok
-  end
-
-  def terminate(reason, state) do
-    dbug("Terminating without supervisor", reason: reason, state: state)
-    # Emit stopped signal for non-supervisor states
-    if state && state.agent && state.agent.id do
-      # Try shutdown callback even without supervisor
-      dbug("Attempting shutdown callback without supervisor")
-
-      shutdown_result =
-        if state.agent,
-          do: call_shutdown_callback(state.agent, reason),
-          else: :ok
-
-      dbug("Shutdown result", result: shutdown_result)
-
-      ServerOutput.emit_event(state, ServerSignal.stopped(), %{
-        reason: reason,
-        shutdown_result: shutdown_result
-      })
-    end
-
-    # Return :ok to allow normal termination
-    :ok
+  def code_change(old_vsn, %ServerState{} = state, extra) do
+    ServerCallback.code_change(state, old_vsn, extra)
   end
 
   @impl true
   def format_status(_opts, [_pdict, state]) do
-    dbug("Formatting status", state: state)
-
     %{
       state: state,
       status: state.status,
@@ -292,125 +303,46 @@ defmodule Jido.Agent.Server do
     }
   end
 
-  defp build_agent(opts) do
-    dbug("Building agent", opts: opts)
+  @doc """
+  Returns a via tuple for process registration.
+  """
+  @spec via_tuple(String.t(), module()) :: {:via, Registry, {module(), String.t()}}
+  def via_tuple(name, registry) do
+    {:via, Registry, {registry, name}}
+  end
 
+  @spec build_agent(keyword()) :: {:ok, struct()} | {:error, :invalid_agent}
+  defp build_agent(opts) do
     case Keyword.fetch(opts, :agent) do
       {:ok, agent_input} when not is_nil(agent_input) ->
         cond do
-          # Module that needs instantiation
           is_atom(agent_input) and :erlang.function_exported(agent_input, :new, 2) ->
-            dbug("Instantiating new agent from module", module: agent_input)
             id = Keyword.get(opts, :id)
             initial_state = Keyword.get(opts, :initial_state, %{})
             {:ok, agent_input.new(id, initial_state)}
 
-          # Already instantiated struct
           is_struct(agent_input) ->
-            dbug("Using pre-instantiated agent struct")
             {:ok, agent_input}
 
           true ->
-            dbug("Invalid agent input")
             {:error, :invalid_agent}
         end
 
       _ ->
-        dbug("Missing agent input")
         {:error, :invalid_agent}
     end
   end
 
-  defp build_config(opts, agent) do
-    dbug("Building config", opts: opts, agent: agent)
-
-    try do
-      config = %{
-        name: opts[:name] || agent.id,
-        dispatch: Keyword.get(opts, :dispatch, {:bus, [target: :default, stream: "agent"]}),
-        max_queue_size: Keyword.get(opts, :max_queue_size, @default_max_queue_size),
-        registry: Keyword.get(opts, :registry, Jido.AgentRegistry),
-        verbose: Keyword.get(opts, :verbose, false),
-        mode: Keyword.get(opts, :mode, :auto)
-      }
-
-      dbug("Config built successfully", config: config)
-      {:ok, config}
-    rescue
-      error ->
-        dbug("Config build failed", error: error)
-        {:error, {:invalid_config, error}}
-    end
-  end
-
-  # Private helper to call mount callback if defined
-  defp call_mount_callback(agent, state) do
-    if function_exported?(agent.__struct__, :mount, 2) do
-      dbug("Calling mount callback", agent_id: agent.id)
-
-      try do
-        case agent.__struct__.mount(agent, state) do
-          {:ok, mounted_agent} ->
-            dbug("Mount successful", mounted_agent: mounted_agent)
-            {:ok, mounted_agent}
-
-          {:error, reason} ->
-            dbug("Mount failed", error: reason)
-            {:error, {:mount_failed, reason}}
-        end
-      rescue
-        error ->
-          dbug("Mount callback raised error", error: error)
-          {:error, {:mount_failed, error}}
-      end
-    else
-      dbug("No mount callback defined")
-      {:ok, agent}
-    end
-  end
-
-  # Private helper to call shutdown callback if defined
-  defp call_shutdown_callback(agent, reason) do
-    if function_exported?(agent.__struct__, :shutdown, 2) do
-      dbug("Calling shutdown callback", agent_id: agent.id, reason: reason)
-
-      try do
-        case agent.__struct__.shutdown(agent, reason) do
-          {:ok, _} ->
-            dbug("Shutdown successful")
-            :ok
-
-          {:error, shutdown_error} ->
-            dbug("Shutdown failed", error: shutdown_error)
-            {:error, {:shutdown_failed, shutdown_error}}
-        end
-      rescue
-        error ->
-          dbug("Shutdown callback raised error", error: error)
-          {:error, {:shutdown_failed, error}}
-      end
-    else
-      dbug("No shutdown callback defined")
-      :ok
-    end
-  end
-
-  defp cleanup_processes(supervisor) when is_pid(supervisor) do
-    dbug("Cleaning up supervisor processes", supervisor: supervisor)
-
-    try do
-      DynamicSupervisor.stop(supervisor, :shutdown)
-      dbug("Supervisor stopped successfully")
-      :ok
-    catch
-      :exit, reason ->
-        dbug("Supervisor cleanup failed", error: reason)
-        :ok
-    end
-  end
-
-  defp via_tuple(name, registry) do
-    dbug("Building via tuple", name: name, registry: registry)
-    {:via, Registry, {registry, name}}
+  @spec build_initial_state_from_opts(keyword()) :: {:ok, ServerState.t()}
+  defp build_initial_state_from_opts(opts) do
+    {:ok,
+     %ServerState{
+       agent: opts[:agent],
+       output: opts[:output],
+       log_level: opts[:log_level],
+       mode: opts[:mode],
+       registry: opts[:registry],
+       max_queue_size: opts[:max_queue_size]
+     }}
   end
 end

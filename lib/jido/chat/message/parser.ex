@@ -93,7 +93,7 @@ defmodule Jido.Chat.Message.Parser do
 
   # NimbleParsec callbacks
 
-  defp track_offset(_rest, [name], context, _line, offset) do
-    {[{name, offset - String.length(name) - 1}], context}
+  defp track_offset(rest, [name], context, _line, offset) do
+    {rest, [{name, offset - String.length(name) - 1}], context}
   end
 end

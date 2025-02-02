@@ -5,9 +5,10 @@ In our previous guides, we explored how Signals provide real-time event streams 
 ## Understanding the Router
 
 The Signal Router is a powerful trie-based message routing system that:
+
 - Routes signals to appropriate Instructions based on path patterns
 - Supports both wildcards and pattern matching functions
-- Manages execution priority and complexity-based ordering 
+- Manages execution priority and complexity-based ordering
 - Provides efficient trie-based path matching
 - Integrates with Jido's Instruction system
 
@@ -18,20 +19,26 @@ Think of the Router as a smart traffic controller for your signals - it ensures 
 Before diving into code, let's understand the key concepts:
 
 ### Routes
+
 A route connects a signal path pattern to one or more Instructions. Routes support:
+
 - Exact matches: `"user.created"`
 - Single-level wildcards: `"user.*.updated"`
 - Multi-level wildcards: `"order.**.completed"`
 
 ### Instructions
+
 Instructions wrapped in routes:
+
 - Define an Action module to execute
 - Can have priorities (-100 to 100)
 - May include pattern matching functions
 - Integrate with Jido's execution system
 
 ### Priority & Complexity
+
 Handlers execute based on:
+
 - Priority (higher numbers execute first)
 - Path complexity scoring
 - Registration order for same priority/complexity
@@ -58,7 +65,7 @@ end
 
 defmodule MyApp.Actions.HandlePremiumUser do
   use Jido.Action,
-    name: "handle_premium_user", 
+    name: "handle_premium_user",
     schema: [
       signal: [type: :map, required: true]
     ]
@@ -79,7 +86,7 @@ end
   {"user.**", %Instruction{
     action: MyApp.Actions.AuditUser
   }, 100},
-  
+
   # Pattern match for premium users
   {"user.*.updated",
     fn signal -> Map.get(signal.data, :premium, false) end,
@@ -87,8 +94,8 @@ end
       action: MyApp.Actions.HandlePremiumUser
     },
     75},
-   
-  # Standard notification handling  
+
+  # Standard notification handling
   {"user.*.notify", %Instruction{
     action: MyApp.Actions.NotifyUser
   }}
@@ -110,6 +117,7 @@ Let's break down what's happening:
 The router supports several route specifications:
 
 ### 1. Basic Route with Instruction
+
 ```elixir
 # Simple path and instruction
 {"user.created", %Instruction{
@@ -123,6 +131,7 @@ The router supports several route specifications:
 ```
 
 ### 2. Pattern Matching Routes
+
 ```elixir
 # With match function
 {
@@ -145,7 +154,9 @@ The router supports several route specifications:
 ```
 
 ### 3. Route Structs
+
 For maximum control:
+
 ```elixir
 %Route{
   path: "user.created",
@@ -162,16 +173,19 @@ For maximum control:
 The router implements sophisticated path matching:
 
 ### 1. Static Segments
+
 - Must match exactly
 - Can contain alphanumeric characters, underscores, and hyphens
 - Cannot contain consecutive dots
 
-### 2. Single Wildcards (*)
+### 2. Single Wildcards (\*)
+
 - Match exactly one path segment
 - Can appear anywhere in the path
 - Multiple wildcards allowed
 
-### 3. Multi-Level Wildcards (**)
+### 3. Multi-Level Wildcards (\*\*)
+
 - Match zero or more segments
 - Cannot have consecutive multi-wildcards
 - Most expensive match type
@@ -182,7 +196,7 @@ The router scores paths to ensure most specific matches take precedence:
 
 1. Base score from segment count
 2. Bonuses for exact matches (higher at start of path)
-3. Penalties for wildcards (higher for ** than *)
+3. Penalties for wildcards (higher for \*_ than _)
 4. Position weighting (earlier segments worth more)
 
 ## Managing Routes
@@ -190,6 +204,7 @@ The router scores paths to ensure most specific matches take precedence:
 Routes can be dynamically managed:
 
 ### Adding Routes
+
 ```elixir
 {:ok, router} = Router.add(router, [
   {"metrics.**", %Instruction{
@@ -202,6 +217,7 @@ Routes can be dynamically managed:
 ```
 
 ### Removing Routes
+
 ```elixir
 # Remove a single route
 {:ok, router} = Router.remove(router, "metrics.**")
@@ -214,6 +230,7 @@ Routes can be dynamically managed:
 ```
 
 ### Listing Routes
+
 ```elixir
 {:ok, routes} = Router.list(router)
 
@@ -241,7 +258,7 @@ defmodule MyApp.UserAgent do
       MyApp.Actions.HandleUserUpdated,
       MyApp.Actions.AuditUser
     ]
-    
+
   def init(opts) do
     {:ok, router} = Router.new([
       {"user.created", %Instruction{
@@ -254,13 +271,13 @@ defmodule MyApp.UserAgent do
         action: MyApp.Actions.AuditUser
       }, 100}
     ])
-    
+
     {:ok, Map.put(opts, :router, router)}
   end
-  
+
   def handle_signal(%Signal{} = signal, state) do
     case Router.route(state.router, signal) do
-      {:ok, instructions} -> 
+      {:ok, instructions} ->
         # Execute instructions in priority/complexity order
         Enum.reduce_while(instructions, {:ok, state}, fn instruction, {:ok, state} ->
           case run(instruction, state) do
@@ -268,7 +285,7 @@ defmodule MyApp.UserAgent do
             error -> {:halt, error}
           end
         end)
-      
+
       {:error, _} = error -> error
     end
   end
@@ -280,13 +297,15 @@ end
 When working with the router, keep these principles in mind:
 
 ### 1. Path Design
+
 - Use consistent, meaningful path segments
 - Prefer exact matches over wildcards
 - Put more specific routes first
 - Document path patterns
 - Consider future extensibility
 
-### 2. Priority Management  
+### 2. Priority Management
+
 - Use priority ranges thoughtfully
 - Reserve high/low ends for special cases
 - Document priority meanings
@@ -294,6 +313,7 @@ When working with the router, keep these principles in mind:
 - Test priority interactions
 
 ### 3. Pattern Matching
+
 - Keep match functions simple
 - Handle nil/missing data gracefully
 - Document matching conditions
@@ -301,6 +321,7 @@ When working with the router, keep these principles in mind:
 - Consider performance impact
 
 ### 4. Route Organization
+
 - Group related functionality
 - Use consistent naming
 - Document path hierarchies
@@ -308,6 +329,7 @@ When working with the router, keep these principles in mind:
 - Plan for scale
 
 ### 5. Error Handling
+
 - Validate routes early
 - Handle missing routes gracefully
 - Use Error structs consistently
@@ -321,10 +343,10 @@ Here's how to thoroughly test your routing:
 ```elixir
 defmodule MyApp.RouterTest do
   use ExUnit.Case
-  
+
   alias Jido.Signal
   alias Jido.Instruction
-  
+
   setup do
     routes = [
       {"user.created", %Instruction{
@@ -337,48 +359,48 @@ defmodule MyApp.RouterTest do
         action: MyApp.Actions.AuditUser
       }, 100}
     ]
-    
+
     {:ok, router} = Router.new(routes)
     %{router: router}
   end
-  
+
   test "routes signals correctly", %{router: router} do
     signal = %Signal{
-      id: UUID.uuid4(),
+      id: Jido.Util.generate_id(),
       source: "/test",
       type: "user.123.updated",
       data: %{}
     }
-    
+
     {:ok, instructions} = Router.route(router, signal)
-    
+
     assert length(instructions) == 2  # audit and update handlers
     assert Enum.any?(instructions, & &1.action == MyApp.Actions.AuditUser)
     assert Enum.any?(instructions, & &1.action == MyApp.Actions.HandleUserUpdated)
   end
-  
+
   test "respects priority and complexity", %{router: router} do
     signal = %Signal{
-      id: UUID.uuid4(),
-      source: "/test", 
+      id: Jido.Util.generate_id(),
+      source: "/test",
       type: "user.created",
       data: %{}
     }
-    
+
     {:ok, [first | _]} = Router.route(router, signal)
     assert first.action == MyApp.Actions.AuditUser
   end
-  
+
   test "handles edge cases" do
     # Test empty segments
     assert {:error, _} = Router.new({"user..created", instruction})
-    
+
     # Test consecutive wildcards
     assert {:error, _} = Router.new({"user.**.**.created", instruction})
-    
+
     # Test priority bounds
     assert {:error, _} = Router.new({"test", instruction, 101})
-    
+
     # Test pattern matching errors
     assert {:error, _} = Router.new({
       "test",
@@ -392,6 +414,7 @@ end
 ## Next Steps
 
 Now that you understand the Router, you can explore:
+
 - Complex routing patterns
 - Dynamic route management
 - Custom pattern matching

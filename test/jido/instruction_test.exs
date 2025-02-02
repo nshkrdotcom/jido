@@ -6,7 +6,7 @@ defmodule Jido.InstructionTest do
   alias JidoTest.TestActions.NoSchema
   @moduletag :capture_log
 
-  describe "normalize/2" do
+  describe "normalize/3" do
     test "normalizes single instruction struct" do
       instruction = %Instruction{
         action: BasicAction,
@@ -22,22 +22,16 @@ defmodule Jido.InstructionTest do
 
     test "normalizes bare action module" do
       assert {:ok, [instruction]} = Instruction.normalize(BasicAction)
-
-      assert instruction == %Instruction{
-               action: BasicAction,
-               params: %{},
-               context: %{}
-             }
+      assert instruction.action == BasicAction
+      assert instruction.params == %{}
+      assert instruction.context == %{}
     end
 
     test "normalizes action tuple with params" do
       assert {:ok, [instruction]} = Instruction.normalize({BasicAction, %{value: 42}})
-
-      assert instruction == %Instruction{
-               action: BasicAction,
-               params: %{value: 42},
-               context: %{}
-             }
+      assert instruction.action == BasicAction
+      assert instruction.params == %{value: 42}
+      assert instruction.context == %{}
     end
 
     test "normalizes list of mixed formats" do
@@ -47,28 +41,19 @@ defmodule Jido.InstructionTest do
         %Instruction{action: BasicAction, context: %{local: true}}
       ]
 
-      assert {:ok, instructions} = Instruction.normalize(input, %{request_id: "123"})
-      assert length(instructions) == 3
+      assert {:ok, [first, second, third]} = Instruction.normalize(input, %{request_id: "123"})
 
-      [first, second, third] = instructions
+      assert first.action == BasicAction
+      assert first.params == %{}
+      assert first.context == %{request_id: "123"}
 
-      assert first == %Instruction{
-               action: BasicAction,
-               params: %{},
-               context: %{request_id: "123"}
-             }
+      assert second.action == NoSchema
+      assert second.params == %{data: "test"}
+      assert second.context == %{request_id: "123"}
 
-      assert second == %Instruction{
-               action: NoSchema,
-               params: %{data: "test"},
-               context: %{request_id: "123"}
-             }
-
-      assert third == %Instruction{
-               action: BasicAction,
-               params: %{},
-               context: %{local: true, request_id: "123"}
-             }
+      assert third.action == BasicAction
+      assert third.params == %{}
+      assert third.context == %{local: true, request_id: "123"}
     end
 
     test "returns error for invalid params format" do
@@ -79,15 +64,20 @@ defmodule Jido.InstructionTest do
       assert {:error, %Error{}} = Instruction.normalize(123)
     end
 
-    test "preserves options from original instruction struct" do
+    test "merges options from input" do
       instruction = %Instruction{
         action: BasicAction,
         params: %{value: 1},
         opts: [timeout: 20_000]
       }
 
-      assert {:ok, [normalized]} = Instruction.normalize(instruction)
+      assert {:ok, [normalized]} = Instruction.normalize(instruction, %{}, retry: true)
       assert normalized.opts == [timeout: 20_000]
+    end
+
+    test "uses provided options when instruction has none" do
+      assert {:ok, [normalized]} = Instruction.normalize(BasicAction, %{}, retry: true)
+      assert normalized.opts == [retry: true]
     end
   end
 
@@ -104,11 +94,17 @@ defmodule Jido.InstructionTest do
     test "returns error when actions are not allowed" do
       instructions = [
         %Instruction{action: BasicAction},
-        %Instruction{action: UnregisteredAction}
+        %Instruction{action: NoSchema}
       ]
 
       assert {:error, %Error{}} =
                Instruction.validate_allowed_actions(instructions, [BasicAction])
+    end
+
+    test "validates single instruction" do
+      instruction = %Instruction{action: BasicAction}
+      assert :ok = Instruction.validate_allowed_actions(instruction, [BasicAction])
+      assert {:error, %Error{}} = Instruction.validate_allowed_actions(instruction, [NoSchema])
     end
   end
 end

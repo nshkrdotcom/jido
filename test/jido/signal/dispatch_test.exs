@@ -2,6 +2,7 @@ defmodule Jido.Signal.DispatchTest do
   use ExUnit.Case, async: true
 
   alias Jido.Signal.Dispatch
+  @moduletag :capture_log
 
   describe "pid adapter" do
     setup do

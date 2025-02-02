@@ -10,6 +10,7 @@ defmodule Jido.Agent.Server.Signal do
   3. Event Signals - Outbound signals that report Agent activity
   """
   use ExDbug, enabled: false
+  @decorate_all dbug()
 
   alias Jido.Signal
   alias Jido.Agent.Types
@@ -20,12 +21,19 @@ defmodule Jido.Agent.Server.Signal do
   @cmd_prefix "#{@agent_prefix}cmd."
   @directive_prefix "#{@cmd_prefix}directive."
   @event_prefix "#{@agent_prefix}event."
+  @log_prefix "#{@agent_prefix}log."
+
+  # Output signal types
+  def out, do: "#{@agent_prefix}out"
+  def error, do: "#{@agent_prefix}error"
 
   # Command signal types
   def cmd, do: @cmd_prefix
   def directive, do: @directive_prefix
 
   # Agent cmd signals
+  def cmd_state, do: "#{@cmd_prefix}state"
+  def cmd_queue_size, do: "#{@cmd_prefix}queue_size"
   def cmd_set, do: "#{@cmd_prefix}set"
   def cmd_validate, do: "#{@cmd_prefix}validate"
   def cmd_plan, do: "#{@cmd_prefix}plan"
@@ -36,24 +44,41 @@ defmodule Jido.Agent.Server.Signal do
   def cmd_success, do: "#{@event_prefix}cmd.success"
   def cmd_success_with_syscall, do: "#{@event_prefix}cmd.success.syscall"
   def cmd_success_with_pending_instructions, do: "#{@event_prefix}cmd.success.pending"
+  def plan_failed, do: "#{@event_prefix}plan.failed"
+
+  def route_failed, do: "#{@event_prefix}route.failed"
+  def route_success, do: "#{@event_prefix}route.success"
 
   # Event signal types - Process lifecycle
   def process_started, do: "#{@event_prefix}process.started"
   def process_terminated, do: "#{@event_prefix}process.terminated"
   def process_failed, do: "#{@event_prefix}process.failed"
+  def process_error, do: "#{@event_prefix}process.error"
 
   # Event signal types - Queue processing
   def queue_started, do: "#{@event_prefix}queue.started"
   def queue_completed, do: "#{@event_prefix}queue.completed"
   def queue_failed, do: "#{@event_prefix}queue.failed"
+  def queue_full, do: "#{@event_prefix}queue.full"
   def queue_overflow, do: "#{@event_prefix}queue.overflow"
   def queue_cleared, do: "#{@event_prefix}queue.cleared"
   def queue_processing_started, do: "#{@event_prefix}queue.processing.started"
   def queue_processing_completed, do: "#{@event_prefix}queue.processing.completed"
   def queue_processing_failed, do: "#{@event_prefix}queue.processing.failed"
+  def queue_step_started, do: "#{@event_prefix}queue.step.started"
   def queue_step_completed, do: "#{@event_prefix}queue.step.completed"
   def queue_step_ignored, do: "#{@event_prefix}queue.step.ignored"
   def queue_step_failed, do: "#{@event_prefix}queue.step.failed"
+
+  def log(log_level) do
+    cond do
+      log_level == :debug -> "#{@log_prefix}debug"
+      log_level == :info -> "#{@log_prefix}info"
+      log_level == :warn -> "#{@log_prefix}warn"
+      log_level == :error -> "#{@log_prefix}error"
+      true -> "#{@log_prefix}info"
+    end
+  end
 
   # Event signal types - State transitions
   def started, do: "#{@event_prefix}started"
@@ -133,30 +158,6 @@ defmodule Jido.Agent.Server.Signal do
       {:error, _} = error ->
         error
     end
-  end
-
-  @doc """
-  Creates a directive signal from a directive struct. Returns {:ok, Signal.t()} | {:error, String.t()}.
-  """
-  @spec build_directive(%{agent: Types.agent_info()}, struct()) ::
-          {:ok, Signal.t()} | {:error, term()}
-  def build_directive(%{agent: agent}, %_{} = directive)
-      when is_binary(agent.id) and is_struct(directive) do
-    build_signal(directive(), agent.id, %{directive: directive})
-  end
-
-  def build_directive(%{agent: agent}, _invalid) when is_binary(agent.id) do
-    {:error, :invalid_directive}
-  end
-
-  @doc """
-  Creates an event signal from agent state. Returns {:ok, Signal.t()} | {:error, String.t()}.
-  """
-  @spec build_event(%{agent: Types.agent_info()}, String.t(), map()) ::
-          {:ok, Signal.t()} | {:error, term()}
-  def build_event(%{agent: agent}, type, payload \\ %{})
-      when is_binary(type) do
-    build_signal(type, agent.id, payload)
   end
 
   @doc """

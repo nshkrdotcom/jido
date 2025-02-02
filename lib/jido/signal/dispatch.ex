@@ -15,6 +15,9 @@ defmodule Jido.Signal.Dispatch do
     bus: Jido.Signal.Dispatch.Bus,
     named: Jido.Signal.Dispatch.Named,
     pubsub: Jido.Signal.Dispatch.PubSub,
+    logger: Jido.Signal.Dispatch.LoggerAdapter,
+    console: Jido.Signal.Dispatch.ConsoleAdapter,
+    noop: Jido.Signal.Dispatch.NoopAdapter,
     nil: nil
   }
 

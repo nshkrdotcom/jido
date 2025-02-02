@@ -1,7 +1,6 @@
 defmodule Jido.Agent.Server.StateTest do
   use ExUnit.Case, async: true
   alias Jido.Agent.Server.State
-  alias Jido.Agent.Server.Signal, as: ServerSignal
   alias JidoTest.TestAgents.BasicAgent
   alias Jido.Signal
 
@@ -13,35 +12,47 @@ defmodule Jido.Agent.Server.StateTest do
       state = %State{agent: agent}
 
       assert state.agent == agent
-      assert state.dispatch == {:bus, [target: {:bus, :default}, stream: "agent"]}
+
+      assert state.output == [
+               out: {:bus, [target: :default, stream: "agent"]},
+               log: {:logger, []},
+               err: {:console, []}
+             ]
+
       assert state.status == :idle
-      assert state.verbose == :info
+      assert state.log_level == :info
       assert state.mode == :auto
       assert :queue.is_queue(state.pending_signals)
       assert :queue.is_empty(state.pending_signals)
     end
 
-    test "creates state with custom dispatch" do
+    test "creates state with custom output config" do
       agent = BasicAgent.new("test")
-      dispatch = {:pid, [target: self(), delivery_mode: :async]}
-      state = %State{agent: agent, dispatch: dispatch}
+
+      output = [
+        out: {:pid, [target: self()]},
+        log: {:pid, [target: self()]},
+        err: {:pid, [target: self()]}
+      ]
+
+      state = %State{agent: agent, output: output}
 
       assert state.agent == agent
-      assert state.dispatch == dispatch
+      assert state.output == output
       assert state.status == :idle
-      assert state.verbose == :info
+      assert state.log_level == :info
       assert state.mode == :auto
       assert :queue.is_queue(state.pending_signals)
       assert :queue.is_empty(state.pending_signals)
     end
 
-    test "creates state with custom verbose and mode settings" do
+    test "creates state with custom log_level and mode settings" do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, verbose: :debug, mode: :manual}
+      state = %State{agent: agent, log_level: :debug, mode: :step}
 
       assert state.agent == agent
-      assert state.verbose == :debug
-      assert state.mode == :manual
+      assert state.log_level == :debug
+      assert state.mode == :step
       assert state.status == :idle
       assert :queue.is_queue(state.pending_signals)
       assert :queue.is_empty(state.pending_signals)
@@ -51,14 +62,23 @@ defmodule Jido.Agent.Server.StateTest do
   describe "transition/2" do
     setup do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, dispatch: {:pid, [target: self(), delivery_mode: :async]}}
+
+      state = %State{
+        agent: agent,
+        output: [
+          out: {:pid, [target: self()]},
+          log: {:pid, [target: self()]},
+          err: {:pid, [target: self()]}
+        ]
+      }
+
       {:ok, state: state}
     end
 
     test "allows valid transitions and emits signals", %{state: state} do
       # initializing -> idle
       state = %{state | status: :initializing}
-      transition_succeeded = ServerSignal.transition_succeeded()
+      transition_succeeded = "jido.agent.log.jido.agent.event.transition.succeeded"
       assert {:ok, %State{status: :idle}} = State.transition(state, :idle)
 
       assert_receive {:signal,
@@ -111,7 +131,7 @@ defmodule Jido.Agent.Server.StateTest do
     test "rejects invalid transitions and emits failure signals", %{state: state} do
       # Can't go from idle to paused
       state = %{state | status: :idle}
-      transition_failed = ServerSignal.transition_failed()
+      transition_failed = "jido.agent.log.jido.agent.event.transition.failed"
       assert {:error, {:invalid_transition, :idle, :paused}} = State.transition(state, :paused)
 
       assert_receive {:signal,
@@ -137,7 +157,16 @@ defmodule Jido.Agent.Server.StateTest do
   describe "enqueue/2" do
     setup do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, dispatch: {:pid, [target: self(), delivery_mode: :async]}}
+
+      state = %State{
+        agent: agent,
+        output: [
+          out: {:pid, [target: self()]},
+          log: {:pid, [target: self()]},
+          err: {:pid, [target: self()]}
+        ]
+      }
+
       {:ok, state: state}
     end
 
@@ -154,7 +183,7 @@ defmodule Jido.Agent.Server.StateTest do
       state = %{state | max_queue_size: 1}
       signal1 = %Signal{type: "test.signal.1", source: "test", id: "test-1"}
       signal2 = %Signal{type: "test.signal.2", source: "test", id: "test-2"}
-      queue_overflow = ServerSignal.queue_overflow()
+      queue_overflow = "jido.agent.log.jido.agent.event.queue.overflow"
 
       {:ok, state_with_one} = State.enqueue(state, signal1)
       assert :queue.len(state_with_one.pending_signals) == 1
@@ -173,7 +202,16 @@ defmodule Jido.Agent.Server.StateTest do
   describe "dequeue/1" do
     setup do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, dispatch: {:pid, [target: self(), delivery_mode: :async]}}
+
+      state = %State{
+        agent: agent,
+        output: [
+          out: {:pid, [target: self()]},
+          log: {:pid, [target: self()]},
+          err: {:pid, [target: self()]}
+        ]
+      }
+
       {:ok, state: state}
     end
 
@@ -186,7 +224,7 @@ defmodule Jido.Agent.Server.StateTest do
       assert :queue.is_empty(new_state.pending_signals)
     end
 
-    test "returns error when queue is empty", %{state: state} do
+    test "returns empty queue when queue is empty", %{state: state} do
       assert {:error, :empty_queue} = State.dequeue(state)
     end
 
@@ -212,14 +250,23 @@ defmodule Jido.Agent.Server.StateTest do
   describe "clear_queue/1" do
     setup do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, dispatch: {:pid, [target: self(), delivery_mode: :async]}}
+
+      state = %State{
+        agent: agent,
+        output: [
+          out: {:pid, [target: self()]},
+          log: {:pid, [target: self()]},
+          err: {:pid, [target: self()]}
+        ]
+      }
+
       {:ok, state: state}
     end
 
     test "clears all signals from the queue and emits signal", %{state: state} do
       signal1 = %Signal{type: "test.signal.1", source: "test", id: "test-1"}
       signal2 = %Signal{type: "test.signal.2", source: "test", id: "test-2"}
-      queue_cleared = ServerSignal.queue_cleared()
+      queue_cleared = "jido.agent.log.jido.agent.event.queue.cleared"
 
       {:ok, state} = State.enqueue(state, signal1)
       {:ok, state} = State.enqueue(state, signal2)
@@ -231,11 +278,51 @@ defmodule Jido.Agent.Server.StateTest do
     end
 
     test "clearing an empty queue emits signal with zero size", %{state: state} do
-      queue_cleared = ServerSignal.queue_cleared()
+      queue_cleared = "jido.agent.log.jido.agent.event.queue.cleared"
       assert :queue.is_empty(state.pending_signals)
       {:ok, cleared_state} = State.clear_queue(state)
       assert :queue.is_empty(cleared_state.pending_signals)
       assert_receive {:signal, %Signal{type: ^queue_cleared, data: %{queue_size: 0}}}
+    end
+  end
+
+  describe "check_queue_size/1" do
+    setup do
+      agent = BasicAgent.new("test")
+
+      state = %State{
+        agent: agent,
+        output: [
+          out: {:pid, [target: self()]},
+          log: {:pid, [target: self()]},
+          err: {:pid, [target: self()]}
+        ]
+      }
+
+      {:ok, state: state}
+    end
+
+    test "returns current queue size when within limits", %{state: state} do
+      assert {:ok, 0} = State.check_queue_size(state)
+
+      signal = %Signal{type: "test.signal", source: "test", id: "test-1"}
+      {:ok, state_with_signal} = State.enqueue(state, signal)
+      assert {:ok, 1} = State.check_queue_size(state_with_signal)
+    end
+
+    test "returns error when queue size exceeds maximum", %{state: state} do
+      state = %{state | max_queue_size: 0}
+      signal = %Signal{type: "test.signal", source: "test", id: "test-1"}
+
+      # Since max_queue_size is 0, enqueue should fail immediately
+      assert {:error, :queue_overflow} = State.enqueue(state, signal)
+      queue_overflow = "jido.agent.log.jido.agent.event.queue.overflow"
+
+      assert_receive {:signal,
+                      %Signal{
+                        type: ^queue_overflow,
+                        data: %{queue_size: 0, max_size: 0}
+                      }}
     end
   end
 end

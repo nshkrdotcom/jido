@@ -204,6 +204,34 @@ defmodule JidoTest.TestAgents do
     end
 
     @impl true
+    def mount(state, _opts) do
+      agent = track_callback(state.agent, :mount)
+      {:ok, %{state | agent: agent}}
+    end
+
+    @impl true
+    def code_change(state, _old_vsn, _extra) do
+      agent = track_callback(state.agent, :code_change)
+      {:ok, %{state | agent: agent}}
+    end
+
+    @impl true
+    def shutdown(state, _reason) do
+      agent = track_callback(state.agent, :shutdown)
+      {:ok, %{state | agent: agent}}
+    end
+
+    @impl true
+    def handle_signal(signal) do
+      {:ok, %{signal | data: Map.put(signal.data, :agent_handled, true)}}
+    end
+
+    @impl true
+    def process_result(_signal, result) do
+      {:ok, Map.put(result, :agent_processed, true)}
+    end
+
+    @impl true
     def on_before_validate_state(agent) do
       {:ok, track_callback(agent, :on_before_validate_state)}
     end
@@ -297,11 +325,14 @@ defmodule JidoTest.TestAgents do
       Jido.Agent.Server.start_link(
         agent: agent,
         name: agent_id,
+        routes: [
+          {"example.event", Instruction.new!(action: JidoTest.TestActions.BasicAction)}
+        ],
         skills: [
           JidoTest.TestSkills.WeatherMonitorSkill
         ],
-        schedule: [
-          {"*/15 * * * *", Signal.new(%{type: "example.event", data: %{}})}
+        child_specs: [
+          {JidoTest.TestSensors.CounterSensor, []}
         ]
       )
     end
@@ -330,6 +361,31 @@ defmodule JidoTest.TestAgents do
         # Clean up any resources if needed
         {:ok, agent}
       end
+    end
+  end
+
+  defmodule SignalOutputAgent do
+    use Jido.Agent,
+      name: "signal_output_agent",
+      schema: [
+        processed_results: [type: {:list, :any}, default: []]
+      ]
+
+    @impl true
+    def process_result(%Signal{type: "test.string"} = _signal, data) do
+      {:ok, {:processed_string, String.upcase(data)}}
+    end
+
+    def process_result(%Signal{type: "test.map"} = _signal, data) do
+      {:ok, Map.put(data, :processed_at, DateTime.utc_now())}
+    end
+
+    def process_result(%Signal{type: "test.error"} = signal, reason) do
+      {:error, %{reason: reason, signal_id: signal.id}}
+    end
+
+    def process_result(signal, other) do
+      {:error, %{signal: signal, result: other}}
     end
   end
 end

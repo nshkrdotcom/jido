@@ -6,10 +6,7 @@ defmodule Jido.Agent.Server.DirectiveTest do
 
   alias Jido.Agent.Directive.{
     Spawn,
-    Kill,
-    Enqueue,
-    RegisterAction,
-    DeregisterAction
+    Kill
   }
 
   @moduletag :capture_log
@@ -29,7 +26,11 @@ defmodule Jido.Agent.Server.DirectiveTest do
     state = %State{
       agent: agent,
       child_supervisor: supervisor,
-      dispatch: {:pid, [target: self(), delivery_mode: :async]},
+      output: [
+        out: {:pid, [target: self(), delivery_mode: :async]},
+        log: {:pid, [target: self(), delivery_mode: :async]},
+        err: {:pid, [target: self(), delivery_mode: :async]}
+      ],
       status: :idle,
       pending_signals: :queue.new()
     }
@@ -37,84 +38,61 @@ defmodule Jido.Agent.Server.DirectiveTest do
     {:ok, state: state}
   end
 
-  describe "instruction queue directives" do
-    test "enqueue adds instruction to queue", %{state: state} do
-      directive = %Enqueue{
-        action: :test_action,
-        params: %{value: 42},
-        context: %{user: "test"},
-        opts: [priority: :high]
-      }
+  describe "handle/2" do
+    test "processes multiple directives in sequence", %{state: state} do
+      task1 = fn -> Process.sleep(1000) end
+      task2 = fn -> Process.sleep(1000) end
 
-      {:ok, new_state} = Directive.execute(state, directive)
+      directives = [
+        %Spawn{module: Task, args: task1},
+        %Spawn{module: Task, args: task2}
+      ]
 
-      # Verify instruction was added to queue
-      assert :queue.len(new_state.pending_signals) == 1
-      {{:value, instruction}, _} = :queue.out(new_state.pending_signals)
-      assert instruction.action == :test_action
-      assert instruction.params == %{value: 42}
-      assert instruction.context == %{user: "test"}
-      assert instruction.opts == [priority: :high]
+      {:ok, new_state} = Directive.handle(state, directives)
+      assert state == new_state
+
+      # Verify we received process_started signals for both tasks
+      assert_receive {:signal, signal1}
+      assert signal1.type == Signal.process_started()
+      assert is_pid(signal1.data.child_pid)
+
+      assert_receive {:signal, signal2}
+      assert signal2.type == Signal.process_started()
+      assert is_pid(signal2.data.child_pid)
     end
 
-    test "enqueue fails with invalid action", %{state: state} do
-      directive = %Enqueue{action: nil}
-      {:error, error} = Directive.execute(state, directive)
+    test "stops processing on first error", %{state: state} do
+      task = fn -> Process.sleep(1000) end
+
+      directives = [
+        %Spawn{module: Task, args: task},
+        :invalid_directive
+      ]
+
+      {:error, error} = Directive.handle(state, directives)
+
+      # Should only receive one process_started signal
+      assert_receive {:signal, signal}
+      assert signal.type == Signal.process_started()
+      refute_receive {:signal, _}
 
       assert_error_match(error, %Error{
         type: :validation_error,
-        message: "Invalid action",
-        details: %{action: nil}
-      })
-    end
-  end
-
-  describe "action registration directives" do
-    defmodule TestAction do
-      def run(_params, _context), do: {:ok, nil}
-    end
-
-    test "register adds action module", %{state: state} do
-      directive = %RegisterAction{action_module: TestAction}
-      {:ok, new_state} = Directive.execute(state, directive)
-
-      # Verify action was registered
-      assert TestAction in new_state.agent.actions
-    end
-
-    test "register fails with invalid module", %{state: state} do
-      directive = %RegisterAction{action_module: :not_a_module}
-      {:error, error} = Directive.execute(state, directive)
-
-      assert_error_match(error, %Error{
-        type: :validation_error,
-        message: "Invalid action module",
-        details: %{module: :not_a_module}
+        message: "Invalid directive",
+        details: %{directive: :invalid_directive}
       })
     end
 
-    test "deregister removes action module", %{state: state} do
-      # First register the action
-      {:ok, state_with_action} =
-        Directive.execute(state, %RegisterAction{action_module: TestAction})
+    test "handles single directive", %{state: state} do
+      task = fn -> Process.sleep(1000) end
+      directive = %Spawn{module: Task, args: task}
 
-      # Then deregister it
-      directive = %DeregisterAction{action_module: TestAction}
-      {:ok, final_state} = Directive.execute(state_with_action, directive)
+      {:ok, new_state} = Directive.handle(state, directive)
+      assert state == new_state
 
-      # Verify action was removed
-      refute TestAction in final_state.agent.actions
-    end
-
-    test "deregister fails with invalid module", %{state: state} do
-      directive = %DeregisterAction{action_module: :not_a_module}
-      {:error, error} = Directive.execute(state, directive)
-
-      assert_error_match(error, %Error{
-        type: :validation_error,
-        message: "Invalid action module",
-        details: %{module: :not_a_module}
-      })
+      assert_receive {:signal, signal}
+      assert signal.type == Signal.process_started()
+      assert is_pid(signal.data.child_pid)
     end
   end
 

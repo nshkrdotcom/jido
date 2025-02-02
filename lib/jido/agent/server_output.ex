@@ -1,144 +1,150 @@
 defmodule Jido.Agent.Server.Output do
   @moduledoc """
-  Centralizes log/console output and event emission for the Agent Server.
+  Centralizes signal output for the Agent Server.
 
-  This module provides functions for:
-  - Logging with correlation/causation IDs
-  - Event emission with consistent metadata
-  - Capturing operation results
-  - Controlling output verbosity
+  Provides three output channels:
+  - emit_out: Generic signal emission (out channel)
+  - emit_log: Log message emission (log channel)
+  - emit_err: Error message emission (err channel)
   """
 
   require Logger
   alias Jido.Agent.Server.State, as: ServerState
-  alias Jido.Agent.Server.Signal, as: ServerSignal
   alias Jido.Signal
   alias Jido.Signal.Dispatch
 
   @doc """
-  Emits an event with consistent logging and metadata handling.
+  Emits a signal through the 'out' channel, optionally processing it through the agent's process_result callback.
   """
-  @spec emit_event(ServerState.t(), String.t(), map()) :: :ok | {:ok, term()} | {:error, term()}
-  def emit_event(%ServerState{} = state, event_type, payload \\ %{}) do
-    # Add correlation metadata
-    set_logger_metadata(state)
+  @spec emit_out(%ServerState{}, term(), keyword()) :: :ok | {:error, term()}
+  def emit_out(%ServerState{} = state, data, opts \\ []) do
+    # Process data through agent callback if available
+    processed_data =
+      if state.agent && function_exported?(state.agent.__struct__, :process_result, 2) do
+        state.agent.__struct__.process_result(state.agent, data)
+      else
+        data
+      end
 
-    # Log if verbose level is info or lower
-    log_message(state, :debug, "Emitting event #{event_type} with payload=#{inspect(payload)}")
+    # Create a new signal with the processed data
+    {:ok, signal} =
+      Signal.new(%{
+        type: "jido.agent.out",
+        data: processed_data
+      })
 
-    with {:ok, signal} <- ServerSignal.build_event(state, event_type, payload) do
-      dispatch(state, signal)
-    end
+    # Emit the signal using the 'out' channel
+    emit_signal(state, signal, Keyword.put(opts, :channel, :out))
   end
 
   @doc """
-  Emits a command with consistent logging and metadata handling.
+  Emits a log message as a signal through the 'log' channel.
   """
-  @spec emit_cmd(ServerState.t(), term(), map(), Keyword.t()) ::
-          :ok | {:ok, term()} | {:error, term()}
-  def emit_cmd(%ServerState{} = state, instruction, params \\ %{}, opts \\ []) do
-    set_logger_metadata(state)
+  @spec emit_log(%ServerState{}, atom(), String.t(), keyword()) :: :ok | {:error, term()}
+  def emit_log(%ServerState{} = state, level, message, opts \\ []) do
+    {:ok, signal} =
+      Signal.new(%{
+        type: "jido.agent.log.#{level}",
+        data: message
+      })
 
-    log_message(
-      state,
-      :info,
-      "Emitting command #{inspect(instruction)} with params=#{inspect(params)}"
-    )
-
-    with {:ok, signal} <- ServerSignal.build_cmd(state, instruction, params, opts) do
-      dispatch(state, signal)
-    end
+    emit_signal(state, signal, Keyword.put(opts, :channel, :log))
   end
 
   @doc """
-  Emits a directive with consistent logging and metadata handling.
+  Emits an error message as a signal through the 'err' channel.
   """
-  @spec emit_directive(ServerState.t(), struct()) :: :ok | {:ok, term()} | {:error, term()}
-  def emit_directive(%ServerState{} = state, directive) do
-    set_logger_metadata(state)
+  @spec emit_err(%ServerState{}, String.t(), map(), keyword()) :: :ok | {:error, term()}
+  def emit_err(%ServerState{} = state, message, metadata \\ %{}, opts \\ []) do
+    {:ok, signal} =
+      Signal.new(%{
+        type: "jido.agent.error",
+        data: %{
+          message: message,
+          metadata: metadata,
+          agent_id: state.agent.id,
+          timestamp: DateTime.utc_now()
+        }
+      })
 
-    log_message(state, :info, "Emitting directive #{inspect(directive)}")
-
-    with {:ok, signal} <- ServerSignal.build_directive(state, directive) do
-      dispatch(state, signal)
-    end
+    emit_signal(state, signal, Keyword.put(opts, :channel, :err))
   end
 
   @doc """
-  Logs a message with consistent metadata handling and verbosity control.
+  Core signal emission function that handles dispatch configuration and delivery.
+  Supports both single and multiple dispatch configurations.
   """
-  @spec log_message(ServerState.t(), atom(), String.t() | map()) :: :ok
-  def log_message(%ServerState{verbose: level} = state, msg_level, msg) do
-    # Only log if message level is equal or higher priority than verbose setting
-    if should_log?(level, msg_level) do
-      set_logger_metadata(state)
-      Logger.log(msg_level, msg)
-    end
+  @spec emit_signal(%ServerState{}, Signal.t(), keyword()) :: :ok | {:error, term()}
+  def emit_signal(%ServerState{} = state, signal, opts \\ []) do
+    # Get the channel from opts or default to :out
+    channel = Keyword.get(opts, :channel, :out)
 
-    :ok
-  end
+    # Get the dispatch config for the specified channel
+    dispatch_config =
+      case Keyword.get(opts, :dispatch) do
+        nil -> get_in(state.output, [channel])
+        config -> config
+      end
 
-  @doc """
-  Captures the result of an operation, logging appropriately based on success/failure.
-  """
-  @spec capture_result(ServerState.t(), any()) :: {:ok, ServerState.t()} | {:error, term()}
-  def capture_result(state, result) do
-    case result do
-      {:ok, data} ->
-        log_message(state, :info, "Successfully executed with data=#{inspect(data)}")
-        {:ok, state}
-
-      {:error, reason} ->
-        log_message(state, :error, "Execution failed: #{inspect(reason)}")
-        {:error, reason}
-    end
-  end
-
-  @doc """
-  Helper to set logger metadata with correlation IDs from state.
-  """
-  @spec set_logger_metadata(ServerState.t()) :: :ok
-  def set_logger_metadata(%ServerState{} = state) do
-    metadata = [
-      agent_id: state.agent.id,
-      correlation_id: Map.get(state, :correlation_id),
-      causation_id: Map.get(state, :causation_id)
-    ]
-
-    Logger.metadata(metadata)
-    :ok
-  end
-
-  @doc """
-  Helper macro for executing a block with logger metadata set.
-  """
-  defmacro with_logger_metadata(state, do: block) do
-    quote do
-      require Logger
-      Jido.Agent.Server.Output.set_logger_metadata(unquote(state))
-      result = unquote(block)
-      Logger.reset_metadata()
-      result
-    end
-  end
-
-  defp dispatch(%{dispatch: {adapter, opts}}, %Signal{} = signal) do
-    Dispatch.dispatch(signal, {adapter, opts})
-  end
-
-  # Helper to determine if a message should be logged based on verbosity levels
-  defp should_log?(verbose_level, msg_level) do
-    level_priority = %{
-      debug: 0,
-      info: 1,
-      warn: 2,
-      error: 3
+    # Update signal with correlation and causation IDs, prioritizing:
+    # 1. opts override
+    # 2. existing signal values (if not nil)
+    # 3. state values
+    # 4. generate new UUIDs as last resort
+    signal = %{
+      signal
+      | jido_correlation_id:
+          Keyword.get(opts, :correlation_id) ||
+            if(is_nil(signal.jido_correlation_id),
+              do: state.current_correlation_id || UUID.uuid4(),
+              else: signal.jido_correlation_id
+            ),
+        jido_causation_id:
+          Keyword.get(opts, :causation_id) ||
+            if(is_nil(signal.jido_causation_id),
+              do: state.current_causation_id || UUID.uuid4(),
+              else: signal.jido_causation_id
+            )
     }
 
-    cond do
-      verbose_level == true -> true
-      is_atom(verbose_level) -> level_priority[msg_level] >= level_priority[verbose_level]
-      true -> false
+    # First handle any jido_output dispatch config from the signal
+    if signal.jido_output do
+      case signal.jido_output do
+        dispatches when is_list(dispatches) ->
+          Enum.each(dispatches, fn {adapter, adapter_opts} ->
+            do_dispatch(adapter, adapter_opts, signal)
+          end)
+
+        {adapter, adapter_opts} ->
+          do_dispatch(adapter, adapter_opts, signal)
+      end
     end
+
+    # Then handle the channel-based dispatch config
+    case dispatch_config do
+      # List of dispatches
+      dispatches when is_list(dispatches) ->
+        # Dispatch to each configured adapter
+        Enum.each(dispatches, fn
+          {_key, {adapter, adapter_opts}} -> do_dispatch(adapter, adapter_opts, signal)
+          {adapter, adapter_opts} -> do_dispatch(adapter, adapter_opts, signal)
+        end)
+
+      # Single dispatch
+      {adapter, adapter_opts} ->
+        do_dispatch(adapter, adapter_opts, signal)
+    end
+
+    :ok
+  end
+
+  defp do_dispatch(Jido.Signal.Dispatch.NoopAdapter, opts, signal) do
+    if test_pid = Process.get(:test_pid) do
+      send(test_pid, {:dispatch, signal, opts})
+    end
+  end
+
+  defp do_dispatch(adapter, adapter_opts, signal) do
+    Dispatch.dispatch(signal, {adapter, adapter_opts})
   end
 end

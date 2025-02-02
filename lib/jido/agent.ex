@@ -262,10 +262,11 @@ defmodule Jido.Agent do
       use GenServer
       alias Jido.Agent
       alias Jido.Util
+      alias Jido.Signal
       alias Jido.Instruction
-      alias Jido.Runner.Result
       alias Jido.Agent.Directive
       require OK
+      require Logger
 
       case NimbleOptions.validate(unquote(opts), unquote(escaped_schema)) do
         {:ok, validated_opts} ->
@@ -314,7 +315,6 @@ defmodule Jido.Agent do
               |> Keyword.delete(:initial_state)
               |> Keyword.put(:agent, agent)
 
-            dbug("Starting agent", agent: agent)
             Jido.Agent.Server.start_link(opts)
           end
 
@@ -335,8 +335,16 @@ defmodule Jido.Agent do
           def init(opts), do: OK.success(opts)
 
           @doc false
-          def state(pid) when is_pid(pid) do
-            GenServer.call(pid, :state)
+          def state(agent) do
+            Jido.Agent.Server.state(agent)
+          end
+
+          def call(agent, signal, timeout \\ 5000) do
+            Jido.Agent.Server.call(agent, signal, timeout)
+          end
+
+          def cast(agent, signal) do
+            Jido.Agent.Server.cast(agent, signal)
           end
 
           @doc """
@@ -501,13 +509,6 @@ defmodule Jido.Agent do
 
           def new(id, initial_state)
               when (is_binary(id) or is_nil(id)) and is_map(initial_state) do
-            dbug("Creating new #{__MODULE__.name()} agent",
-              id: id,
-              schema: @validated_opts[:schema],
-              actions: @validated_opts[:actions],
-              initial_state: initial_state
-            )
-
             generated_id = id || Util.generate_id()
 
             # Extract default values from schema, handling missing defaults
@@ -583,13 +584,11 @@ defmodule Jido.Agent do
           def set(agent, attrs, opts \\ [])
 
           def set(%__MODULE__{} = agent, attrs, opts) when is_list(attrs) do
-            dbug("Setting agent state from keyword list", agent_id: agent.id, attrs: attrs)
             mapped_attrs = Map.new(attrs)
             set(agent, mapped_attrs, opts)
           end
 
           def set(%__MODULE__{} = agent, attrs, opts) when is_map(attrs) do
-            dbug("Setting agent state from map", agent_id: agent.id, attrs: attrs)
             strict_validation = Keyword.get(opts, :strict_validation, false)
 
             if Enum.empty?(attrs) do
@@ -630,7 +629,6 @@ defmodule Jido.Agent do
 
           @spec do_set(map(), map() | keyword()) :: map_result()
           defp do_set(state, attrs) when is_map(attrs) do
-            dbug("Deep merging state", current: state, new: attrs)
             merged = DeepMerge.deep_merge(state, Map.new(attrs))
             OK.success(merged)
           end
@@ -698,7 +696,6 @@ defmodule Jido.Agent do
           def validate(agent, opts \\ [])
 
           def validate(%__MODULE__{} = agent, opts) do
-            dbug("Validating agent state", agent_id: agent.id)
             strict_validation = Keyword.get(opts, :strict_validation, false)
 
             with {:ok, before_agent} <- on_before_validate_state(agent),
@@ -727,7 +724,6 @@ defmodule Jido.Agent do
 
           @spec do_validate(t(), map(), keyword()) :: map_result()
           defp do_validate(%__MODULE__{} = agent, state, opts) do
-            dbug("Running schema validation", agent_id: agent.id, state: state)
             schema = schema()
             strict_validation = Keyword.get(opts, :strict_validation, false)
 
@@ -739,11 +735,6 @@ defmodule Jido.Agent do
 
               # Return error if strict validation is enabled and unknown fields exist
               if strict_validation && map_size(unknown_state) > 0 do
-                dbug("Strict validation failed - unknown fields present",
-                  agent_id: agent.id,
-                  unknown_fields: Map.keys(unknown_state)
-                )
-
                 Error.validation_error(
                   "Agent state validation failed: Strict validation is enabled but unknown fields were provided. " <>
                     "When strict validation is enabled, only fields defined in the schema are allowed. " <>
@@ -762,8 +753,6 @@ defmodule Jido.Agent do
                     OK.success(Map.merge(unknown_state, Map.new(validated)))
 
                   {:error, error} ->
-                    dbug("Validation failed", agent_id: agent.id, error: error)
-
                     Error.validation_error(
                       "Agent state validation failed: The provided state does not match the schema requirements. " <>
                         "This could be due to missing required fields, invalid field types, or values outside allowed ranges. " <>
@@ -847,12 +836,6 @@ defmodule Jido.Agent do
           def plan(agent, instructions, context \\ %{})
 
           def plan(%__MODULE__{} = agent, instructions, context) do
-            dbug("Planning instructions",
-              agent_id: agent.id,
-              instructions: instructions,
-              context: context
-            )
-
             with {:ok, instruction_structs} <- Instruction.normalize(instructions, context),
                  :ok <- Instruction.validate_allowed_actions(instruction_structs, agent.actions),
                  {:ok, agent} <- on_before_plan(agent, nil, %{}),
@@ -973,14 +956,6 @@ defmodule Jido.Agent do
             apply_state = Keyword.get(opts, :apply_state, true)
             runner = Keyword.get(opts, :runner, runner())
 
-            dbug("Starting agent run",
-              agent_id: agent.id,
-              runner: runner,
-              apply_state: apply_state,
-              current_state: agent.state,
-              pending_count: pending?(agent)
-            )
-
             with {:ok, validated_runner} <- Jido.Util.validate_runner(runner),
                  {:ok, agent} <- on_before_run(agent),
                  {:ok, agent, directives} <- validated_runner.run(agent, opts),
@@ -1085,34 +1060,12 @@ defmodule Jido.Agent do
             runner = Keyword.get(opts, :runner, runner())
             context = Keyword.get(opts, :context, %{})
 
-            dbug("Starting cmd execution",
-              agent_id: agent.id,
-              instructions: instructions,
-              attrs: attrs,
-              opts: opts,
-              current_state: agent.state,
-              pending_count: pending?(agent)
-            )
-
             with {:ok, agent} <- set(agent, attrs, strict_validation: strict_validation),
                  {:ok, agent} <- plan(agent, instructions, context),
                  {:ok, agent, directives} <- run(agent, opts) do
-              dbug("Cmd execution completed successfully",
-                agent_id: agent.id,
-                final_state: agent.state,
-                result: agent.result,
-                directives: directives
-              )
-
               {:ok, agent, directives}
             else
               {:error, reason} ->
-                dbug("Cmd execution failed",
-                  agent_id: agent.id,
-                  error: reason,
-                  current_state: agent.state
-                )
-
                 on_error(agent, reason)
             end
           end
@@ -1176,17 +1129,30 @@ defmodule Jido.Agent do
           @spec on_error(t(), any()) :: agent_result()
           def on_error(agent, reason), do: OK.failure(reason)
 
-          @spec mount(t(), opts :: keyword()) :: agent_result()
-          def mount(agent, _opts), do: OK.success(agent)
+          @spec mount(ServerState.t(), opts :: keyword()) :: agent_result()
+          def mount(state, _opts), do: OK.success(state)
 
-          @spec shutdown(t(), reason :: any()) :: agent_result()
-          def shutdown(agent, _reason), do: OK.success(agent)
+          @spec code_change(ServerState.t(), any(), any()) :: agent_result()
+          def code_change(state, _old_vsn, _extra), do: OK.success(state)
+
+          @spec shutdown(ServerState.t(), reason :: any()) :: agent_result()
+          def shutdown(state, _reason), do: OK.success(state)
+
+          @spec handle_signal(Signal.t()) :: {:ok, Signal.t()} | {:error, any()}
+          def handle_signal(signal), do: OK.success(signal)
+
+          @spec process_result(Signal.t(), term() | {:ok, term()} | {:error, any()}) ::
+                  {:ok, term()} | {:error, any()}
+          def process_result(signal, result), do: OK.success(result)
 
           defoverridable start_link: 1,
                          child_spec: 1,
                          init: 1,
                          mount: 2,
+                         code_change: 3,
                          shutdown: 2,
+                         handle_signal: 1,
+                         process_result: 2,
                          on_before_validate_state: 1,
                          on_after_validate_state: 1,
                          on_before_plan: 3,
@@ -1239,18 +1205,23 @@ defmodule Jido.Agent do
 
   @callback on_error(agent :: t(), reason :: any()) ::
               {:ok, t()} | {:error, t()}
+
+  # Server Callbacks
   @callback start_link(opts :: keyword()) :: {:ok, pid()} | {:error, any()}
-
   @callback child_spec(opts :: keyword()) :: Supervisor.child_spec()
-
   @callback mount(agent :: t(), opts :: keyword()) :: {:ok, map()} | {:error, any()}
   @callback shutdown(agent :: t(), reason :: any()) :: {:ok, map()} | {:error, any()}
+  @callback handle_signal(signal :: Signal.t()) :: {:ok, Signal.t()} | {:error, any()}
+  @callback process_result(signal :: Signal.t(), result :: {:ok, term()} | {:error, any()}) ::
+              {:ok, term()} | {:error, any()}
 
   @optional_callbacks [
     start_link: 1,
     child_spec: 1,
     mount: 2,
     shutdown: 2,
+    handle_signal: 1,
+    process_result: 2,
     on_before_validate_state: 1,
     on_after_validate_state: 1,
     on_before_plan: 3,

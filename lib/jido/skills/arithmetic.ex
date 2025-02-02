@@ -159,7 +159,7 @@ defmodule Jido.Skills.Arithmetic do
     * arithmetic.result: Result of arithmetic operation
     * arithmetic.error: Error from arithmetic operation
   """
-  def router do
+  def routes do
     [
       %{
         path: "arithmetic.add",
@@ -214,32 +214,35 @@ defmodule Jido.Skills.Arithmetic do
     }
   end
 
-  def handle_result({:ok, result}, path) do
-    operation = path |> String.split(".") |> List.last() |> String.to_atom()
-
-    [
-      %Signal{
-        id: UUID.uuid4(),
-        source: "replace_agent_id",
-        type: "arithmetic.result",
-        data: Map.merge(result, %{operation: operation})
-      }
-    ]
+  def handle_signal(%Signal{} = signal) do
+    operation = signal.type |> String.split(".") |> List.last() |> String.to_atom()
+    {:ok, %{signal | data: Map.put(signal.data, :operation, operation)}}
   end
 
-  def handle_result({:error, error}, path) do
-    operation = path |> String.split(".") |> List.last() |> String.to_atom()
+  def process_result(%Signal{} = signal, {:ok, result}) do
+    operation = signal.type |> String.split(".") |> List.last() |> String.to_atom()
 
-    [
-      %Signal{
-        id: UUID.uuid4(),
-        source: "replace_agent_id",
-        type: "arithmetic.error",
-        data: %{
-          error: error,
-          operation: operation
-        }
-      }
-    ]
+    {:ok,
+     %Signal{
+       id: UUID.uuid4(),
+       source: signal.source,
+       type: "arithmetic.result",
+       data: Map.merge(result, %{operation: operation})
+     }}
+  end
+
+  def process_result(%Signal{} = signal, {:error, error}) do
+    operation = signal.type |> String.split(".") |> List.last() |> String.to_atom()
+
+    {:ok,
+     %Signal{
+       id: UUID.uuid4(),
+       source: signal.source,
+       type: "arithmetic.error",
+       data: %{
+         error: error,
+         operation: operation
+       }
+     }}
   end
 end

@@ -6,6 +6,7 @@ defmodule Jido.Discovery do
   The cache is initialized at application startup and can be manually refreshed if needed.
   """
   use ExDbug, enabled: false
+  @decorate_all dbug()
   require Logger
 
   @cache_key :__jido_discovery_cache__
@@ -41,8 +42,6 @@ defmodule Jido.Discovery do
   """
   @spec init() :: :ok | {:error, term()}
   def init do
-    dbug("Initializing discovery cache")
-
     try do
       cache = build_cache()
       :persistent_term.put(@cache_key, cache)
@@ -65,8 +64,6 @@ defmodule Jido.Discovery do
   """
   @spec refresh() :: :ok | {:error, term()}
   def refresh do
-    dbug("Refreshing discovery cache")
-
     try do
       cache = build_cache()
       :persistent_term.put(@cache_key, cache)
@@ -264,8 +261,6 @@ defmodule Jido.Discovery do
   """
   @spec list_actions(keyword()) :: [component_metadata()]
   def list_actions(opts \\ []) do
-    dbug("Listing actions with options", opts: opts)
-
     with {:ok, cache} <- get_cache() do
       filter_and_paginate(cache.actions, opts)
     else
@@ -298,8 +293,6 @@ defmodule Jido.Discovery do
   """
   @spec list_sensors(keyword()) :: [component_metadata()]
   def list_sensors(opts \\ []) do
-    dbug("Listing sensors with options", opts: opts)
-
     with {:ok, cache} <- get_cache() do
       filter_and_paginate(cache.sensors, opts)
     else
@@ -332,8 +325,6 @@ defmodule Jido.Discovery do
   """
   @spec list_agents(keyword()) :: [component_metadata()]
   def list_agents(opts \\ []) do
-    dbug("Listing agents with options", opts: opts)
-
     with {:ok, cache} <- get_cache() do
       filter_and_paginate(cache.agents, opts)
     else
@@ -366,8 +357,6 @@ defmodule Jido.Discovery do
   """
   @spec list_skills(keyword()) :: [component_metadata()]
   def list_skills(opts \\ []) do
-    dbug("Listing skills with options", opts: opts)
-
     with {:ok, cache} <- get_cache() do
       filter_and_paginate(cache.skills, opts)
     else
@@ -400,8 +389,6 @@ defmodule Jido.Discovery do
   """
   @spec list_demos(keyword()) :: [component_metadata()]
   def list_demos(opts \\ []) do
-    dbug("Listing demos with options", opts: opts)
-
     with {:ok, cache} <- get_cache() do
       filter_and_paginate(cache.demos, opts)
     else
@@ -439,8 +426,6 @@ defmodule Jido.Discovery do
   end
 
   defp discover_components(metadata_function) do
-    dbug("Discovering components", metadata_function: metadata_function)
-
     all_applications()
     |> Enum.flat_map(&all_modules/1)
     |> Enum.filter(&has_metadata_function?(&1, metadata_function))

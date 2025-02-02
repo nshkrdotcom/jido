@@ -16,7 +16,7 @@ defmodule JidoTest.SensorTest do
     test "starts the sensor with valid options", %{bus_name: bus_name} do
       opts = [
         id: "test_id",
-        target: {:bus, bus_name},
+        target: {:bus, [target: bus_name, stream: "test"]},
         test_param: 42
       ]
 
@@ -30,7 +30,7 @@ defmodule JidoTest.SensorTest do
 
     test "uses default values when not provided", %{bus_name: bus_name} do
       opts = [
-        target: {:bus, bus_name}
+        target: {:bus, [target: bus_name, stream: "test"]}
       ]
 
       assert {:ok, pid} = TestSensor.start_link(opts)
@@ -43,7 +43,7 @@ defmodule JidoTest.SensorTest do
 
     test "fails to start with invalid options", %{bus_name: bus_name} do
       opts = [
-        target: {:bus, bus_name},
+        target: {:bus, [target: bus_name, stream: "test"]},
         test_param: "not an integer"
       ]
 
@@ -60,7 +60,7 @@ defmodule JidoTest.SensorTest do
   describe "Configuration management" do
     setup %{bus_name: bus_name} do
       opts = [
-        target: {:bus, bus_name},
+        target: {:bus, [target: bus_name, stream: "test"]},
         test_param: 42
       ]
 
@@ -94,7 +94,7 @@ defmodule JidoTest.SensorTest do
   describe "Sensor behavior" do
     setup %{bus_name: bus_name} do
       opts = [
-        target: {:bus, bus_name},
+        target: {:bus, [target: bus_name, stream: "test"]},
         test_param: 42
       ]
 
@@ -133,7 +133,7 @@ defmodule JidoTest.SensorTest do
   describe "Error handling" do
     test "handles invalid server options", %{bus_name: bus_name} do
       opts = [
-        target: {:bus, bus_name},
+        target: {:bus, [target: bus_name, stream: "test"]},
         test_param: "not an integer"
       ]
 
@@ -142,7 +142,10 @@ defmodule JidoTest.SensorTest do
     end
 
     test "handles errors in generate_signal", %{bus_name: bus_name} do
-      {:ok, pid} = JidoTest.TestSensors.ErrorSensor1.start_link(target: {:bus, bus_name})
+      {:ok, pid} =
+        JidoTest.TestSensors.ErrorSensor1.start_link(
+          target: {:bus, [target: bus_name, stream: "test"]}
+        )
 
       log =
         capture_log(fn ->
@@ -154,7 +157,10 @@ defmodule JidoTest.SensorTest do
     end
 
     test "handles errors in before_publish", %{bus_name: bus_name} do
-      {:ok, pid} = JidoTest.TestSensors.ErrorSensor2.start_link(target: {:bus, bus_name})
+      {:ok, pid} =
+        JidoTest.TestSensors.ErrorSensor2.start_link(
+          target: {:bus, [target: bus_name, stream: "test"]}
+        )
 
       log =
         capture_log(fn ->

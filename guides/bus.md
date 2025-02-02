@@ -5,6 +5,7 @@ In our previous guides, we explored how Actions provide composable building bloc
 ## Understanding the Signal Bus
 
 At its core, the Jido Signal Bus is a message routing and persistence system that enables:
+
 - Publishing and subscribing to signal streams
 - Persistent message storage and replay
 - Real-time signal distribution
@@ -45,7 +46,7 @@ Signals can be published to named streams:
 
 ```elixir
 signal = %Jido.Signal{
-  id: UUID.uuid4(),
+  id: Jido.Util.generate_id(),
   source: "user_service",
   type: "user.registered",
   data: %{user_id: "123", email: "user@example.com"},
@@ -56,6 +57,7 @@ signal = %Jido.Signal{
 ```
 
 The `:any_version` parameter tells the bus to append without checking versions. You can also use:
+
 - `:no_stream` - Requires stream doesn't exist
 - `:stream_exists` - Requires stream exists
 - Integer version - Requires exact version match
@@ -65,6 +67,7 @@ The `:any_version` parameter tells the bus to append without checking versions. 
 The bus supports two types of subscriptions:
 
 #### 1. Transient Subscriptions
+
 Best for temporary subscribers that don't need persistence:
 
 ```elixir
@@ -73,12 +76,13 @@ Best for temporary subscribers that don't need persistence:
 
 # Receive signals
 receive do
-  {:signals, signals} -> 
+  {:signals, signals} ->
     Enum.each(signals, &process_signal/1)
 end
 ```
 
 #### 2. Persistent Subscriptions
+
 For durable subscribers that need guaranteed delivery:
 
 ```elixir
@@ -103,6 +107,7 @@ end
 ```
 
 The subscription options include:
+
 - `:origin` - Start from beginning
 - `:current` - Start from now
 - Integer position - Start from specific point
@@ -154,7 +159,9 @@ snapshot = %Jido.Bus.Snapshot{
 The Signal Bus supports multiple backend adapters:
 
 ### In-Memory Adapter
+
 Best for development and testing:
+
 - Full persistence and replay support
 - Fast local operation
 - Memory-bound storage
@@ -165,7 +172,9 @@ Best for development and testing:
 ```
 
 ### PubSub Adapter
+
 Best for distributed scenarios:
+
 - Built on Phoenix.PubSub
 - Supports clustering
 - Real-time message distribution
@@ -174,4 +183,3 @@ Best for distributed scenarios:
 ```elixir
 {Jido.Bus, name: :my_bus, adapter: :pubsub, pubsub_name: MyApp.PubSub}
 ```
-

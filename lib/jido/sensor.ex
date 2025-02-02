@@ -100,8 +100,6 @@ defmodule Jido.Sensor do
                                      )
 
   @callback mount(map()) :: {:ok, map()} | {:error, any()}
-  @callback set_config(map()) :: {:ok, map()} | {:error, any()}
-  @callback get_config() :: {:ok, map()} | {:error, any()}
   @callback deliver_signal(map()) :: {:ok, Jido.Signal.t()} | {:error, any()}
   @callback on_before_deliver(Jido.Signal.t(), map()) :: {:ok, Jido.Signal.t()} | {:error, any()}
   @callback shutdown(map()) :: {:ok, map()} | {:error, any()}
@@ -128,12 +126,10 @@ defmodule Jido.Sensor do
                                               doc: "Unique identifier for the sensor instance"
                                             ],
                                             target: [
-                                              type:
-                                                {:custom, Jido.Sensor.SignalDelivery,
-                                                 :validate_delivery_target, []},
+                                              type: {:custom, __MODULE__, :validate_target, []},
                                               required: true,
                                               doc:
-                                                "Target for signal delivery. Can be {:pid, pid}, {:bus, bus_name}, {:name, process_name}, or {:remote, {node, target}}"
+                                                "Target for signal delivery. Can be a single dispatch config tuple or a keyword list of named configurations."
                                             ],
                                             retain_last: [
                                               type: :pos_integer,
@@ -247,6 +243,16 @@ defmodule Jido.Sensor do
               {:error, _} = error ->
                 error
             end
+          end
+
+          def child_spec(opts) do
+            %{
+              id: __MODULE__,
+              start: {__MODULE__, :start_link, [opts]},
+              shutdown: 5000,
+              restart: :permanent,
+              type: :worker
+            }
           end
 
           @doc """
@@ -412,10 +418,8 @@ defmodule Jido.Sensor do
           def deliver_signal(state) do
             OK.success(
               Jido.Signal.new(%{
-                source: "#{state.sensor.name}:#{state.id}",
                 topic: "signal",
-                payload: %{status: :ok},
-                timestamp: DateTime.utc_now()
+                data: %{status: :ok}
               })
             )
           end
@@ -449,19 +453,7 @@ defmodule Jido.Sensor do
           end
 
           defp deliver_signal(%Jido.Signal{} = signal, state) do
-            require Logger
-
-            Logger.debug("Delivering signal: #{inspect(signal)}")
-
-            routing_opts = %{
-              target: state.target,
-              delivery_mode: :async,
-              stream: "default",
-              version: :any_version,
-              publish_opts: []
-            }
-
-            Jido.Sensor.SignalDelivery.deliver({signal, routing_opts})
+            Jido.Signal.Dispatch.dispatch(signal, state.target)
           end
 
           defp update_last_values(state, signal) do
@@ -490,6 +482,18 @@ defmodule Jido.Sensor do
                          deliver_signal: 1,
                          on_before_deliver: 2,
                          shutdown: 1
+
+          @doc false
+          def validate_target(value) do
+            case Jido.Signal.Dispatch.validate_opts(value) do
+              {:ok, validated} ->
+                {:ok, validated}
+
+              {:error, _reason} ->
+                {:error,
+                 "invalid dispatch configuration - must be a valid dispatch config tuple or keyword list"}
+            end
+          end
 
         {:error, error} ->
           message = Error.format_nimble_config_error(error, "Sensor", __MODULE__)

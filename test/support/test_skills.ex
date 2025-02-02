@@ -1,4 +1,25 @@
 defmodule JidoTest.TestSkills do
+  defmodule TestSkill do
+    use Jido.Skill,
+      name: "test_skill",
+      description: "Test skill for callback testing",
+      schema_key: :test_skill,
+      signals: %{
+        input: ["test.skill.*"],
+        output: ["test.skill.result"]
+      }
+
+    defstruct [:name, :description, :schema_key, :signals]
+
+    def handle_signal(signal) do
+      {:ok, %{signal | data: Map.put(signal.data, :skill_handled, true)}}
+    end
+
+    def process_result(_signal, result) do
+      {:ok, Map.put(result, :skill_processed, true)}
+    end
+  end
+
   defmodule WeatherMonitorSkill do
     use Jido.Skill,
       name: "weather_monitor",
@@ -33,6 +54,8 @@ defmodule JidoTest.TestSkills do
           doc: "Alert configuration"
         ]
       }
+
+    defstruct [:name, :description, :category, :tags, :vsn, :schema_key, :signals, :config]
 
     # Actions that this skill provides to the agent
     defmodule Actions do
@@ -250,6 +273,45 @@ defmodule JidoTest.TestSkills do
         ) do
       # No signals emitted when no alert is needed
       []
+    end
+
+    # Add handle_signal and process_result callbacks
+    def handle_signal(signal) do
+      {:ok, %{signal | data: Map.put(signal.data, :skill_handled, true)}}
+    end
+
+    def process_result(_signal, result) do
+      {:ok, Map.put(result, :skill_processed, true)}
+    end
+  end
+
+  defmodule MockSkill do
+    def routes do
+      [
+        {:test_route, :test_handler}
+      ]
+    end
+
+    def child_spec(_) do
+      %{
+        id: __MODULE__,
+        start: {__MODULE__, :start_link, []},
+        type: :worker
+      }
+    end
+  end
+
+  defmodule InvalidSkill do
+    def routes do
+      :not_a_list
+    end
+
+    def child_spec(_) do
+      %{
+        id: __MODULE__,
+        start: {__MODULE__, :start_link, []},
+        type: :worker
+      }
     end
   end
 end

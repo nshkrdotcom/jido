@@ -27,19 +27,12 @@ defmodule Jido.Runner.Simple do
   """
   @behaviour Jido.Runner
 
-  use ExDbug, enabled: true, truncate: false
+  use ExDbug, enabled: false, truncate: false
+  @decorate_all dbug()
 
   alias Jido.Instruction
   alias Jido.Error
   alias Jido.Agent.Directive
-
-  alias Jido.Agent.Directive.{
-    Enqueue,
-    RegisterAction,
-    DeregisterAction,
-    Spawn,
-    Kill
-  }
 
   @type run_opts :: [apply_state: boolean()]
   @type run_result :: {:ok, Jido.Agent.t(), list()} | {:error, Error.t()}
@@ -104,25 +97,12 @@ defmodule Jido.Runner.Simple do
   def run(%{pending_instructions: instructions} = agent, opts \\ []) do
     apply_state = Keyword.get(opts, :apply_state, true)
 
-    dbug("Starting simple runner execution",
-      agent_id: agent.id,
-      queue_size: :queue.len(instructions),
-      apply_state: apply_state
-    )
-
     case :queue.out(instructions) do
       {{:value, %Instruction{} = instruction}, remaining} ->
-        dbug("Dequeued instruction for execution",
-          agent_id: agent.id,
-          instruction: instruction,
-          remaining_count: :queue.len(remaining)
-        )
-
         agent = %{agent | pending_instructions: remaining}
         execute_instruction(agent, instruction, apply_state)
 
       {:empty, _} ->
-        dbug("Execution skipped - empty instruction queue")
         {:ok, agent, []}
     end
   end
@@ -130,11 +110,6 @@ defmodule Jido.Runner.Simple do
   @doc false
   @spec execute_instruction(Jido.Agent.t(), Instruction.t(), boolean()) :: run_result()
   defp execute_instruction(agent, instruction, apply_state) do
-    dbug("Executing workflow action",
-      agent_id: agent.id,
-      action: instruction.action
-    )
-
     case Jido.Workflow.run(instruction) do
       {:ok, state_map, directives} when is_list(directives) ->
         handle_directive_result(agent, state_map, directives, apply_state)

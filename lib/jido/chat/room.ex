@@ -9,27 +9,60 @@ defmodule Jido.Chat.Room do
   use GenServer
   alias Jido.Chat.{Message, Participant}
 
+  @default_registry Jido.Chat.Registry
+
   defmodule State do
     defstruct [
       :bus_name,
       :room_id,
+      :registry,
+      :module,
       participants: %{},
       messages: []
     ]
   end
 
-  # Client API
+  defmacro __using__(_opts) do
+    quote do
+      @behaviour Jido.Chat.Room
 
-  @doc """
-  Returns a via tuple for registering or looking up a room process.
+      def child_spec(opts) do
+        %{
+          id: __MODULE__,
+          start: {__MODULE__, :start_link, [opts]},
+          type: :worker,
+          restart: :permanent,
+          shutdown: 5000
+        }
+      end
 
-  ## Parameters
-    * bus_name - The name of the Jido.Bus
-    * room_id - Unique identifier for the room
-  """
-  def via_tuple(bus_name, room_id) do
-    {:via, Registry, {Jido.Chat.Registry, {bus_name, room_id}}}
+      def mount(room), do: {:ok, room}
+      def handle_message(room, message), do: {:ok, message}
+      def handle_join(room, participant), do: {:ok, participant}
+      def handle_leave(room, participant), do: {:ok, participant}
+      def shutdown(room), do: :ok
+
+      defoverridable mount: 1, handle_message: 2, handle_join: 2, handle_leave: 2, shutdown: 1
+    end
   end
+
+  @callback mount(room :: pid()) ::
+              {:ok, pid()} | {:error, term()}
+
+  @callback handle_message(room :: pid(), message :: Message.t()) ::
+              {:ok, Message.t()} | {:error, term()}
+
+  @callback handle_join(room :: pid(), participant :: Participant.t()) ::
+              {:ok, Participant.t()} | {:error, term()}
+
+  @callback handle_leave(room :: pid(), participant :: Participant.t()) ::
+              {:ok, Participant.t()} | {:error, term()}
+
+  @callback shutdown(room :: pid()) :: :ok
+
+  @optional_callbacks mount: 1, handle_message: 2, handle_join: 2, handle_leave: 2, shutdown: 1
+
+  # Client API
 
   @doc """
   Starts a new chat room process.
@@ -37,12 +70,17 @@ defmodule Jido.Chat.Room do
   ## Options
     * :bus_name - Required. The name of the Jido.Bus to use
     * :room_id - Required. Unique identifier for this room
+    * :module - Optional. The module implementing the Room behaviour. Defaults to the calling module
+    * :registry - Optional. The registry to use. Defaults to Jido.Chat.Registry
   """
   def start_link(opts) do
     bus_name = Keyword.fetch!(opts, :bus_name)
     room_id = Keyword.fetch!(opts, :room_id)
-    name = via_tuple(bus_name, room_id)
-    GenServer.start_link(__MODULE__, {bus_name, room_id}, name: name)
+    module = Keyword.get(opts, :module, __MODULE__)
+    registry = Keyword.get(opts, :registry, @default_registry)
+    name = via_tuple(bus_name, room_id, registry)
+
+    GenServer.start_link(__MODULE__, {bus_name, room_id, module, registry}, name: name)
   end
 
   @doc """
@@ -106,19 +144,32 @@ defmodule Jido.Chat.Room do
   # Server Callbacks
 
   @impl true
-  def init({bus_name, room_id}) do
-    {:ok, %State{bus_name: bus_name, room_id: room_id}}
+  def init({bus_name, room_id, module, registry}) do
+    {:ok,
+     %State{
+       bus_name: bus_name,
+       room_id: room_id,
+       module: module,
+       registry: registry
+     }, {:continue, :mount}}
+  end
+
+  @impl true
+  def handle_continue(:mount, state) do
+    case apply(state.module, :mount, [self()]) do
+      {:ok, _room} -> {:noreply, state}
+      {:error, reason} -> {:stop, reason, state}
+    end
   end
 
   @impl true
   def handle_call({:add_participant, participant}, _from, state) do
-    case Map.has_key?(state.participants, participant.id) do
-      true ->
-        {:reply, {:error, :already_joined}, state}
-
-      false ->
-        new_state = put_in(state.participants[participant.id], participant)
-        {:reply, :ok, new_state}
+    with :ok <- validate_participant(participant, state),
+         {:ok, participant} <- apply(state.module, :handle_join, [self(), participant]) do
+      new_state = put_in(state.participants[participant.id], participant)
+      {:reply, :ok, new_state}
+    else
+      {:error, _reason} = error -> {:reply, error, state}
     end
   end
 
@@ -128,8 +179,14 @@ defmodule Jido.Chat.Room do
       {nil, _} ->
         {:reply, {:error, :not_found}, state}
 
-      {_participant, new_participants} ->
-        {:reply, :ok, %{state | participants: new_participants}}
+      {participant, new_participants} ->
+        case apply(state.module, :handle_leave, [self(), participant]) do
+          {:ok, _} ->
+            {:reply, :ok, %{state | participants: new_participants}}
+
+          {:error, _reason} = error ->
+            {:reply, error, state}
+        end
     end
   end
 
@@ -159,13 +216,12 @@ defmodule Jido.Chat.Room do
       participants: participants_map
     }
 
-    case Message.new(attrs, type) do
-      {:ok, message} ->
-        new_state = %{state | messages: [message | state.messages]}
-        {:reply, {:ok, message}, new_state}
-
-      {:error, _reason} = error ->
-        {:reply, error, state}
+    with {:ok, message} <- Message.new(attrs, type),
+         {:ok, message} <- apply(state.module, :handle_message, [self(), message]) do
+      new_state = %{state | messages: [message | state.messages]}
+      {:reply, {:ok, message}, new_state}
+    else
+      {:error, _reason} = error -> {:reply, error, state}
     end
   end
 
@@ -188,7 +244,33 @@ defmodule Jido.Chat.Room do
     end
   end
 
+  def resolve_room(bus_name, room_id) do
+    case Registry.lookup(@default_registry, {bus_name, room_id}) do
+      [{pid, _}] -> {:ok, pid}
+      [] -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Returns a via tuple for registering or looking up a room process.
+
+  ## Parameters
+    * bus_name - The name of the bus
+    * room_id - The room ID
+    * registry - The registry to use
+  """
+  def via_tuple(bus_name, room_id, registry \\ @default_registry) do
+    {:via, Registry, {registry, {bus_name, room_id}}}
+  end
+
   # Private Helpers
+
+  defp validate_participant(%Participant{} = participant, state) do
+    case Map.has_key?(state.participants, participant.id) do
+      true -> {:error, :already_joined}
+      false -> :ok
+    end
+  end
 
   # defp publish_message(message, state) do
   #   case Jido.Bus.publish(state.bus_name, state.room_id, :any_version, [message.signal]) do

@@ -11,7 +11,7 @@ defmodule Jido.Chat.Participant do
 
   defstruct [:id, :type, :display_name]
 
-  @valid_types [:human, :agent]
+  @valid_types [:human, :agent, :user]
 
   @doc """
   Creates a new participant with the given ID and type.
@@ -27,14 +27,24 @@ defmodule Jido.Chat.Participant do
       %Participant{id: "agent123", type: :agent, display_name: nil}
   """
   def new(id, type, opts \\ []) when is_binary(id) do
+    type = normalize_type(type)
+
     if type in @valid_types do
-      %__MODULE__{
-        id: id,
-        type: type,
-        display_name: Keyword.get(opts, :display_name)
-      }
+      {:ok,
+       %__MODULE__{
+         id: id,
+         type: type,
+         display_name: Keyword.get(opts, :display_name)
+       }}
     else
       {:error, :invalid_type}
+    end
+  end
+
+  def new!(id, type, opts \\ []) when is_binary(id) do
+    case new(id, type, opts) do
+      {:ok, participant} -> participant
+      {:error, _reason} = error -> raise error
     end
   end
 
@@ -48,4 +58,9 @@ defmodule Jido.Chat.Participant do
   Returns true if the participant is of the given type.
   """
   def type?(%__MODULE__{type: type}, expected_type), do: type == expected_type
+
+  # Private Helpers
+
+  defp normalize_type(:user), do: :human
+  defp normalize_type(type), do: type
 end

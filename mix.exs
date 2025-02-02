@@ -189,6 +189,8 @@ defmodule Jido.MixProject do
       {:typed_struct, "~> 0.3.0"},
       {:typed_struct_nimble_options, "~> 0.1.1"},
       {:quantum, "~> 3.5"},
+      # {:ex_dbug, "~> 2.0"},
+      {:ex_dbug, path: "../../../OSS/ex_dbug"},
       # Skill & Action Dependencies for examples
       {:abacus, "~> 2.1"},
 
@@ -199,20 +201,19 @@ defmodule Jido.MixProject do
       {:langchain, "~> 0.3.0-rc.1"},
       {:ex_json_schema, "~> 0.10.0"},
 
-      # Testing
-      {:benchee, "~> 1.3", only: [:dev, :test]},
+      # Development & Test Dependencies
+      {:benchee, "~> 1.0", only: [:dev, :test]},
       {:benchee_html, "~> 1.0", only: [:dev, :test]},
       {:credo, "~> 1.7"},
-      {:doctor, "~> 0.22.0", only: [:dev, :test]},
-      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:excoveralls, "~> 0.18.3", only: [:dev, :test]},
-      {:ex_dbug, "~> 1.2"},
       {:expublish, "~> 2.7", only: [:dev], runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
-      {:mimic, "~> 1.7", only: [:dev, :test]},
-      {:mock, "~> 0.3.8", only: [:dev, :test]},
-      {:stream_data, "~> 1.1", only: [:dev, :test]}
+      {:mock, "~> 0.3.0", only: :test},
+      {:mimic, "~> 1.11", only: :test},
+      {:stream_data, "~> 1.0", only: [:dev, :test]}
     ]
   end
 

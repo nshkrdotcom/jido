@@ -2,6 +2,8 @@ defmodule JidoTest.DirectiveTest do
   use ExUnit.Case, async: true
   use Mimic
 
+  @moduletag :capture_log
+
   alias Jido.Agent.Directive
 
   alias Jido.Agent.Directive.{

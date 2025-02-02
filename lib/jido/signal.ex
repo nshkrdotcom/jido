@@ -22,7 +22,40 @@ defmodule Jido.Signal do
     field(:jido_opts, map())
     field(:jido_causation_id, String.t())
     field(:jido_correlation_id, String.t())
+    field(:jido_output, Dipatch.t())
     field(:jido_metadata, map())
+  end
+
+  @doc """
+  Creates a new Signal struct, raising an error if invalid.
+
+  ## Parameters
+
+  - `attrs`: A map or keyword list containing the Signal attributes.
+
+  ## Returns
+
+  `Signal.t()` if the attributes are valid.
+
+  ## Raises
+
+  `RuntimeError` if the attributes are invalid.
+
+  ## Examples
+
+      iex> Jido.Signal.new!(%{type: "example.event", source: "/example"})
+      %Jido.Signal{type: "example.event", source: "/example", ...}
+
+      iex> Jido.Signal.new!(type: "example.event", source: "/example")
+      %Jido.Signal{type: "example.event", source: "/example", ...}
+
+  """
+  @spec new!(map() | keyword()) :: t() | no_return()
+  def new!(attrs) do
+    case new(attrs) do
+      {:ok, signal} -> signal
+      {:error, reason} -> raise reason
+    end
   end
 
   @doc """
@@ -30,7 +63,7 @@ defmodule Jido.Signal do
 
   ## Parameters
 
-  - `attrs`: A map containing the Signal attributes.
+  - `attrs`: A map or keyword list containing the Signal attributes.
 
   ## Returns
 
@@ -41,8 +74,15 @@ defmodule Jido.Signal do
       iex> Jido.Signal.new(%{type: "example.event", source: "/example", id: "123"})
       {:ok, %Jido.Signal{type: "example.event", source: "/example", id: "123", ...}}
 
+      iex> Jido.Signal.new(type: "example.event", source: "/example")
+      {:ok, %Jido.Signal{type: "example.event", source: "/example", ...}}
+
   """
-  @spec new(map()) :: {:ok, t()} | {:error, String.t()}
+  @spec new(map() | keyword()) :: {:ok, t()} | {:error, String.t()}
+  def new(attrs) when is_list(attrs) do
+    attrs |> Map.new() |> new()
+  end
+
   def new(attrs) when is_map(attrs) do
     caller =
       Process.info(self(), :current_stacktrace)
@@ -96,7 +136,10 @@ defmodule Jido.Signal do
          {:ok, dataschema} <- parse_dataschema(map),
          {:ok, data} <- parse_data(map["data"]),
          {:ok, jido_instructions} <- parse_jido_instructions(map["jido_instructions"]),
-         {:ok, jido_opts} <- parse_jido_opts(map["jido_opts"]) do
+         {:ok, jido_opts} <- parse_jido_opts(map["jido_opts"]),
+         {:ok, jido_correlation_id} <- parse_correlation_id(map["jido_correlation_id"]),
+         {:ok, jido_causation_id} <- parse_causation_id(map["jido_causation_id"]),
+         {:ok, jido_output} <- parse_jido_output(map["jido_output"]) do
       event = %__MODULE__{
         specversion: "1.0.2",
         type: type,
@@ -108,7 +151,10 @@ defmodule Jido.Signal do
         dataschema: dataschema,
         data: data,
         jido_instructions: jido_instructions,
-        jido_opts: jido_opts
+        jido_opts: jido_opts,
+        jido_correlation_id: jido_correlation_id,
+        jido_causation_id: jido_causation_id,
+        jido_output: jido_output
       }
 
       {:ok, event}
@@ -187,4 +233,44 @@ defmodule Jido.Signal do
   defp parse_jido_opts(nil), do: {:ok, %{}}
   defp parse_jido_opts(opts) when is_map(opts), do: {:ok, opts}
   defp parse_jido_opts(_), do: {:error, "jido_opts must be a map"}
+
+  defp parse_correlation_id(nil), do: {:ok, UUID.uuid4()}
+  defp parse_correlation_id(id) when is_binary(id) and byte_size(id) > 0, do: {:ok, id}
+  defp parse_correlation_id(""), do: {:error, "correlation_id given but empty"}
+  defp parse_correlation_id(_), do: {:error, "correlation_id must be a string"}
+
+  defp parse_causation_id(nil), do: {:ok, UUID.uuid4()}
+  defp parse_causation_id(id) when is_binary(id) and byte_size(id) > 0, do: {:ok, id}
+  defp parse_causation_id(""), do: {:error, "causation_id given but empty"}
+  defp parse_causation_id(_), do: {:error, "causation_id must be a string"}
+
+  defp parse_jido_output(nil), do: {:ok, nil}
+
+  defp parse_jido_output({adapter, opts} = config) when is_atom(adapter) and is_list(opts) do
+    case Jido.Signal.Dispatch.validate_opts(config) do
+      {:ok, validated} -> {:ok, validated}
+      {:error, _} -> {:error, "invalid jido_output dispatch config"}
+    end
+  end
+
+  defp parse_jido_output(configs) when is_list(configs) do
+    # Validate each config in the list
+    configs
+    |> Enum.reduce_while({:ok, []}, fn
+      {adapter, opts}, {:ok, acc} when is_atom(adapter) and is_list(opts) ->
+        case Jido.Signal.Dispatch.validate_opts({adapter, opts}) do
+          {:ok, validated} -> {:cont, {:ok, [validated | acc]}}
+          {:error, _} -> {:halt, {:error, "invalid jido_output dispatch config"}}
+        end
+
+      _, _ ->
+        {:halt, {:error, "invalid jido_output dispatch config"}}
+    end)
+    |> case do
+      {:ok, validated} -> {:ok, Enum.reverse(validated)}
+      error -> error
+    end
+  end
+
+  defp parse_jido_output(_), do: {:error, "jido_output must be a valid dispatch config"}
 end

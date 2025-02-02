@@ -19,7 +19,10 @@ defmodule Jido.Application do
       {DynamicSupervisor, strategy: :one_for_one, name: Jido.BusSupervisor},
 
       # Chat Room Registry
-      {Registry, keys: :unique, name: Jido.Chat.Registry}
+      {Registry, keys: :unique, name: Jido.Chat.Registry},
+
+      # Add the Jido Scheduler (Quantum) under the name :jido_quantum
+      {Jido.Scheduler, name: :jido_quantum}
     ]
 
     # Initialize discovery cache asynchronously

@@ -1,4 +1,6 @@
 defmodule Jido.Agent.Directive do
+  require Logger
+
   @moduledoc """
     Provides a type-safe way to modify agent state through discrete, validated directives.
 
@@ -72,8 +74,17 @@ defmodule Jido.Agent.Directive do
     * `:invalid_module` - The module specified in a `Spawn` is invalid
     * `:invalid_pid` - The PID specified in a `Kill` is invalid
     * `:invalid_topic` - The topic specified in a broadcast/subscribe/unsubscribe directive is invalid
+
+    ## Ideas
+    Change Mode
+    Change Verbosity
+    Manage Router (add/remove/etc)
+    Manage Skills (add/remove/etc)
+    Manage Dispatchers (add/remove/etc)
+
   """
   use ExDbug, enabled: false
+  @decorate_all dbug()
   use TypedStruct
   alias Jido.Agent
   alias Jido.Agent.Server.State, as: ServerState
@@ -193,7 +204,7 @@ defmodule Jido.Agent.Directive do
   def apply_server_directive(state, directives, _opts \\ []) do
     # First validate all directives
     with :ok <- validate_directives(directives) do
-      {agent_directives, server_directives} = split_directives(directives)
+      {_agent_directives, server_directives} = split_directives(directives)
 
       {:ok, state, server_directives}
       # # First apply agent directives to the embedded agent

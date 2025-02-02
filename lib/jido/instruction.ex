@@ -61,7 +61,9 @@ defmodule Jido.Instruction do
   executed by a Runner module like `Jido.Runner.Simple` or `Jido.Runner.Chain`.
   """
   alias Jido.Error
+  alias Jido.Instruction
   use ExDbug, enabled: false
+  @decorate_all dbug()
   use TypedStruct
 
   @type action_module :: module()
@@ -71,11 +73,103 @@ defmodule Jido.Instruction do
   @type instruction_list :: [instruction()]
 
   typedstruct do
+    field(:id, String.t(), default: UUID.uuid4())
     field(:action, module(), enforce: true)
     field(:params, map(), default: %{})
     field(:context, map(), default: %{})
     field(:opts, keyword(), default: [])
+    field(:correlation_id, String.t(), default: nil)
   end
+
+  @doc """
+  Creates a new Instruction struct from a map or keyword list of attributes.
+  Returns the struct directly or raises an error.
+
+  ## Parameters
+    * `attrs` - Map or keyword list containing instruction attributes:
+      * `:action` - Action module (required)
+      * `:params` - Map of parameters (optional, default: %{})
+      * `:context` - Context map (optional, default: %{})
+      * `:opts` - Keyword list of options (optional, default: [])
+
+  ## Returns
+    * `%Instruction{}` - Successfully created instruction
+
+  ## Raises
+    * `Jido.Error` - If action is missing or invalid
+
+  ## Examples
+
+      iex> Instruction.new!(%{action: MyAction, params: %{value: 1}})
+      %Instruction{action: MyAction, params: %{value: 1}}
+
+      iex> Instruction.new!(action: MyAction)
+      %Instruction{action: MyAction}
+
+      iex> Instruction.new!(%{params: %{value: 1}})
+      ** (Jido.Error) missing action
+  """
+  @spec new!(map() | keyword()) :: t() | no_return()
+  def new!(attrs) do
+    case new(attrs) do
+      {:ok, instruction} ->
+        instruction
+
+      {:error, reason} ->
+        {:error,
+         Error.validation_error("Invalid instruction configuration", %{
+           reason: reason
+         })}
+    end
+  end
+
+  @doc """
+  Creates a new Instruction struct from a map or keyword list of attributes.
+
+  ## Parameters
+    * `attrs` - Map or keyword list containing instruction attributes:
+      * `:action` - Action module (required)
+      * `:params` - Map of parameters (optional, default: %{})
+      * `:context` - Context map (optional, default: %{})
+      * `:opts` - Keyword list of options (optional, default: [])
+      * `:id` - String identifier (optional, defaults to UUID)
+      * `:correlation_id` - String correlation ID (optional)
+
+  ## Returns
+    * `{:ok, %Instruction{}}` - Successfully created instruction
+    * `{:error, :missing_action}` - If action is not provided
+    * `{:error, :invalid_action}` - If action is not a module
+
+  ## Examples
+
+      iex> Instruction.new(%{action: MyAction, params: %{value: 1}})
+      {:ok, %Instruction{action: MyAction, params: %{value: 1}}}
+
+      iex> Instruction.new(action: MyAction)
+      {:ok, %Instruction{action: MyAction}}
+
+      iex> Instruction.new(%{params: %{value: 1}})
+      {:error, :missing_action}
+  """
+  @spec new(map() | keyword()) :: {:ok, t()} | {:error, :missing_action | :invalid_action}
+  def new(attrs) when is_list(attrs) do
+    new(Map.new(attrs))
+  end
+
+  def new(%{action: action} = attrs) when is_atom(action) do
+    {:ok,
+     %__MODULE__{
+       id: Map.get(attrs, :id, UUID.uuid4()),
+       action: action,
+       params: Map.get(attrs, :params, %{}),
+       context: Map.get(attrs, :context, %{}),
+       opts: Map.get(attrs, :opts, []),
+       correlation_id: Map.get(attrs, :correlation_id)
+     }}
+  end
+
+  def new(%{action: _}), do: {:error, :invalid_action}
+  def new(_), do: {:error, :missing_action}
 
   @doc """
   Normalizes instruction shorthand input into instruction structs. Accepts a variety of input formats
@@ -89,119 +183,68 @@ defmodule Jido.Instruction do
       * Action tuple {module, params}
       * List of actions/tuples/instructions
     * `context` - Optional context map to merge into all instructions (default: %{})
-    * `opts` - Optional keyword list of options, see `Jido.Workflow.run/4` for supported options
+    * `opts` - Optional keyword list of options (default: [])
 
   ## Returns
     * `{:ok, [%Instruction{}]}` - List of normalized instruction structs
     * `{:error, term()}` - If normalization fails
-
-  ## Examples
-
-      iex> Instruction.normalize(MyAction)
-      {:ok, [%Instruction{action: MyAction, params: %{}, context: %{}}]}
-
-      iex> Instruction.normalize({MyAction, %{value: 1}}, %{user_id: "123"})
-      {:ok, [%Instruction{action: MyAction, params: %{value: 1}, context: %{user_id: "123"}}]}
-
-      iex> Instruction.normalize([
-      ...>   %Instruction{action: MyAction, context: %{local: true}},
-      ...>   {OtherAction, %{data: "test"}}
-      ...> ], %{request_id: "abc"})
-      {:ok, [
-        %Instruction{action: MyAction, context: %{local: true, request_id: "abc"}},
-        %Instruction{action: OtherAction, params: %{data: "test"}, context: %{request_id: "abc"}}
-      ]}
   """
   @spec normalize(instruction() | instruction_list(), map(), keyword()) ::
           {:ok, [t()]} | {:error, term()}
   def normalize(input, context \\ %{}, opts \\ [])
 
-  # Normalize context and opts
-  def normalize(input, context, opts) when not is_map(context) or not is_list(opts) do
-    normalize(
-      input,
-      if(is_map(context), do: context, else: %{}),
-      if(is_list(opts), do: opts, else: [])
-    )
+  # Handle lists by recursively normalizing each element
+  def normalize(instructions, context, opts) when is_list(instructions) do
+    # Check for nested lists first
+    if Enum.any?(instructions, &is_list/1) do
+      {:error,
+       Error.execution_error("Invalid instruction format: nested lists are not allowed", %{
+         instructions: instructions
+       })}
+    else
+      context = context || %{}
+
+      instructions
+      |> Enum.reduce_while({:ok, []}, fn instruction, {:ok, acc} ->
+        case normalize(instruction, context, opts) do
+          {:ok, [normalized]} -> {:cont, {:ok, [normalized | acc]}}
+          error -> {:halt, error}
+        end
+      end)
+      |> case do
+        {:ok, list} -> {:ok, Enum.reverse(list)}
+        error -> error
+      end
+    end
   end
 
-  # Already normalized instruction
+  # Already normalized instruction - just merge context and opts
   def normalize(%__MODULE__{} = instruction, context, opts) do
+    context = context || %{}
     merged_opts = if Enum.empty?(instruction.opts), do: opts, else: instruction.opts
     {:ok, [%{instruction | context: Map.merge(instruction.context, context), opts: merged_opts}]}
   end
 
-  # List containing instructions/actions
-  def normalize(instructions, context, opts) when is_list(instructions) do
-    dbug("Normalizing instruction list", instructions: instructions)
-
-    instructions
-    |> Enum.reduce_while({:ok, []}, fn
-      # Handle existing instruction struct
-      %__MODULE__{} = inst, {:ok, acc} ->
-        merged_opts = if Enum.empty?(inst.opts), do: opts, else: inst.opts
-        merged = %{inst | context: Map.merge(inst.context, context), opts: merged_opts}
-        {:cont, {:ok, [merged | acc]}}
-
-      # Handle bare action module
-      action, {:ok, acc} when is_atom(action) ->
-        instruction = %__MODULE__{action: action, params: %{}, context: context, opts: opts}
-        {:cont, {:ok, [instruction | acc]}}
-
-      # Handle action tuple with params
-      {action, params}, {:ok, acc} when is_atom(action) ->
-        case normalize_params(params) do
-          {:ok, normalized_params} ->
-            instruction = %__MODULE__{
-              action: action,
-              params: normalized_params,
-              context: context,
-              opts: opts
-            }
-
-            {:cont, {:ok, [instruction | acc]}}
-
-          {:error, reason} ->
-            {:halt, {:error, reason}}
-        end
-
-      invalid, {:ok, _acc} ->
-        dbug("Invalid instruction format", instruction: invalid)
-
-        {:halt,
-         {:error,
-          Error.execution_error(
-            "Invalid instruction format. Expected an instruction struct, action module, or {action, params} tuple",
-            %{
-              instruction: invalid,
-              expected_formats: [
-                "%Instruction{}",
-                "MyAction",
-                "{MyAction, %{param: value}}"
-              ]
-            }
-          )}}
-    end)
-    |> case do
-      {:ok, list} -> {:ok, Enum.reverse(list)}
-      error -> error
-    end
-  end
-
   # Single action module
   def normalize(action, context, opts) when is_atom(action) do
-    {:ok, [%__MODULE__{action: action, params: %{}, context: context, opts: opts}]}
+    context = context || %{}
+    {:ok, [new!(%{action: action, params: %{}, context: context, opts: opts})]}
   end
 
-  # Action tuple
+  # Action tuple with params
   def normalize({action, params}, context, opts) when is_atom(action) do
-    with {:ok, normalized_params} <- normalize_params(params) do
-      {:ok,
-       [%__MODULE__{action: action, params: normalized_params, context: context, opts: opts}]}
+    context = context || %{}
+
+    case normalize_params(params) do
+      {:ok, normalized_params} ->
+        {:ok, [new!(%{action: action, params: normalized_params, context: context, opts: opts})]}
+
+      error ->
+        error
     end
   end
 
-  # Return an error for any other format
+  # Invalid format
   def normalize(invalid, _context, _opts) do
     {:error, Error.execution_error("Invalid instruction format", %{instruction: invalid})}
   end
@@ -226,13 +269,12 @@ defmodule Jido.Instruction do
       iex> Instruction.validate_allowed_actions(instructions, [MyAction])
       :ok
   """
-  @spec validate_allowed_actions([t()], [module()]) :: :ok | {:error, term()}
-  def validate_allowed_actions(instructions, allowed_actions) do
-    dbug("Validating allowed actions",
-      instructions: instructions,
-      allowed_actions: allowed_actions
-    )
+  @spec validate_allowed_actions(t() | [t()], [module()]) :: :ok | {:error, term()}
+  def validate_allowed_actions(%Instruction{} = instruction, allowed_actions) do
+    validate_allowed_actions([instruction], allowed_actions)
+  end
 
+  def validate_allowed_actions(instructions, allowed_actions) when is_list(instructions) do
     unregistered =
       instructions
       |> Enum.map(& &1.action)
@@ -257,8 +299,6 @@ defmodule Jido.Instruction do
   defp normalize_params(params) when is_map(params), do: {:ok, params}
 
   defp normalize_params(invalid) do
-    dbug("Invalid params format", params: invalid)
-
     {:error,
      Error.execution_error(
        "Invalid params format. Params must be a map.",

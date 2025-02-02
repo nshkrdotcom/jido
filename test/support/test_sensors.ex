@@ -67,31 +67,31 @@ defmodule JidoTest.TestSensors do
       {:noreply, new_state}
     end
 
-    @impl true
-    def get_config do
-      state = %{
-        id: "test_id",
-        target: "test_target",
-        sensor: %{test_param: 42},
-        last_values: :queue.new(),
-        config: %{test_param: 42}
-      }
+    # @impl true
+    # def get_config do
+    #   state = %{
+    #     id: "test_id",
+    #     target: "test_target",
+    #     sensor: %{test_param: 42},
+    #     last_values: :queue.new(),
+    #     config: %{test_param: 42}
+    #   }
 
-      {:ok, state}
-    end
+    #   {:ok, state}
+    # end
 
-    @impl true
-    def set_config(config) do
-      state = %{
-        id: "test_id",
-        target: "test_target",
-        sensor: %{test_param: 42},
-        last_values: :queue.new(),
-        config: config
-      }
+    # @impl true
+    # def set_config(config) do
+    #   state = %{
+    #     id: "test_id",
+    #     target: "test_target",
+    #     sensor: %{test_param: 42},
+    #     last_values: :queue.new(),
+    #     config: config
+    #   }
 
-      {:ok, state}
-    end
+    #   {:ok, state}
+    # end
 
     def get_last_values(pid) do
       state = :sys.get_state(pid)
@@ -103,66 +103,56 @@ defmodule JidoTest.TestSensors do
     @moduledoc false
     use Jido.Sensor,
       name: "counter_sensor",
-      description: "A sensor that emits a counter value at a specified interval",
-      category: :counter,
-      tags: [:counter, :interval],
-      vsn: "1.0.0",
       schema: [
-        floor: [type: :integer, default: 0],
-        emit_interval: [type: :pos_integer, required: true]
+        id: [type: :string, required: true],
+        target: [type: :any, required: true],
+        emit_interval: [type: :pos_integer, required: true],
+        floor: [type: :integer, default: 0]
       ]
 
     @impl true
     def mount(opts) do
       state = %{
-        id: Map.get(opts, :id, "counter_id"),
-        target: Map.get(opts, :target, "counter_target"),
-        sensor: Map.get(opts, :sensor, %{floor: 0}),
-        last_values: :queue.new(),
-        config: Map.merge(%{floor: 0}, Map.get(opts, :config, %{})),
-        counter: Map.get(opts, :floor, 0)
+        id: opts.id,
+        target: opts.target,
+        config: %{
+          emit_interval: opts.emit_interval,
+          floor: opts.floor
+        },
+        counter: opts.floor
       }
 
       schedule_emit(state)
-      OK.success(state)
+      {:ok, state}
     end
 
     @impl true
     def deliver_signal(state) do
-      new_counter = state.counter + 1
+      new_state = %{state | counter: state.counter + 1}
 
-      {:ok,
-       Jido.Signal.new(%{
-         source: "#{state.sensor.name}:#{state.id}",
-         subject: "counter",
-         type: "counter",
-         data: %{value: new_counter},
-         timestamp: DateTime.utc_now()
-       })}
+      signal = %{
+        type: "counter",
+        data: %{
+          value: new_state.counter
+        }
+      }
+
+      {:ok, signal, new_state}
     end
 
-    @impl true
-    def get_config do
-      {:ok, %{floor: 0}}
-    end
-
-    @impl true
-    def set_config(config) do
-      {:ok, config}
-    end
-
+    @impl GenServer
     def handle_info(:emit, state) do
       case deliver_signal(state) do
-        {:ok, signal} ->
-          case Jido.Sensor.SignalDelivery.deliver({signal, %{target: state.target}}) do
+        {:ok, signal, new_state} ->
+          case Jido.Signal.Dispatch.dispatch({:ok, signal}, state.target) do
             :ok ->
-              schedule_emit(state)
-              {:noreply, %{state | counter: state.counter + 1}}
+              schedule_emit(new_state)
+              {:noreply, new_state}
 
             {:error, reason} ->
-              Logger.warning("Error publishing signal: #{inspect(reason)}")
-              schedule_emit(state)
-              {:noreply, state}
+              Logger.warning("Error dispatching signal: #{inspect(reason)}")
+              schedule_emit(new_state)
+              {:noreply, new_state}
           end
       end
     end
@@ -198,31 +188,31 @@ defmodule JidoTest.TestSensors do
       {:error, :test_error}
     end
 
-    @impl true
-    def get_config do
-      state = %{
-        id: "error_id",
-        target: "error_target",
-        sensor: %{error: true},
-        last_values: :queue.new(),
-        config: %{error: true}
-      }
+    # @impl true
+    # def get_config do
+    #   state = %{
+    #     id: "error_id",
+    #     target: "error_target",
+    #     sensor: %{error: true},
+    #     last_values: :queue.new(),
+    #     config: %{error: true}
+    #   }
 
-      {:ok, state}
-    end
+    #   {:ok, state}
+    # end
 
-    @impl true
-    def set_config(config) do
-      state = %{
-        id: "error_id",
-        target: "error_target",
-        sensor: %{error: true},
-        last_values: :queue.new(),
-        config: config
-      }
+    # @impl true
+    # def set_config(config) do
+    #   state = %{
+    #     id: "error_id",
+    #     target: "error_target",
+    #     sensor: %{error: true},
+    #     last_values: :queue.new(),
+    #     config: config
+    #   }
 
-      {:ok, state}
-    end
+    #   {:ok, state}
+    # end
   end
 
   defmodule ErrorSensor2 do
@@ -269,30 +259,30 @@ defmodule JidoTest.TestSensors do
 
     def on_before_deliver(signal, _state), do: {:ok, signal}
 
-    @impl true
-    def get_config do
-      state = %{
-        id: "error_id",
-        target: "error_target",
-        sensor: %{error: true},
-        last_values: :queue.new(),
-        config: %{error: true}
-      }
+    # @impl true
+    # def get_config do
+    #   state = %{
+    #     id: "error_id",
+    #     target: "error_target",
+    #     sensor: %{error: true},
+    #     last_values: :queue.new(),
+    #     config: %{error: true}
+    #   }
 
-      {:ok, state}
-    end
+    #   {:ok, state}
+    # end
 
-    @impl true
-    def set_config(config) do
-      state = %{
-        id: "error_id",
-        target: "error_target",
-        sensor: %{error: true},
-        last_values: :queue.new(),
-        config: config
-      }
+    # @impl true
+    # def set_config(config) do
+    #   state = %{
+    #     id: "error_id",
+    #     target: "error_target",
+    #     sensor: %{error: true},
+    #     last_values: :queue.new(),
+    #     config: config
+    #   }
 
-      {:ok, state}
-    end
+    #   {:ok, state}
+    # end
   end
 end

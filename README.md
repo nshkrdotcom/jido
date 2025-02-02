@@ -1,10 +1,8 @@
 # Jido (自動)
 
-The name "Jido" (自動) comes from the Japanese word meaning "automatic" or "automated", where 自 (ji) means "self" and 動 (dō) means "movement".
-
 Jido is a foundational framework for building autonomous, distributed agent systems in Elixir.
 
-> **Note**: Jido is a foundational framework that does not include AI or LLM capabilities out of the box. For AI integration, please see the separate [`jido_ai`](https://github.com/agentjido/jido_ai) package which provides custom actions for AI/LLM functionality like structured interactions with Anthropic's Claude models.
+The name "Jido" (自動) comes from the Japanese word meaning "automatic" or "automated", where 自 (ji) means "self" and 動 (dō) means "movement".
 
 [![Hex Version](https://img.shields.io/hexpm/v/jido.svg)](https://hex.pm/packages/jido)
 [![Hex Docs](http://img.shields.io/badge/hex.pm-docs-green.svg?style=flat)](https://hexdocs.pm/jido)
@@ -12,11 +10,41 @@ Jido is a foundational framework for building autonomous, distributed agent syst
 [![Coverage Status](https://coveralls.io/repos/github/agentjido/jido/badge.svg?branch=main)](https://coveralls.io/github/agentjido/jido?branch=main)
 [![Apache 2 License](https://img.shields.io/hexpm/l/jido)](https://opensource.org/licenses/Apache-2.0)
 
+## Quick Start
+
+```elixir
+# First, define our Calculator agent with supported operations
+iex> defmodule CalculatorAgent do
+...>   use Jido.Agent,
+...>     name: "calculator",
+...>     actions: [Actions.Add, Actions.Subtract, Actions.Multiply, Actions.Divide]
+...>   # Omitting the router that maps the "add" signal to the Add Action
+...> end
+{:module, CalculatorAgent, <<...>>, %{}}
+
+# Start the agent process
+iex> {:ok, pid} = CalculatorAgent.start_link()
+{:ok, #PID<0.123.0>}
+
+# Send a synchronous request to the agent
+iex> {:ok, result} = CalculatorAgent.call(pid, Signal.new(%{type: "add", data: %{a: 1, b: 2}}))
+{:ok, 3}
+
+# Send an asynchronous request to the agent
+iex> {:ok, request_id} = CalculatorAgent.cast(pid, Signal.new(%{type: "multiply", data: %{a: 2, b: 4}}))
+{:ok, "req_abc123"}
+
+# Receive the result of the asynchronous request
+iex> flush()
+{:jido_agent, "req_abc123", 8}
+:ok
+```
+
+This example barely scratches the surface of what Jido can do. For more examples, see the [Getting Started Guide](guides/getting-started.md) and [Jido Workbench](https://github.com/agentjido/jido_workbench) to play with our growing catalog of real-life examples.
+
 ## Overview
 
 Jido provides a robust foundation for building autonomous agents that can plan, execute, and adapt their behavior in distributed Elixir applications. Think of it as a toolkit for creating smart, composable workflows that can evolve and respond to their environment.
-
-> ⚠️ **Status**: Jido is under active development. The API is stable for Actions, Workflows, Agents and Sensors. We are actively working on the Agent Server and Supervisor for the 1.1 release.
 
 ## Are You Sure You Need an Agent?
 
@@ -25,7 +53,7 @@ Agents are a hot topic right now, but they aren’t a silver bullet. In particul
 - **LLMs aren’t required for all tasks** — Avoid building them into your core logic unless necessary
 - **Agents as Dynamic ETL** — Agents dynamically direct data ingestion, transformation, and output based on:
   - LLMs (e.g., GPT)
-  - Classical planning algorithms (A*, Behavior Trees, etc.)
+  - Classical planning algorithms (A\*, Behavior Trees, etc.)
 - **Simplicity often wins** — If you don’t need these dynamic behaviors, you probably don’t need an Agent. This library is likely overkill compared to straightforward code.
 
 ### Our Definition of an Agent
@@ -174,7 +202,7 @@ children = [
   {Registry, keys: :unique, name: Jido.AgentRegistry},
   {Phoenix.PubSub, name: MyApp.PubSub},
   {Jido.Agent.Supervisor, pubsub: MyApp.PubSub},
-  {Jido.Agent.Server, 
+  {Jido.Agent.Server,
     agent: MyApp.CalculatorAgent.new(),
     name: "calculator_1"
   }
@@ -225,6 +253,7 @@ Jido is built with a test-driven mindset and provides comprehensive testing tool
 ### Testing Utilities
 
 Jido provides several testing helpers:
+
 - `Jido.TestSupport` - Common testing utilities
 - Property-based testing via StreamData
 - Mocking support through Mimic

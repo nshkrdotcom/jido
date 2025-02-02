@@ -5,13 +5,13 @@ defmodule Jido.Chat.ParticipantTest do
 
   describe "new/2" do
     test "creates a human participant" do
-      participant = Participant.new("user123", :human)
+      {:ok, participant} = Participant.new("user123", :human)
       assert participant.id == "user123"
       assert participant.type == :human
     end
 
     test "creates an agent participant" do
-      participant = Participant.new("agent123", :agent)
+      {:ok, participant} = Participant.new("agent123", :agent)
       assert participant.id == "agent123"
       assert participant.type == :agent
     end
@@ -23,19 +23,19 @@ defmodule Jido.Chat.ParticipantTest do
 
   describe "display_name/1" do
     test "returns display name for human" do
-      participant = Participant.new("user123", :human, display_name: "Bob")
+      {:ok, participant} = Participant.new("user123", :human, display_name: "Bob")
       assert Participant.display_name(participant) == "Bob"
     end
 
     test "returns ID if no display name set" do
-      participant = Participant.new("user123", :human)
+      {:ok, participant} = Participant.new("user123", :human)
       assert Participant.display_name(participant) == "user123"
     end
   end
 
   describe "type?/2" do
     test "returns true when type matches" do
-      participant = Participant.new("user123", :human)
+      {:ok, participant} = Participant.new("user123", :human)
       assert Participant.type?(participant, :human)
       refute Participant.type?(participant, :agent)
     end

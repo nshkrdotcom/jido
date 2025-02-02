@@ -55,12 +55,12 @@ defmodule Jido.Agent.Server.State do
   #     :running
 
   use TypedStruct
-  require Logger
   alias Jido.Signal
   alias Jido.Agent.Server.Signal, as: ServerSignal
   alias Jido.Agent.Server.Output, as: ServerOutput
   alias Jido.Signal.Dispatch
   use ExDbug, enabled: false
+  @decorate_all dbug()
 
   @typedoc """
   Represents the possible states of a worker.
@@ -72,22 +72,38 @@ defmodule Jido.Agent.Server.State do
   - `:paused` - Server execution is suspended
   """
   @type status :: :initializing | :idle | :planning | :running | :paused
+  @type modes :: :auto | :step
+  @type log_levels :: :debug | :info | :warn | :error
+  @type output_config :: [
+          out: Dispatch.dispatch_config(),
+          log: Dispatch.dispatch_config(),
+          err: Dispatch.dispatch_config()
+        ]
 
   typedstruct do
     field(:agent, Jido.Agent.t(), enforce: true)
+    field(:mode, modes(), default: :auto)
+    field(:log_level, log_levels(), default: :info)
+    field(:max_queue_size, non_neg_integer(), default: 10_000)
+    field(:registry, atom(), default: Jido.AgentRegistry)
 
-    field(:dispatch, Dispatch.dispatch_config(),
-      default: {:bus, [target: {:bus, :default}, stream: "agent"]}
+    field(:output, output_config(),
+      default: [
+        out: {:bus, [target: :default, stream: "agent"]},
+        log: {:logger, []},
+        err: {:console, []}
+      ]
     )
 
-    field(:verbose, :debug | :info | :warn | :error, default: :info)
-    field(:mode, :auto | :manual, default: :auto)
+    field(:router, Jido.Signal.Router.t(), default: Jido.Signal.Router.new!())
+    field(:skills, [Jido.Skill.t()], default: [])
+
+    field(:child_supervisor, pid())
     field(:status, status(), default: :idle)
     field(:pending_signals, :queue.queue(), default: :queue.new())
-    field(:max_queue_size, non_neg_integer(), default: 10_000)
-    field(:child_supervisor, pid())
-    field(:correlation_id, String.t())
-    field(:causation_id, String.t())
+
+    field(:current_correlation_id, String.t(), default: nil)
+    field(:current_causation_id, String.t(), default: nil)
   end
 
   # Define valid state transitions and their conditions
@@ -145,7 +161,7 @@ defmodule Jido.Agent.Server.State do
   def transition(%__MODULE__{status: current} = state, desired) do
     case @transitions[current][desired] do
       nil ->
-        ServerOutput.emit_event(state, ServerSignal.transition_failed(), %{
+        ServerOutput.emit_log(state, ServerSignal.transition_failed(), %{
           from: current,
           to: desired
         })
@@ -153,11 +169,7 @@ defmodule Jido.Agent.Server.State do
         {:error, {:invalid_transition, current, desired}}
 
       _reason ->
-        dbug(
-          "Agent state transition from #{current} to #{desired} (#{reason}) for agent #{state.agent.id}"
-        )
-
-        ServerOutput.emit_event(state, ServerSignal.transition_succeeded(), %{
+        ServerOutput.emit_log(state, ServerSignal.transition_succeeded(), %{
           from: current,
           to: desired
         })
@@ -197,13 +209,7 @@ defmodule Jido.Agent.Server.State do
     queue_size = :queue.len(state.pending_signals)
 
     if queue_size >= state.max_queue_size do
-      dbug(
-        "Queue overflow, dropping signal",
-        queue_size: queue_size,
-        max_size: state.max_queue_size
-      )
-
-      ServerOutput.emit_event(state, ServerSignal.queue_overflow(), %{
+      ServerOutput.emit_log(state, ServerSignal.queue_overflow(), %{
         queue_size: queue_size,
         max_size: state.max_queue_size
       })
@@ -243,7 +249,13 @@ defmodule Jido.Agent.Server.State do
   def dequeue(%__MODULE__{} = state) do
     case :queue.out(state.pending_signals) do
       {{:value, signal}, new_queue} ->
-        {:ok, signal, %{state | pending_signals: new_queue}}
+        {:ok, signal,
+         %{
+           state
+           | pending_signals: new_queue,
+             current_correlation_id: signal.jido_correlation_id,
+             current_causation_id: nil
+         }}
 
       {:empty, _} ->
         {:error, :empty_queue}
@@ -271,13 +283,50 @@ defmodule Jido.Agent.Server.State do
   """
   @spec clear_queue(%__MODULE__{}) :: {:ok, %__MODULE__{}}
   def clear_queue(%__MODULE__{} = state) do
-    ServerOutput.emit_event(state, ServerSignal.queue_cleared(), %{
+    ServerOutput.emit_log(state, ServerSignal.queue_cleared(), %{
       queue_size: :queue.len(state.pending_signals)
     })
 
     {:ok, %{state | pending_signals: :queue.new()}}
   end
 
-  def validate_state(%__MODULE__{agent: nil}), do: {:error, "Agent is required"}
-  def validate_state(_state), do: :ok
+  @doc """
+  Checks the current size of the pending signals queue.
+
+  Returns the queue size as an integer if within limits, or :queue_overflow error if exceeded.
+
+  ## Parameters
+
+  - `state` - Current server state
+
+  ## Returns
+
+  - `{:ok, size}` - Current queue size as integer
+  - `{:error, :queue_overflow}` - Queue size exceeds maximum
+
+  ## Examples
+
+      iex> state = %Server.State{pending_signals: queue_with_items, max_queue_size: 100}
+      iex> Server.State.check_queue_size(state)
+      {:ok, 5}
+
+      iex> state = %Server.State{pending_signals: large_queue, max_queue_size: 10}
+      iex> Server.State.check_queue_size(state)
+      {:error, :queue_overflow}
+  """
+  @spec check_queue_size(%__MODULE__{}) :: {:ok, non_neg_integer()} | {:error, :queue_overflow}
+  def check_queue_size(%__MODULE__{} = state) do
+    queue_size = :queue.len(state.pending_signals)
+
+    if queue_size > state.max_queue_size do
+      ServerOutput.emit_log(state, ServerSignal.queue_overflow(), %{
+        queue_size: queue_size,
+        max_size: state.max_queue_size
+      })
+
+      {:error, :queue_overflow}
+    else
+      {:ok, queue_size}
+    end
+  end
 end

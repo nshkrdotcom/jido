@@ -1,6 +1,8 @@
 defmodule Jido.Signal.Dispatch.Bus do
   @behaviour Jido.Signal.Dispatch.Adapter
 
+  require Logger
+
   @type delivery_target :: atom()
   @type delivery_opts :: [
           target: delivery_target(),
@@ -34,6 +36,7 @@ defmodule Jido.Signal.Dispatch.Bus do
         Jido.Bus.publish(bus_name, stream, :any_version, [signal])
 
       {:error, :not_found} ->
+        Logger.error("Bus not found: #{bus_name}")
         {:error, :bus_not_found}
     end
   end

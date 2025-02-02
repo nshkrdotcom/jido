@@ -70,6 +70,8 @@ defmodule Jido.Signal.Router do
   """
   @spec new(route_spec() | [route_spec()] | [Route.t()] | nil) ::
           {:ok, Router.t()} | {:error, term()}
+  def new(routes \\ nil)
+
   def new(nil), do: {:ok, %Router{}}
 
   def new(routes) do
@@ -77,6 +79,23 @@ defmodule Jido.Signal.Router do
          {:ok, validated} <- validate(normalized) do
       trie = build_trie(validated)
       {:ok, %Router{trie: trie, route_count: length(validated)}}
+    end
+  end
+
+  @doc """
+  Creates a new router with the given routes, raising on error.
+  """
+  @spec new!(route_spec() | [route_spec()] | [Route.t()] | nil) :: Router.t()
+  def new!(routes \\ nil) do
+    case new(routes) do
+      {:ok, router} ->
+        router
+
+      {:error, reason} ->
+        {:error,
+         Error.validation_error("Invalid router configuration", %{
+           reason: reason
+         })}
     end
   end
 
@@ -359,8 +378,6 @@ defmodule Jido.Signal.Router do
   end
 
   def validate(invalid) do
-    dbug("Invalid input - expected Route struct or list of Route structs", value: invalid)
-
     {:error,
      Error.validation_error("Expected Route struct or list of Route structs", %{value: invalid})}
   end
@@ -385,8 +402,6 @@ defmodule Jido.Signal.Router do
   """
   @spec route(Router.t(), Signal.t()) :: {:ok, [Instruction.t()]} | {:error, term()}
   def route(%Router{trie: trie}, %Signal{type: type} = signal) do
-    dbug("Routing signal", type: type)
-
     results =
       type
       |> String.split(".")
@@ -394,10 +409,8 @@ defmodule Jido.Signal.Router do
       |> sort_and_execute(signal)
 
     if Enum.empty?(results) do
-      dbug("No handlers found for signal", type: type)
       {:error, Error.routing_error(:no_handler)}
     else
-      dbug("Successfully routed signal", type: type, handler_count: length(results))
       {:ok, results}
     end
   end
@@ -405,52 +418,40 @@ defmodule Jido.Signal.Router do
   private do
     # Validates a path string against the allowed format
     defp validate_path(path) when is_binary(path) do
-      dbug("Validating path", path: path)
-
       cond do
         String.contains?(path, "..") ->
-          dbug("Path contains double dots", path: path)
           {:error, Error.routing_error(:invalid_path_format)}
 
         String.match?(path, ~r/\*\*.*\*\*/) ->
-          dbug("Path contains consecutive multi-level wildcards", path: path)
           {:error, Error.routing_error(:invalid_path_format)}
 
         not String.match?(path, @valid_path_regex) ->
-          dbug("Path does not match regex", path: path)
           {:error, Error.routing_error(:invalid_path_format)}
 
         true ->
-          dbug("Path validation successful", path: path)
           {:ok, path}
       end
     end
 
     defp validate_path(_invalid) do
-      dbug("Invalid path type: #{inspect(_invalid)}")
       {:error, Error.routing_error(:invalid_path)}
     end
 
     # Validates that an instruction has a valid action
     defp validate_instruction(%Instruction{action: action} = instruction) when is_atom(action) do
-      dbug("Instruction validation successful")
       {:ok, instruction}
     end
 
     defp validate_instruction(_invalid) do
-      dbug("Invalid instruction: #{inspect(_invalid)}")
       {:error, Error.routing_error(:invalid_instruction)}
     end
 
     # Validates that a match function returns boolean for a test signal
     defp validate_match(nil) do
-      dbug("No match function provided")
       {:ok, nil}
     end
 
     defp validate_match(match_fn) when is_function(match_fn, 1) do
-      dbug("Validating match function")
-
       try do
         test_signal = %Signal{
           type: "",
@@ -462,26 +463,20 @@ defmodule Jido.Signal.Router do
           }
         }
 
-        dbug("Testing match function with test signal")
-
         case match_fn.(test_signal) do
           result when is_boolean(result) ->
-            dbug("Match function validation successful")
             {:ok, match_fn}
 
           _other ->
-            dbug("Match function returned non-boolean: #{inspect(_other)}")
             {:error, Error.routing_error(:invalid_match_function)}
         end
       rescue
         _error ->
-          dbug("Match function raised error: #{inspect(_error)}")
           {:error, Error.routing_error(:invalid_match_function)}
       end
     end
 
     defp validate_match(_invalid) do
-      dbug("Invalid match function: #{inspect(_invalid)}")
       {:error, Error.routing_error(:invalid_match_function)}
     end
 
@@ -489,40 +484,28 @@ defmodule Jido.Signal.Router do
     defp validate_priority(nil), do: {:ok, @default_priority}
 
     defp validate_priority(priority) when is_integer(priority) do
-      dbug("Validating priority", priority: priority)
-
       cond do
         priority > @max_priority ->
-          dbug("Priority too high", priority: priority, max: @max_priority)
           {:error, Error.routing_error({:priority_out_of_bounds, :too_high})}
 
         priority < @min_priority ->
-          dbug("Priority too low", priority: priority, min: @min_priority)
           {:error, Error.routing_error({:priority_out_of_bounds, :too_low})}
 
         true ->
-          dbug("Priority validation successful", priority: priority)
           {:ok, priority}
       end
     end
 
     defp validate_priority(_invalid) do
-      dbug("Invalid priority type: #{inspect(_invalid)}")
       {:error, Error.routing_error(:invalid_priority)}
     end
 
     # Cleans up a path string by removing extra dots and whitespace
     defp sanitize_path(path) do
-      dbug("Sanitizing path", original: path)
-
-      sanitized =
-        path
-        |> String.trim()
-        |> String.replace(~r/\.+/, ".")
-        |> String.replace(~r/(^\.|\.$)/, "")
-
-      dbug("Path sanitized", original: path, sanitized: sanitized)
-      sanitized
+      path
+      |> String.trim()
+      |> String.replace(~r/\.+/, ".")
+      |> String.replace(~r/(^\.|\.$)/, "")
     end
 
     # Builds the trie structure from validated routes
@@ -553,29 +536,20 @@ defmodule Jido.Signal.Router do
     end
 
     # Core routing logic
-    defp do_route([], %TrieNode{} = _trie, %Signal{} = _signal, acc) do
-      dbug("Reached end of segments", accumulated: length(acc))
-      acc
-    end
+    defp do_route([], %TrieNode{} = _trie, %Signal{} = _signal, acc), do: acc
 
     defp do_route([segment | rest] = _segments, %TrieNode{} = trie, %Signal{} = signal, acc) do
-      dbug("Routing segments", segments: _segments)
-
-      # First try exact match
       matching_handlers =
         case Map.get(trie.segments, segment) do
           nil ->
-            dbug("No exact match found for segment", segment: segment)
             acc
 
           %TrieNode{} = node ->
             handlers = collect_handlers(node.handlers, signal, acc)
 
             if rest == [] do
-              dbug("Found leaf node", segment: segment)
               handlers
             else
-              dbug("Found branch node", segment: segment)
               do_route(rest, node, signal, handlers)
             end
         end
@@ -584,11 +558,9 @@ defmodule Jido.Signal.Router do
       matching_handlers =
         case Map.get(trie.segments, "*") do
           nil ->
-            dbug("No single wildcard match found for segment", segment: segment)
             matching_handlers
 
           %TrieNode{} = node ->
-            dbug("Found single wildcard match", segment: segment)
             handlers = collect_handlers(node.handlers, signal, matching_handlers)
 
             if rest == [] do
@@ -601,11 +573,9 @@ defmodule Jido.Signal.Router do
       # Finally try multi-level wildcard
       case Map.get(trie.segments, "**") do
         nil ->
-          dbug("No multi-level wildcard match found for segment", segment: segment)
           matching_handlers
 
         %TrieNode{} = node ->
-          dbug("Found multi-level wildcard match", segment: segment)
           handlers = collect_handlers(node.handlers, signal, matching_handlers)
 
           # Try all possible remaining segment combinations
@@ -627,13 +597,10 @@ defmodule Jido.Signal.Router do
 
     # Handler collection logic
     defp collect_handlers(%NodeHandlers{} = node_handlers, %Signal{} = signal, acc) do
-      dbug("Collecting handlers")
-
       handler_results =
         case node_handlers.handlers do
           handlers when is_list(handlers) ->
             Enum.map(handlers, fn info ->
-              dbug("Found handler", priority: info.priority, complexity: info.complexity)
               {info.instruction, info.priority, info.complexity}
             end)
 
@@ -642,40 +609,30 @@ defmodule Jido.Signal.Router do
         end
 
       pattern_results = collect_pattern_matches(node_handlers.matchers || [], signal)
-      dbug("Collected pattern matches", count: length(pattern_results))
 
       handler_results ++ pattern_results ++ acc
     end
 
     defp collect_handlers(nil, %Signal{} = _signal, acc) do
-      dbug("No handlers to collect")
       acc
     end
 
     # Pattern matching
     defp collect_pattern_matches(matchers, %Signal{} = signal) do
-      dbug("Collecting pattern matches", count: length(matchers))
-
       Enum.reduce(matchers, [], fn %PatternMatch{} = matcher, matches ->
-        dbug("Testing pattern", priority: matcher.priority)
-
         try do
           case matcher.match.(signal) do
             true ->
-              dbug("Pattern matched", priority: matcher.priority)
               [{matcher.instruction, matcher.priority, 0} | matches]
 
             false ->
-              dbug("Pattern did not match", priority: matcher.priority)
               matches
 
             _ ->
-              dbug("Pattern returned non-boolean", priority: matcher.priority)
               matches
           end
         rescue
           _ ->
-            dbug("Pattern match failed", priority: matcher.priority)
             matches
         end
       end)
@@ -683,8 +640,6 @@ defmodule Jido.Signal.Router do
 
     # Handler execution
     defp sort_and_execute(handlers, %Signal{} = _signal) do
-      dbug("Sorting and executing handlers", count: length(handlers))
-
       handlers
       |> Enum.sort_by(
         fn {_instruction, priority, complexity} ->
@@ -732,8 +687,6 @@ defmodule Jido.Signal.Router do
 
     # Route addition to trie
     defp do_add_path_route([segment], %TrieNode{} = trie, %HandlerInfo{} = handler_info) do
-      dbug("Adding leaf handler", segment: segment, priority: handler_info.priority)
-
       Map.update(
         trie,
         :segments,
@@ -758,8 +711,6 @@ defmodule Jido.Signal.Router do
     end
 
     defp do_add_path_route([segment | rest], %TrieNode{} = trie, %HandlerInfo{} = handler_info) do
-      dbug("Adding branch segment", segment: segment)
-
       Map.update(
         trie,
         :segments,
@@ -776,8 +727,6 @@ defmodule Jido.Signal.Router do
     end
 
     defp do_add_pattern_route([segment], %TrieNode{} = trie, %PatternMatch{} = matcher) do
-      dbug("Adding leaf pattern matcher", segment: segment)
-
       Map.update(
         trie,
         :segments,
@@ -799,8 +748,6 @@ defmodule Jido.Signal.Router do
     end
 
     defp do_add_pattern_route([segment | rest], %TrieNode{} = trie, %PatternMatch{} = matcher) do
-      dbug("Adding pattern branch segment", segment: segment)
-
       Map.update(
         trie,
         :segments,

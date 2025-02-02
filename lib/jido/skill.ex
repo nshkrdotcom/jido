@@ -124,36 +124,15 @@ defmodule Jido.Skill do
           # Default implementations
           def initial_state, do: %{}
           def child_spec(_config), do: []
-          def router, do: []
-
-          def handle_result({:ok, result}, _path) do
-            [
-              %Signal{
-                id: UUID.uuid4(),
-                source: "replace_agent_id",
-                type: "#{name()}.result",
-                data: result
-              }
-            ]
-          end
-
-          def handle_result({:error, error}, _path) do
-            [
-              %Signal{
-                id: UUID.uuid4(),
-                source: "replace_agent_id",
-                type: "#{name()}.error",
-                data: %{
-                  error: error
-                }
-              }
-            ]
-          end
+          def routes, do: []
+          def handle_signal(signal), do: {:ok, signal}
+          def process_result(signal, result), do: {:ok, result}
 
           defoverridable initial_state: 0,
                          child_spec: 1,
-                         router: 0,
-                         handle_result: 2
+                         routes: 0,
+                         handle_signal: 1,
+                         process_result: 2
 
         {:error, error} ->
           message = Error.format_nimble_config_error(error, "Skill", __MODULE__)
@@ -169,8 +148,10 @@ defmodule Jido.Skill do
   # Behaviour callbacks
   @callback initial_state() :: map()
   @callback child_spec(config :: map()) :: Supervisor.child_spec() | [Supervisor.child_spec()]
-  @callback router() :: [map()]
-  @callback handle_result({:ok, map()} | {:error, term()}, String.t()) :: [Signal.t()]
+  @callback routes() :: [map()]
+  @callback handle_signal(signal :: Signal.t()) :: {:ok, Signal.t()} | {:error, term()}
+  @callback process_result(signal :: Signal.t(), result :: term()) ::
+              {:ok, term()} | {:error, any()}
 
   @doc """
   Skills should be defined at compile time, not runtime.

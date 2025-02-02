@@ -3,14 +3,69 @@ defmodule Jido.Chat.RoomTest do
 
   alias Jido.Chat.{Room, Message, Participant}
 
+  defmodule TestRoom do
+    use Jido.Chat.Room
+
+    def mount(room) do
+      send(test_process(), {:mount_called, room})
+      {:ok, room}
+    end
+
+    def handle_message(room, message) do
+      send(test_process(), {:handle_message_called, room, message})
+      {:ok, message}
+    end
+
+    def handle_join(room, participant) do
+      send(test_process(), {:handle_join_called, room, participant})
+      {:ok, participant}
+    end
+
+    def handle_leave(room, participant) do
+      send(test_process(), {:handle_leave_called, room, participant})
+      {:ok, participant}
+    end
+
+    defp test_process, do: Process.whereis(RoomTest)
+  end
+
   setup do
-    {:ok, room} = Room.start_link(bus_name: "test_bus", room_id: "room1")
+    # Register this test process to receive messages
+    Process.register(self(), RoomTest)
+
+    {:ok, room} = Room.start_link(bus_name: "test_bus", room_id: "room1", module: TestRoom)
+
+    # Verify mount was called
+    assert_receive {:mount_called, ^room}
+
     %{room: room}
+  end
+
+  describe "callbacks" do
+    test "handle_join is called when adding participant", %{room: room} do
+      participant = Participant.new!("user1", :human, display_name: "Bob")
+      assert :ok = Room.add_participant(room, participant)
+      assert_receive {:handle_join_called, ^room, ^participant}
+    end
+
+    test "handle_leave is called when removing participant", %{room: room} do
+      participant = Participant.new!("user1", :human)
+      :ok = Room.add_participant(room, participant)
+      assert_receive {:handle_join_called, ^room, ^participant}
+
+      assert :ok = Room.remove_participant(room, "user1")
+      assert_receive {:handle_leave_called, ^room, ^participant}
+    end
+
+    test "handle_message is called when posting message", %{room: room} do
+      {:ok, message} = Room.post_message(room, "Hello world", "agent_123")
+      assert_receive {:handle_message_called, ^room, ^message}
+    end
   end
 
   describe "add_participant/2" do
     test "adds a human participant to the room", %{room: room} do
-      participant = Participant.new("user1", :human, display_name: "Bob")
+      participant = Participant.new!("user1", :human, display_name: "Bob")
       assert :ok = Room.add_participant(room, participant)
 
       participants = Room.list_participants(room)
@@ -19,7 +74,7 @@ defmodule Jido.Chat.RoomTest do
     end
 
     test "adds an agent participant to the room", %{room: room} do
-      participant = Participant.new("agent1", :agent)
+      participant = Participant.new!("agent1", :agent)
       assert :ok = Room.add_participant(room, participant)
 
       participants = Room.list_participants(room)
@@ -28,7 +83,7 @@ defmodule Jido.Chat.RoomTest do
     end
 
     test "prevents duplicate participants", %{room: room} do
-      participant = Participant.new("user1", :human)
+      participant = Participant.new!("user1", :human)
       assert :ok = Room.add_participant(room, participant)
       assert {:error, :already_joined} = Room.add_participant(room, participant)
     end
@@ -36,7 +91,7 @@ defmodule Jido.Chat.RoomTest do
 
   describe "remove_participant/2" do
     test "removes a participant from the room", %{room: room} do
-      participant = Participant.new("user1", :human)
+      participant = Participant.new!("user1", :human)
       :ok = Room.add_participant(room, participant)
       assert :ok = Room.remove_participant(room, "user1")
       assert Room.list_participants(room) == []
@@ -49,8 +104,8 @@ defmodule Jido.Chat.RoomTest do
 
   describe "list_participants/1" do
     test "returns all participants in the room", %{room: room} do
-      human = Participant.new("user1", :human, display_name: "Bob")
-      agent = Participant.new("agent1", :agent)
+      human = Participant.new!("user1", :human, display_name: "Bob")
+      agent = Participant.new!("agent1", :agent)
 
       :ok = Room.add_participant(room, human)
       :ok = Room.add_participant(room, agent)

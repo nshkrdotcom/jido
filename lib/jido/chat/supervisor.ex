@@ -5,6 +5,8 @@ defmodule Jido.Chat.Supervisor do
   use DynamicSupervisor
   alias Jido.Chat.Room
 
+  @default_room_module Room
+
   def start_link(opts) do
     DynamicSupervisor.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -48,18 +50,17 @@ defmodule Jido.Chat.Supervisor do
 
   defp do_start_room(bus_name, room_id) do
     name = Room.via_tuple(bus_name, room_id)
+    room_module = Application.get_env(:jido, :chat_room_module, @default_room_module)
 
     DynamicSupervisor.start_child(
       __MODULE__,
-      {Room, [bus_name: bus_name, room_id: room_id, name: name]}
+      {room_module, [bus_name: bus_name, room_id: room_id, name: name]}
     )
   end
 
   def list_rooms(bus_name) do
     Registry.select(Jido.Chat.Registry, [
-      {{:"$1", :_, :_}, [], [:"$1"]}
+      {{{:"$1", :"$2"}, :_, :_}, [{:==, :"$1", bus_name}], [:"$2"]}
     ])
-    |> Enum.filter(fn {name, _room_id} -> name == bus_name end)
-    |> Enum.map(fn {_bus_name, room_id} -> room_id end)
   end
 end

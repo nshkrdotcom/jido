@@ -73,11 +73,11 @@ defmodule Jido do
       end
 
       # Delegate high-level API methods to Jido module
-      defdelegate cmd(agent, action, args \\ %{}, opts \\ []), to: Jido
-      defdelegate get_agent(id), to: Jido
-      defdelegate get_agent_status(agent_or_id), to: Jido
-      defdelegate get_agent_supervisor(agent_or_id), to: Jido
-      defdelegate get_agent_state(agent_or_id), to: Jido
+      # defdelegate cmd(agent, action, args \\ %{}, opts \\ []), to: Jido
+      # defdelegate get_agent(id), to: Jido
+      # defdelegate get_agent_status(agent_or_id), to: Jido
+      # defdelegate get_agent_supervisor(agent_or_id), to: Jido
+      # defdelegate get_agent_state(agent_or_id), to: Jido
     end
   end
 
@@ -138,96 +138,6 @@ defmodule Jido do
     case get_agent(id, opts) do
       {:ok, pid} -> pid
       {:error, :not_found} -> raise "Agent not found: #{id}"
-    end
-  end
-
-  @doc """
-  Sends a command to an agent.
-
-  ## Parameters
-
-  - `agent`: Agent pid or return value from get_agent
-  - `action`: The action to execute
-  - `args`: Optional map of action arguments
-  - `opts`: Optional keyword list of options
-
-  ## Returns
-
-  Returns the result of command execution.
-
-  ## Examples
-
-      iex> {:ok, agent} = Jido.get_agent("my-agent")
-      iex> Jido.cmd(agent, :generate_response, %{prompt: "Hello"})
-      {:ok, %{response: "Hi there!"}}
-  """
-  @spec cmd(pid() | {:ok, pid()}, atom(), map(), keyword()) :: any()
-  def cmd(pid_or_tuple, action \\ :default, args \\ %{}, opts \\ [])
-  def cmd({:ok, pid}, action, args, opts), do: cmd(pid, action, args, opts)
-
-  def cmd(pid, action, args, opts) when is_pid(pid) do
-    Jido.Agent.Server.cmd(pid, action, args, opts)
-  end
-
-  @doc """
-  Gets the status of an agent.
-
-  ## Parameters
-
-  - `agent_or_id`: Agent pid, ID, or return value from get_agent
-
-  ## Returns
-
-  - `{:ok, status}` with the agent's status
-  - `{:error, reason}` if status couldn't be retrieved
-
-  ## Examples
-
-      iex> {:ok, status} = Jido.get_agent_status("my-agent")
-      {:ok, :idle}
-  """
-  @spec get_agent_status(pid() | {:ok, pid()} | String.t()) :: {:ok, atom()} | {:error, term()}
-  def get_agent_status({:ok, pid}), do: get_agent_status(pid)
-
-  def get_agent_status(pid) when is_pid(pid) do
-    Jido.Agent.Server.get_status(pid)
-  end
-
-  def get_agent_status(id) when is_binary(id) or is_atom(id) do
-    case get_agent(id) do
-      {:ok, pid} -> get_agent_status(pid)
-      error -> error
-    end
-  end
-
-  @doc """
-  Gets the supervisor for an agent.
-
-  ## Parameters
-
-  - `agent_or_id`: Agent pid, ID, or return value from get_agent
-
-  ## Returns
-
-  - `{:ok, supervisor_pid}` with the agent's supervisor pid
-  - `{:error, reason}` if supervisor couldn't be retrieved
-
-  ## Examples
-
-      iex> {:ok, supervisor} = Jido.get_agent_supervisor("my-agent")
-      {:ok, #PID<0.124.0>}
-  """
-  @spec get_agent_supervisor(pid() | {:ok, pid()} | String.t()) :: {:ok, pid()} | {:error, term()}
-  def get_agent_supervisor({:ok, pid}), do: get_agent_supervisor(pid)
-
-  def get_agent_supervisor(pid) when is_pid(pid) do
-    Jido.Agent.Server.get_supervisor(pid)
-  end
-
-  def get_agent_supervisor(id) when is_binary(id) or is_atom(id) do
-    case get_agent(id) do
-      {:ok, pid} -> get_agent_supervisor(pid)
-      error -> error
     end
   end
 
@@ -293,10 +203,12 @@ defmodule Jido do
       new_opts =
         source_state
         |> Map.take([
+          :mode,
+          :log_level,
           :max_queue_size,
-          :verbose,
-          :dispatch,
-          :mode
+          :registry,
+          :output,
+          :skills
         ])
         |> Map.to_list()
         |> Keyword.merge([agent: agent], fn _k, _v1, v2 -> v2 end)
@@ -307,8 +219,14 @@ defmodule Jido do
         new_opts
         |> Keyword.put_new(:max_queue_size, 10_000)
         |> Keyword.put_new(:mode, :auto)
-        |> Keyword.put_new(:verbose, false)
-        |> Keyword.put_new(:dispatch, {:bus, [target: {:bus, :default}, stream: "agent"]})
+        |> Keyword.put_new(:log_level, :info)
+        |> Keyword.put_new(:registry, Jido.AgentRegistry)
+        |> Keyword.put_new(:output,
+          out: {:bus, [target: :default, stream: "agent"]},
+          log: {:logger, []},
+          err: {:console, []}
+        )
+        |> Keyword.put_new(:skills, [])
 
       Jido.Agent.Server.start_link(new_opts)
     end

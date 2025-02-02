@@ -17,7 +17,7 @@ defmodule Jido.CronSensor do
         Jido.CronSensor.start_link(
           id: "my_cron_sensor",
           target: {:bus, [target: :my_bus, stream: "some_stream"]},
-          scheduler: Jido.Scheduler,
+          quantum_ref: :jido_quantum,
           jobs: [
             # Auto-named job
             {~e"* * * * * *"e, :task1},
@@ -43,10 +43,10 @@ defmodule Jido.CronSensor do
     tags: [:cron, :scheduling],
     vsn: "1.0.0",
     schema: [
-      scheduler: [
+      quantum_ref: [
         type: :atom,
-        default: Jido.Scheduler,
-        doc: "Reference to the Quantum scheduler module to use"
+        default: :jido_quantum,
+        doc: "Reference to the Quantum scheduler to use"
       ],
       jobs: [
         type: {:list, :any},
@@ -59,6 +59,7 @@ defmodule Jido.CronSensor do
       ]
     ]
 
+  import Crontab.CronExpression
   require Logger
 
   @impl true
@@ -66,9 +67,9 @@ defmodule Jido.CronSensor do
     state = %{
       id: opts[:id],
       target: opts[:target],
-      sensor: %{name: "cron_sensor"},
+      sensor: __MODULE__,
       config: %{
-        scheduler: opts[:scheduler] || Jido.Scheduler,
+        quantum_ref: opts[:quantum_ref] || :jido_quantum,
         jobs: opts[:jobs] || []
       }
     }
@@ -85,7 +86,9 @@ defmodule Jido.CronSensor do
           add_job_now(state, name, schedule, task)
 
         other ->
-          Logger.warning("Unsupported job specification in CronSensor :jobs => #{inspect(other)}")
+          Logger.warning(
+            "Unsupported job specification in CronSensor :jobs => #{inspect(other)}"
+          )
       end
     end)
 
@@ -99,8 +102,7 @@ defmodule Jido.CronSensor do
   `schedule` is a Crontab.CronExpression (supports `~e""` sigil or built manually).
   `task` can be any term you want included in the dispatched signal's data.
   """
-  @spec add_job(GenServer.server(), atom(), Crontab.CronExpression.t(), any()) ::
-          :ok | {:error, any()}
+  @spec add_job(GenServer.server(), atom(), Crontab.CronExpression.t(), any()) :: :ok | {:error, any()}
   def add_job(sensor, name, schedule, task) when is_atom(name) do
     GenServer.call(sensor, {:add_job, name, schedule, task})
   end
@@ -144,52 +146,45 @@ defmodule Jido.CronSensor do
   end
 
   def handle_call({:remove_job, name}, _from, state) do
-    result = apply(state.config.scheduler, :delete_job, [name])
+    result = apply(state.config.quantum_ref, :delete_job, [name])
     {:reply, result, state}
   end
 
   def handle_call({:activate_job, name}, _from, state) do
-    result = apply(state.config.scheduler, :activate_job, [name])
+    result = apply(state.config.quantum_ref, :activate_job, [name])
     {:reply, result, state}
   end
 
   def handle_call({:deactivate_job, name}, _from, state) do
-    result = apply(state.config.scheduler, :deactivate_job, [name])
+    result = apply(state.config.quantum_ref, :deactivate_job, [name])
     {:reply, result, state}
   end
 
   def handle_call({:run_job, name}, _from, state) do
-    result = apply(state.config.scheduler, :run_job, [name])
+    result = apply(state.config.quantum_ref, :run_job, [name])
     {:reply, result, state}
   end
 
   # Internal helper
   defp add_job_now(state, name, schedule, task) do
     job =
-      state.config.scheduler.new_job()
+      Quantum.Job.new()
       |> Quantum.Job.set_name(name)
       |> Quantum.Job.set_schedule(schedule)
       |> Quantum.Job.set_task(fn ->
         signal = build_signal(state, name, schedule, task)
-        # Dispatch the signal through Jido and unwrap the {:ok, signal} tuple
-        case Jido.Signal.Dispatch.dispatch(signal, state.target) do
-          {:ok, dispatched_signal} -> dispatched_signal
-          other -> other
-        end
+        # Dispatch the signal through Jido
+        Jido.Signal.Dispatch.dispatch(signal, state.target)
       end)
 
-    # Add the job to the scheduler and return :ok
-    case apply(state.config.scheduler, :add_job, [job]) do
-      job when is_struct(job, Quantum.Job) -> :ok
-      other -> other
-    end
+    apply(state.config.quantum_ref, :add_job, [job])
   end
 
   defp build_signal(state, name, schedule, task) do
     now = DateTime.utc_now()
 
     Jido.Signal.new(%{
-      source: "#{Map.get(state.sensor, :name)}:#{state.id}:#{name}",
+      source: "#{state.sensor.name}:#{state.id}:#{name}",
       type: "cron_trigger",
       data: %{
         name: name,

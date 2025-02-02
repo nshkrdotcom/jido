@@ -21,10 +21,10 @@ defmodule Jido.Signal.Dispatch.ConsoleAdapter do
     [#{timestamp}] SIGNAL DISPATCHED
     type=#{signal.type}
     source=#{signal.source}
-    correlation_id=#{signal.correlation_id || "-"}
-    causation_id=#{signal.causation_id || "-"}
-    metadata=#{inspect(signal.metadata, pretty: true)}
-    payload=#{inspect(signal.payload, pretty: true)}
+    correlation_id=#{signal.jido_correlation_id || "-"}
+    causation_id=#{signal.jido_causation_id || "-"}
+    metadata=#{inspect(signal.jido_metadata, pretty: true)}
+    data=#{inspect(signal.data, pretty: true)}
     """)
 
     :ok

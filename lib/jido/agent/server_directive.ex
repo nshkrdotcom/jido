@@ -7,79 +7,83 @@ defmodule Jido.Agent.Server.Directive do
 
   alias Jido.Agent.Server.Process, as: ServerProcess
   alias Jido.Agent.Server.State, as: ServerState
-  alias Jido.Instruction
 
   alias Jido.Agent.Directive.{
     Spawn,
-    Kill,
-    Enqueue,
-    RegisterAction,
-    DeregisterAction
+    Kill
   }
 
   alias Jido.{Agent.Directive, Error}
-  use ExDbug, enabled: false
+
+  @doc """
+  Processes one or more directives against a server state.
+
+  Takes a ServerState and a list of directives, executing each in sequence and
+  returning the final updated state.
+
+  ## Parameters
+    - state: Current server state
+    - directives: Single directive or list of directives to process
+
+  ## Returns
+    - `{:ok, updated_state}` - All directives executed successfully
+    - `{:error, Error.t()}` - Failed to execute a directive
+
+  ## Examples
+
+      # Process a single directive
+      {:ok, state} = Directive.handle(state, %Spawn{module: MyWorker})
+
+      # Process multiple directives
+      {:ok, state} = Directive.handle(state, [
+        %Spawn{module: Worker1},
+        %Spawn{module: Worker2}
+      ])
+  """
+  @spec handle(ServerState.t(), Directive.t() | [Directive.t()]) ::
+          {:ok, ServerState.t()} | {:error, Error.t()}
+  def handle(%ServerState{} = state, directives) when is_list(directives) do
+    Enum.reduce_while(directives, {:ok, state}, fn directive, {:ok, acc_state} ->
+      case execute(acc_state, directive) do
+        {:ok, new_state} -> {:cont, {:ok, new_state}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  def handle(%ServerState{} = state, directive) do
+    execute(state, directive)
+  end
 
   @doc """
   Executes a validated directive within a server context.
 
-  Returns a tuple containing the result and updated server state.
+  Takes a ServerState and a Directive struct, and applies the directive's operation
+  to modify the server state appropriately.
+
+  ## Parameters
+    - state: Current server state
+    - directive: The directive to execute
+
+  ## Returns
+    - `{:ok, updated_state}` - Directive executed successfully
+    - `{:error, Error.t()}` - Failed to execute directive
+
+  ## Examples
+
+      # Execute a spawn directive
+      {:ok, state} = Directive.execute(state, %Spawn{module: MyWorker, args: [id: 1]})
+
+      # Execute a kill directive
+      {:ok, state} = Directive.execute(state, %Kill{pid: worker_pid})
   """
   @spec execute(ServerState.t(), Directive.t()) :: {:ok, ServerState.t()} | {:error, Error.t()}
-
-  def execute(%ServerState{} = _state, %Enqueue{action: nil}) do
-    {:error, Error.validation_error("Invalid action", %{action: nil})}
-  end
-
-  def execute(%ServerState{} = state, %Enqueue{} = directive) do
-    instruction = %Instruction{
-      action: directive.action,
-      params: directive.params,
-      context: directive.context,
-      opts: directive.opts
-    }
-
-    new_queue = :queue.in(instruction, state.pending_signals)
-    {:ok, %{state | pending_signals: new_queue}}
-  end
-
-  def execute(%ServerState{} = state, %RegisterAction{action_module: module})
-      when is_atom(module) do
-    case Code.ensure_loaded(module) do
-      {:module, _} ->
-        updated_agent = %{state.agent | actions: [module | state.agent.actions]}
-        {:ok, %{state | agent: updated_agent}}
-
-      {:error, _reason} ->
-        {:error, Error.validation_error("Invalid action module", %{module: module})}
-    end
-  end
-
-  def execute(%ServerState{} = _state, %RegisterAction{action_module: module}) do
-    {:error, Error.validation_error("Invalid action module", %{module: module})}
-  end
-
-  def execute(%ServerState{} = state, %DeregisterAction{action_module: module})
-      when is_atom(module) do
-    case Code.ensure_loaded(module) do
-      {:module, _} ->
-        updated_agent = %{state.agent | actions: List.delete(state.agent.actions, module)}
-        {:ok, %{state | agent: updated_agent}}
-
-      {:error, _reason} ->
-        {:error, Error.validation_error("Invalid action module", %{module: module})}
-    end
-  end
-
-  def execute(%ServerState{} = _state, %DeregisterAction{action_module: module}) do
-    {:error, Error.validation_error("Invalid action module", %{module: module})}
-  end
 
   def execute(%ServerState{} = state, %Spawn{module: module, args: args}) do
     child_spec = build_child_spec({module, args})
 
     case ServerProcess.start(state, child_spec) do
-      {:ok, _pid} ->
+      {:ok, state, _pid} ->
         {:ok, state}
 
       {:error, reason} ->
@@ -105,16 +109,24 @@ defmodule Jido.Agent.Server.Directive do
     {:error, Error.validation_error("Invalid directive", %{directive: invalid_directive})}
   end
 
-  # Private helper to build child specs
+  # Private helper to build child specs for process spawning
+  #
+  # Takes a tuple of {module, args} or {Task, function} and returns a proper child spec
+  # for use with DynamicSupervisor.
+  #
+  # ## Parameters
+  #   - {Task, fun} - For task-based processes where fun is a function
+  #   - {module, args} - For module-based processes with initialization args
+  #
+  # ## Returns
+  #   - A proper child specification map or tuple
   defp build_child_spec({Task, fun}) when is_function(fun) do
-    spec = %{
+    %{
       id: make_ref(),
       start: {Task, :start_link, [fun]},
       restart: :temporary,
       type: :worker
     }
-
-    spec
   end
 
   defp build_child_spec({module, args}) do

@@ -17,7 +17,6 @@ defmodule Jido.Workflow.Chain do
       {:interrupted, %{value: 6}}
   """
 
-  use ExDbug, enabled: false
   require Logger
 
   alias Jido.Error

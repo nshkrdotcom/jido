@@ -11,6 +11,7 @@ defmodule Jido.Agent.Server.Callback do
   All callbacks are called with proper error handling and propagation.
   """
 
+  use ExDbug, enabled: true
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Signal
   require OK
@@ -30,9 +31,16 @@ defmodule Jido.Agent.Server.Callback do
   """
   @spec mount(state :: ServerState.t()) :: {:ok, ServerState.t()} | {:error, term()}
   def mount(%ServerState{agent: agent} = state) do
+    dbug("Mounting agent", agent: agent)
+
     case agent.__struct__.mount(state, []) do
-      {:ok, new_state} -> {:ok, new_state}
-      error -> error
+      {:ok, new_state} ->
+        dbug("Agent mounted successfully", new_state: new_state)
+        {:ok, new_state}
+
+      error ->
+        dbug("Agent mount failed", error: error)
+        error
     end
   end
 
@@ -53,9 +61,16 @@ defmodule Jido.Agent.Server.Callback do
   @spec code_change(state :: ServerState.t(), old_vsn :: term(), extra :: term()) ::
           {:ok, ServerState.t()} | {:error, term()}
   def code_change(%ServerState{agent: agent} = state, old_vsn, extra) do
+    dbug("Code change", agent: agent, old_vsn: old_vsn, extra: extra)
+
     case agent.__struct__.code_change(state, old_vsn, extra) do
-      {:ok, new_state} -> {:ok, new_state}
-      error -> error
+      {:ok, new_state} ->
+        dbug("Code change successful", new_state: new_state)
+        {:ok, new_state}
+
+      error ->
+        dbug("Code change failed", error: error)
+        error
     end
   end
 
@@ -76,9 +91,16 @@ defmodule Jido.Agent.Server.Callback do
   @spec shutdown(state :: ServerState.t(), reason :: term()) ::
           {:ok, ServerState.t()} | {:error, term()}
   def shutdown(%ServerState{agent: agent} = state, reason) do
+    dbug("Shutting down agent", agent: agent, reason: reason)
+
     case agent.__struct__.shutdown(state, reason) do
-      {:ok, new_state} -> {:ok, new_state}
-      error -> error
+      {:ok, new_state} ->
+        dbug("Agent shutdown successful", new_state: new_state)
+        {:ok, new_state}
+
+      error ->
+        dbug("Agent shutdown failed", error: error)
+        error
     end
   end
 
@@ -102,16 +124,26 @@ defmodule Jido.Agent.Server.Callback do
   def handle_signal(state, {:ok, signal}), do: handle_signal(state, signal)
 
   def handle_signal(%ServerState{agent: agent, skills: skills} = _state, %Signal{} = signal) do
+    dbug("Handling signal", agent: agent, signal: signal)
     # First let the agent handle the signal
     with {:ok, handled_signal} <- agent.__struct__.handle_signal(signal) do
+      dbug("Agent handled signal", handled_signal: handled_signal)
       # Then let matching skills handle it
       matching_skills = find_matching_skills(skills, signal)
+      dbug("Found matching skills", matching_skills: matching_skills)
 
       Enum.reduce_while(matching_skills, {:ok, handled_signal}, fn {_key, skill},
                                                                    {:ok, acc_signal} ->
+        dbug("Processing skill", skill: skill, acc_signal: acc_signal)
+
         case skill.__struct__.handle_signal(acc_signal) do
-          {:ok, new_signal} -> {:cont, {:ok, new_signal}}
-          error -> {:halt, error}
+          {:ok, new_signal} ->
+            dbug("Skill processed signal successfully", new_signal: new_signal)
+            {:cont, {:ok, new_signal}}
+
+          error ->
+            dbug("Skill failed to process signal", error: error)
+            {:halt, error}
         end
       end)
     end
@@ -145,16 +177,26 @@ defmodule Jido.Agent.Server.Callback do
         %Signal{} = signal,
         result
       ) do
+    dbug("Processing result", agent: agent, signal: signal, result: result)
     # First let the agent process the result
     with {:ok, processed_result} <- agent.__struct__.process_result(signal, result) do
+      dbug("Agent processed result", processed_result: processed_result)
       # Then let matching skills process it
       matching_skills = find_matching_skills(skills, signal)
+      dbug("Found matching skills", matching_skills: matching_skills)
 
       Enum.reduce_while(matching_skills, {:ok, processed_result}, fn {_key, skill},
                                                                      {:ok, acc_result} ->
+        dbug("Processing skill", skill: skill, acc_result: acc_result)
+
         case skill.__struct__.process_result(signal, acc_result) do
-          {:ok, new_result} -> {:cont, {:ok, new_result}}
-          error -> {:halt, error}
+          {:ok, new_result} ->
+            dbug("Skill processed result successfully", new_result: new_result)
+            {:cont, {:ok, new_result}}
+
+          error ->
+            dbug("Skill failed to process result", error: error)
+            {:halt, error}
         end
       end)
     end
@@ -171,16 +213,22 @@ defmodule Jido.Agent.Server.Callback do
   @spec find_matching_skills(skills :: %{optional(atom()) => struct()}, signal :: Signal.t()) ::
           list({atom(), struct()})
   defp find_matching_skills(skills, %Signal{} = signal) do
-    Enum.filter(skills, fn {_key, skill} ->
-      patterns = skill.__struct__.signals()
-      input_patterns = patterns[:input] || []
-      output_patterns = patterns[:output] || []
-      all_patterns = input_patterns ++ output_patterns
+    dbug("Finding matching skills", skills: skills, signal: signal)
 
-      Enum.any?(all_patterns, fn pattern ->
-        pattern_matches?(signal.type, pattern)
+    matches =
+      Enum.filter(skills, fn {_key, skill} ->
+        patterns = skill.__struct__.signals()
+        input_patterns = patterns[:input] || []
+        output_patterns = patterns[:output] || []
+        all_patterns = input_patterns ++ output_patterns
+
+        Enum.any?(all_patterns, fn pattern ->
+          pattern_matches?(signal.type, pattern)
+        end)
       end)
-    end)
+
+    dbug("Found matching skills", matches: matches)
+    matches
   end
 
   # Checks if a signal type matches a pattern using glob-style matching.
@@ -193,11 +241,17 @@ defmodule Jido.Agent.Server.Callback do
   #   true if the signal type matches the pattern, false otherwise
   @spec pattern_matches?(signal_type :: String.t(), pattern :: String.t()) :: boolean()
   defp pattern_matches?(signal_type, pattern) do
-    pattern
-    |> String.replace(".", "\\.")
-    |> String.replace("*", "[^.]+")
-    |> then(&"^#{&1}$")
-    |> Regex.compile!()
-    |> Regex.match?(signal_type)
+    dbug("Checking pattern match", signal_type: signal_type, pattern: pattern)
+
+    regex =
+      pattern
+      |> String.replace(".", "\\.")
+      |> String.replace("*", "[^.]+")
+      |> then(&"^#{&1}$")
+      |> Regex.compile!()
+
+    matches = Regex.match?(regex, signal_type)
+    dbug("Pattern match result", matches: matches)
+    matches
   end
 end

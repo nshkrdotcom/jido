@@ -5,8 +5,6 @@ defmodule Jido.Discovery do
   This module caches discovered components using :persistent_term for efficient lookups.
   The cache is initialized at application startup and can be manually refreshed if needed.
   """
-  use ExDbug, enabled: false
-  @decorate_all dbug()
   require Logger
 
   @cache_key :__jido_discovery_cache__

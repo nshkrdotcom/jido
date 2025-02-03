@@ -22,9 +22,6 @@ defmodule Jido.Runner.Chain do
   """
   @behaviour Jido.Runner
 
-  use ExDbug, enabled: false, truncate: false
-  @decorate_all dbug()
-
   alias Jido.Instruction
   alias Jido.Agent.Directive
   alias Jido.Error

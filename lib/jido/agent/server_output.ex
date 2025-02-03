@@ -9,6 +9,7 @@ defmodule Jido.Agent.Server.Output do
   """
 
   require Logger
+  use ExDbug, enabled: true
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Signal
   alias Jido.Signal.Dispatch
@@ -18,11 +19,14 @@ defmodule Jido.Agent.Server.Output do
   """
   @spec emit_out(%ServerState{}, term(), keyword()) :: :ok | {:error, term()}
   def emit_out(%ServerState{} = state, data, opts \\ []) do
+    dbug("Emitting out signal", state: state, data: data, opts: opts)
     # Process data through agent callback if available
     processed_data =
       if state.agent && function_exported?(state.agent.__struct__, :process_result, 2) do
+        dbug("Processing data through agent callback")
         state.agent.__struct__.process_result(state.agent, data)
       else
+        dbug("No agent callback, using raw data")
         data
       end
 
@@ -33,6 +37,8 @@ defmodule Jido.Agent.Server.Output do
         data: processed_data
       })
 
+    dbug("Created out signal", signal: signal)
+
     # Emit the signal using the 'out' channel
     emit_signal(state, signal, Keyword.put(opts, :channel, :out))
   end
@@ -42,12 +48,15 @@ defmodule Jido.Agent.Server.Output do
   """
   @spec emit_log(%ServerState{}, atom(), String.t(), keyword()) :: :ok | {:error, term()}
   def emit_log(%ServerState{} = state, level, message, opts \\ []) do
+    dbug("Emitting log signal", state: state, level: level, message: message, opts: opts)
+
     {:ok, signal} =
       Signal.new(%{
         type: "jido.agent.log.#{level}",
         data: message
       })
 
+    dbug("Created log signal", signal: signal)
     emit_signal(state, signal, Keyword.put(opts, :channel, :log))
   end
 
@@ -56,6 +65,8 @@ defmodule Jido.Agent.Server.Output do
   """
   @spec emit_err(%ServerState{}, String.t(), map(), keyword()) :: :ok | {:error, term()}
   def emit_err(%ServerState{} = state, message, metadata \\ %{}, opts \\ []) do
+    dbug("Emitting error signal", state: state, message: message, metadata: metadata, opts: opts)
+
     {:ok, signal} =
       Signal.new(%{
         type: "jido.agent.error",
@@ -67,6 +78,7 @@ defmodule Jido.Agent.Server.Output do
         }
       })
 
+    dbug("Created error signal", signal: signal)
     emit_signal(state, signal, Keyword.put(opts, :channel, :err))
   end
 
@@ -76,8 +88,10 @@ defmodule Jido.Agent.Server.Output do
   """
   @spec emit_signal(%ServerState{}, Signal.t(), keyword()) :: :ok | {:error, term()}
   def emit_signal(%ServerState{} = state, signal, opts \\ []) do
+    dbug("Emitting signal", state: state, signal: signal, opts: opts)
     # Get the channel from opts or default to :out
     channel = Keyword.get(opts, :channel, :out)
+    dbug("Using channel", channel: channel)
 
     # Get the dispatch config for the specified channel
     dispatch_config =
@@ -85,6 +99,8 @@ defmodule Jido.Agent.Server.Output do
         nil -> get_in(state.output, [channel])
         config -> config
       end
+
+    dbug("Using dispatch config", dispatch_config: dispatch_config)
 
     # Update signal with correlation and causation IDs, prioritizing:
     # 1. opts override
@@ -107,15 +123,22 @@ defmodule Jido.Agent.Server.Output do
             )
     }
 
+    dbug("Updated signal with IDs", signal: signal)
+
     # First handle any jido_output dispatch config from the signal
     if signal.jido_output do
+      dbug("Processing jido_output dispatch config", jido_output: signal.jido_output)
+
       case signal.jido_output do
         dispatches when is_list(dispatches) ->
+          dbug("Processing multiple jido_output dispatches", dispatches: dispatches)
+
           Enum.each(dispatches, fn {adapter, adapter_opts} ->
             do_dispatch(adapter, adapter_opts, signal)
           end)
 
         {adapter, adapter_opts} ->
+          dbug("Processing single jido_output dispatch", adapter: adapter, opts: adapter_opts)
           do_dispatch(adapter, adapter_opts, signal)
       end
     end
@@ -124,6 +147,7 @@ defmodule Jido.Agent.Server.Output do
     case dispatch_config do
       # List of dispatches
       dispatches when is_list(dispatches) ->
+        dbug("Processing multiple channel dispatches", dispatches: dispatches)
         # Dispatch to each configured adapter
         Enum.each(dispatches, fn
           {_key, {adapter, adapter_opts}} -> do_dispatch(adapter, adapter_opts, signal)
@@ -132,6 +156,7 @@ defmodule Jido.Agent.Server.Output do
 
       # Single dispatch
       {adapter, adapter_opts} ->
+        dbug("Processing single channel dispatch", adapter: adapter, opts: adapter_opts)
         do_dispatch(adapter, adapter_opts, signal)
     end
 
@@ -139,12 +164,15 @@ defmodule Jido.Agent.Server.Output do
   end
 
   defp do_dispatch(Jido.Signal.Dispatch.NoopAdapter, opts, signal) do
+    dbug("Dispatching to NoopAdapter", opts: opts, signal: signal)
+
     if test_pid = Process.get(:test_pid) do
       send(test_pid, {:dispatch, signal, opts})
     end
   end
 
   defp do_dispatch(adapter, adapter_opts, signal) do
+    dbug("Dispatching to adapter", adapter: adapter, opts: adapter_opts, signal: signal)
     Dispatch.dispatch(signal, {adapter, adapter_opts})
   end
 end

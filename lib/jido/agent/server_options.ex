@@ -1,6 +1,5 @@
 defmodule Jido.Agent.Server.Options do
-  use ExDbug, enabled: false
-  @decorate_all dbug()
+  use ExDbug, enabled: true
 
   @server_state_opts_schema NimbleOptions.new!(
                               id: [
@@ -88,8 +87,12 @@ defmodule Jido.Agent.Server.Options do
       {:ok, %ServerState{...}}
   """
   def validate_server_opts(opts) do
+    dbug("Validating server options", opts: opts)
+
     case NimbleOptions.validate(opts, @server_state_opts_schema) do
       {:ok, validated_opts} ->
+        dbug("Server options validated successfully", validated_opts: validated_opts)
+
         {:ok,
          [
            agent: validated_opts[:agent],
@@ -104,27 +107,36 @@ defmodule Jido.Agent.Server.Options do
          ]}
 
       {:error, error} ->
+        dbug("Server options validation failed", error: error)
         {:error, error}
     end
   end
 
   def validate_agent_opts(agent, _opts \\ []) do
+    dbug("Validating agent options", agent: agent)
+
     cond do
       is_atom(agent) ->
+        dbug("Valid agent module")
         {:ok, agent}
 
       is_struct(agent) and function_exported?(agent.__struct__, :new, 2) ->
+        dbug("Valid agent struct")
         {:ok, agent}
 
       true ->
+        dbug("Invalid agent")
         {:error, :invalid_agent}
     end
   end
 
   def validate_output_opts(output, _opts \\ []) do
+    dbug("Validating output options", output: output)
     out_config = validate_output_dispatch(output[:out])
     err_config = validate_output_dispatch(output[:err])
     log_config = validate_output_dispatch(output[:log])
+
+    dbug("Output configurations", out: out_config, err: err_config, log: log_config)
 
     {:ok,
      [
@@ -137,30 +149,46 @@ defmodule Jido.Agent.Server.Options do
   defp validate_output_dispatch(nil), do: {:console, []}
 
   defp validate_output_dispatch(config) do
+    dbug("Validating output dispatch configuration", config: config)
+
     case Jido.Signal.Dispatch.validate_opts(config) do
-      {:ok, validated} -> validated
-      {:error, _reason} -> {:console, []}
+      {:ok, validated} ->
+        dbug("Output dispatch validated", validated: validated)
+        validated
+
+      {:error, reason} ->
+        dbug("Output dispatch validation failed, using default", reason: reason)
+        {:console, []}
     end
   end
 
   def validate_route_opts(routes, _opts \\ []) do
+    dbug("Validating route options", routes: routes)
+
     case Jido.Signal.Router.normalize(routes) do
       {:ok, normalized} ->
+        dbug("Routes normalized", normalized: normalized)
+
         case Jido.Signal.Router.validate(normalized) do
           {:ok, validated} ->
+            dbug("Routes validated successfully", validated: validated)
             {:ok, validated}
 
           {:error, reason} when is_binary(reason) ->
+            dbug("Route validation failed", reason: reason)
             {:error, reason}
 
           {:error, reason} ->
+            dbug("Route validation failed", reason: reason)
             {:error, "Invalid route configuration: #{inspect(reason)}"}
         end
 
       {:error, reason} when is_binary(reason) ->
+        dbug("Route normalization failed", reason: reason)
         {:error, reason}
 
       {:error, reason} ->
+        dbug("Route normalization failed", reason: reason)
         {:error, "Invalid route format: #{inspect(reason)}"}
     end
   end

@@ -258,7 +258,6 @@ defmodule Jido.Agent do
           doc: "The result of the last action executed by the Agent."
         ]
       ]
-      use ExDbug, enabled: false
       use GenServer
       alias Jido.Agent
       alias Jido.Util
@@ -333,19 +332,15 @@ defmodule Jido.Agent do
 
           @doc false
           def init(opts), do: OK.success(opts)
+          @doc false
+          def state(agent), do: Jido.Agent.Server.state(agent)
 
           @doc false
-          def state(agent) do
-            Jido.Agent.Server.state(agent)
-          end
+          def call(agent, signal, timeout \\ 5000),
+            do: Jido.Agent.Server.call(agent, signal, timeout)
 
-          def call(agent, signal, timeout \\ 5000) do
-            Jido.Agent.Server.call(agent, signal, timeout)
-          end
-
-          def cast(agent, signal) do
-            Jido.Agent.Server.cast(agent, signal)
-          end
+          @doc false
+          def cast(agent, signal), do: Jido.Agent.Server.cast(agent, signal)
 
           @doc """
           Registers a new action module with the Agent at server.

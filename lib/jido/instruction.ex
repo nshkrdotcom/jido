@@ -62,8 +62,6 @@ defmodule Jido.Instruction do
   """
   alias Jido.Error
   alias Jido.Instruction
-  use ExDbug, enabled: false
-  @decorate_all dbug()
   use TypedStruct
 
   @type action_module :: module()

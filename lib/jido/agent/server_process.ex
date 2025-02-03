@@ -29,8 +29,7 @@ defmodule Jido.Agent.Server.Process do
       {:ok, new_pid} = Process.restart(state, old_pid, child_spec)
   """
 
-  use ExDbug, enabled: false
-  @decorate_all dbug()
+  use ExDbug, enabled: true
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Agent.Server.Signal, as: ServerSignal
   alias Jido.Agent.Server.Output, as: ServerOutput
@@ -60,11 +59,15 @@ defmodule Jido.Agent.Server.Process do
   """
   @spec start_supervisor(%ServerState{}) :: {:ok, %ServerState{}} | {:error, term()}
   def start_supervisor(%ServerState{} = state) do
+    dbug("Starting supervisor", state: state)
+
     case DynamicSupervisor.start_link(strategy: :one_for_one) do
       {:ok, supervisor} ->
+        dbug("Supervisor started successfully", supervisor: supervisor)
         {:ok, %{state | child_supervisor: supervisor}}
 
       {:error, _reason} = error ->
+        dbug("Failed to start supervisor", error: error)
         error
     end
   end
@@ -80,16 +83,23 @@ defmodule Jido.Agent.Server.Process do
   - `{:error, reason}` - Failed to stop supervisor
   """
   @spec stop_supervisor(%ServerState{}) :: :ok | {:error, term()}
-  def stop_supervisor(%ServerState{child_supervisor: supervisor} = _state)
+  def stop_supervisor(%ServerState{child_supervisor: supervisor} = state)
       when is_pid(supervisor) do
+    dbug("Stopping supervisor", state: state, supervisor: supervisor)
+
     try do
       DynamicSupervisor.stop(supervisor, :shutdown)
     catch
-      :exit, _reason -> :ok
+      :exit, reason ->
+        dbug("Supervisor already stopped", reason: reason)
+        :ok
     end
   end
 
-  def stop_supervisor(%ServerState{} = _state), do: :ok
+  def stop_supervisor(%ServerState{} = state) do
+    dbug("No supervisor to stop", state: state)
+    :ok
+  end
 
   @doc """
   Starts one or more child processes under the Server's DynamicSupervisor.
@@ -118,22 +128,33 @@ defmodule Jido.Agent.Server.Process do
           {:ok, %ServerState{}, child_pid() | [child_pid()]} | {:error, term()}
   def start(%ServerState{child_supervisor: supervisor} = state, child_specs)
       when is_pid(supervisor) and is_list(child_specs) do
+    dbug("Starting multiple child processes", state: state, specs: child_specs)
     results = Enum.map(child_specs, &start_single(state, &1))
 
     case Enum.split_with(results, &match?({:ok, _}, &1)) do
       {successes, []} ->
         pids = Enum.map(successes, fn {:ok, pid} -> pid end)
+        dbug("Successfully started all children", pids: pids)
         {:ok, state, pids}
 
       {_, failures} ->
-        {:error, Enum.map(failures, fn {:error, reason} -> reason end)}
+        reasons = Enum.map(failures, fn {:error, reason} -> reason end)
+        dbug("Failed to start some children", failures: reasons)
+        {:error, reasons}
     end
   end
 
   def start(%ServerState{} = state, child_spec) do
+    dbug("Starting single child process", state: state, spec: child_spec)
+
     case start_single(state, child_spec) do
-      {:ok, pid} -> {:ok, state, pid}
-      error -> error
+      {:ok, pid} ->
+        dbug("Successfully started child", pid: pid)
+        {:ok, state, pid}
+
+      error ->
+        dbug("Failed to start child", error: error)
+        error
     end
   end
 
@@ -151,7 +172,10 @@ defmodule Jido.Agent.Server.Process do
   """
   @spec list(%ServerState{}) :: [{:undefined, pid(), :worker, [module()]}]
   def list(%ServerState{child_supervisor: supervisor}) when is_pid(supervisor) do
-    DynamicSupervisor.which_children(supervisor)
+    dbug("Listing child processes", supervisor: supervisor)
+    children = DynamicSupervisor.which_children(supervisor)
+    dbug("Found children", children: children)
+    children
   end
 
   @doc """
@@ -170,8 +194,12 @@ defmodule Jido.Agent.Server.Process do
   @spec terminate(%ServerState{}, child_pid()) :: :ok | {:error, :not_found}
   def terminate(%ServerState{child_supervisor: supervisor} = state, child_pid)
       when is_pid(supervisor) do
+    dbug("Terminating child process", state: state, child_pid: child_pid)
+
     case DynamicSupervisor.terminate_child(supervisor, child_pid) do
       :ok ->
+        dbug("Child process terminated successfully")
+
         {:ok, signal} =
           Signal.new(%{
             type: ServerSignal.process_terminated(),
@@ -183,6 +211,7 @@ defmodule Jido.Agent.Server.Process do
         :ok
 
       {:error, _reason} = error ->
+        dbug("Failed to terminate child process", error: error)
         error
     end
   end
@@ -206,11 +235,16 @@ defmodule Jido.Agent.Server.Process do
   """
   @spec restart(%ServerState{}, child_pid(), child_spec()) :: {:ok, pid()} | {:error, term()}
   def restart(%ServerState{} = state, child_pid, child_spec) do
+    dbug("Restarting child process", state: state, child_pid: child_pid, spec: child_spec)
+
     with :ok <- terminate(state, child_pid),
          {:ok, _new_pid} = result <- start(state, child_spec) do
+      dbug("Successfully restarted child process", result: result)
       result
     else
       error ->
+        dbug("Failed to restart child process", error: error)
+
         {:ok, signal} =
           Signal.new(%{
             type: ServerSignal.process_failed(),
@@ -231,8 +265,12 @@ defmodule Jido.Agent.Server.Process do
 
   @spec start_single(%ServerState{}, child_spec()) :: {:ok, pid()} | {:error, term()}
   defp start_single(%ServerState{child_supervisor: supervisor} = state, child_spec) do
+    dbug("Starting single child process", supervisor: supervisor, spec: child_spec)
+
     case DynamicSupervisor.start_child(supervisor, child_spec) do
       {:ok, pid} = result ->
+        dbug("Child process started successfully", pid: pid)
+
         {:ok, signal} =
           Signal.new(%{
             type: ServerSignal.process_started(),
@@ -247,6 +285,8 @@ defmodule Jido.Agent.Server.Process do
         result
 
       {:error, reason} = error ->
+        dbug("Failed to start child process", reason: reason)
+
         {:ok, signal} =
           Signal.new(%{
             type: ServerSignal.process_failed(),

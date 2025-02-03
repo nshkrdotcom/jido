@@ -13,9 +13,8 @@ defmodule Jido.Agent.Server do
   both synchronous (call) and asynchronous (cast) signal handling.
   """
 
-  use GenServer
   use ExDbug, enabled: true
-  @decorate_all dbug()
+  use GenServer
 
   alias Jido.Agent.Server.Callback, as: ServerCallback
   alias Jido.Agent.Server.Options, as: ServerOptions
@@ -60,6 +59,7 @@ defmodule Jido.Agent.Server do
   """
   @spec start_link([start_option()]) :: GenServer.on_start()
   def start_link(opts) do
+    dbug("Starting agent server", opts: opts)
     opts = Keyword.put_new(opts, :id, UUID.uuid4())
 
     with {:ok, agent} <- build_agent(opts),
@@ -81,6 +81,7 @@ defmodule Jido.Agent.Server do
   """
   @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts) do
+    dbug("Building child spec", opts: opts)
     id = Keyword.get(opts, :id, __MODULE__)
 
     %{
@@ -97,6 +98,8 @@ defmodule Jido.Agent.Server do
   """
   @spec state(pid() | atom() | {atom(), node()}) :: {:ok, ServerState.t()} | {:error, term()}
   def state(agent) do
+    dbug("Getting state for agent", agent: agent)
+
     with {:ok, pid} <- Jido.resolve_pid(agent),
          {:ok, signal} <- Signal.new(%{type: ServerSignal.cmd_state()}) do
       GenServer.call(pid, {:signal, signal})
@@ -109,15 +112,18 @@ defmodule Jido.Agent.Server do
   @spec call(pid() | atom() | {atom(), node()}, Signal.t()) ::
           {:ok, Signal.t()} | {:error, term()}
   def call(agent, signal, timeout \\ 5000) do
+    dbug("Calling agent", agent: agent, signal: signal)
     correlation_id = signal.jido_correlation_id || UUID.uuid4()
     signal = %{signal | jido_correlation_id: correlation_id}
 
     with {:ok, pid} <- Jido.resolve_pid(agent) do
       case GenServer.call(pid, {:signal, signal}, timeout) do
         {:ok, response} ->
+          dbug("Call successful", response: response)
           {:ok, response}
 
         other ->
+          dbug("Call failed", result: other)
           other
       end
     end
@@ -129,6 +135,7 @@ defmodule Jido.Agent.Server do
   @spec cast(pid() | atom() | {atom(), node()}, Signal.t()) ::
           {:ok, String.t()} | {:error, term()}
   def cast(agent, signal) do
+    dbug("Casting signal to agent", agent: agent, signal: signal)
     correlation_id = signal.jido_correlation_id || UUID.uuid4()
     signal = %{signal | jido_correlation_id: correlation_id}
 
@@ -140,6 +147,7 @@ defmodule Jido.Agent.Server do
 
   @impl true
   def init(opts) do
+    dbug("Initializing agent server", opts: opts)
     opts = Keyword.put_new(opts, :id, UUID.uuid4())
 
     with {:ok, agent} <- build_agent(opts),
@@ -153,15 +161,18 @@ defmodule Jido.Agent.Server do
          {:ok, state} <- ServerCallback.mount(state),
          {:ok, state} <- ServerState.transition(state, :idle),
          :ok <- ServerOutput.emit_log(state, ServerSignal.started(), %{agent_id: state.agent.id}) do
+      dbug("Agent server initialized successfully")
       {:ok, state}
     else
       {:error, reason} ->
+        dbug("Failed to initialize agent server", reason: reason)
         {:stop, reason}
     end
   end
 
   @impl true
   def handle_call({:signal, %Signal{type: @cmd_state}}, _from, %ServerState{} = state) do
+    dbug("Handling state command")
     {:reply, {:ok, state}, state}
   end
 
@@ -170,6 +181,8 @@ defmodule Jido.Agent.Server do
         _from,
         %ServerState{} = state
       ) do
+    dbug("Handling queue size command")
+
     case ServerState.check_queue_size(state) do
       {:ok, _queue_size} ->
         {:reply, {:ok, state}, state}
@@ -180,77 +193,98 @@ defmodule Jido.Agent.Server do
   end
 
   def handle_call({:signal, %Signal{} = signal}, _from, %ServerState{} = state) do
+    dbug("Handling signal", signal: signal)
+
     case ServerRuntime.execute(state, signal) do
       {:ok, new_state, result} ->
+        dbug("Signal executed successfully", result: result)
         {:reply, {:ok, result}, new_state}
 
       {:error, reason} ->
+        dbug("Signal execution failed", reason: reason)
         {:reply, {:error, reason}, state}
     end
   end
 
-  def handle_call(_unhandled, _from, state) do
+  def handle_call(unhandled, _from, state) do
+    dbug("Unhandled call", call: unhandled)
     {:reply, {:error, :unhandled_call}, state}
   end
 
   @impl true
   def handle_cast({:signal, %Signal{} = signal}, %ServerState{} = state) do
+    dbug("Handling cast signal", signal: signal)
+
     case ServerRuntime.enqueue_and_execute(state, signal) do
       {:ok, state} ->
         {:noreply, state}
 
-      {:error, _reason} ->
+      {:error, reason} ->
+        dbug("Failed to handle cast signal", reason: reason)
         {:noreply, state}
     end
   end
 
-  def handle_cast(_unhandled, state) do
+  def handle_cast(unhandled, state) do
+    dbug("Unhandled cast", cast: unhandled)
     {:noreply, state}
   end
 
   @impl true
   def handle_info(
-        {:signal, %Signal{type: @cmd_queue_size} = _signal},
+        {:signal, %Signal{type: @cmd_queue_size} = signal},
         %ServerState{} = state
       ) do
+    dbug("Handling info queue size signal", signal: signal)
+
     case ServerState.check_queue_size(state) do
       {:ok, _queue_size} ->
         {:noreply, state}
 
       {:error, :queue_overflow} ->
+        dbug("Queue overflow detected")
         {:noreply, state}
     end
   end
 
   def handle_info({:signal, %Signal{} = signal}, %ServerState{} = state) do
+    dbug("Handling info signal", signal: signal)
+
     case ServerRuntime.enqueue_and_execute(state, signal) do
       {:ok, state} ->
         {:noreply, state}
 
-      {:error, _reason} ->
+      {:error, reason} ->
+        dbug("Failed to handle info signal", reason: reason)
         {:noreply, state}
     end
   end
 
-  def handle_info({:EXIT, _pid, reason}, %ServerState{} = state) do
+  def handle_info({:EXIT, pid, reason}, %ServerState{} = state) do
+    dbug("Process exited", pid: pid, reason: reason)
     {:stop, reason, state}
   end
 
-  def handle_info({:DOWN, _ref, :process, pid, reason}, %ServerState{} = state) do
+  def handle_info({:DOWN, ref, :process, pid, reason}, %ServerState{} = state) do
+    dbug("DOWN message received", ref: ref, pid: pid, reason: reason)
+
     ServerOutput.emit_log(state, ServerSignal.process_terminated(), %{pid: pid, reason: reason})
     {:noreply, state}
   end
 
   def handle_info(:timeout, state) do
+    dbug("Timeout received")
     {:noreply, state}
   end
 
-  def handle_info(_unhandled, state) do
+  def handle_info(unhandled, state) do
+    dbug("Unhandled info", info: unhandled)
     {:noreply, state}
   end
 
   @impl true
   def terminate(reason, %ServerState{} = state) do
+    dbug("Terminating agent server", reason: reason)
     require Logger
     stacktrace = Process.info(self(), :current_stacktrace)
 
@@ -283,17 +317,21 @@ defmodule Jido.Agent.Server do
         :ok
 
       {:error, reason} ->
+        dbug("Failed to shutdown server", reason: reason)
         {:error, reason}
     end
   end
 
   @impl true
   def code_change(old_vsn, %ServerState{} = state, extra) do
+    dbug("Code change", old_vsn: old_vsn, extra: extra)
     ServerCallback.code_change(state, old_vsn, extra)
   end
 
   @impl true
   def format_status(_opts, [_pdict, state]) do
+    dbug("Formatting status")
+
     %{
       state: state,
       status: state.status,
@@ -308,11 +346,14 @@ defmodule Jido.Agent.Server do
   """
   @spec via_tuple(String.t(), module()) :: {:via, Registry, {module(), String.t()}}
   def via_tuple(name, registry) do
+    dbug("Creating via tuple", name: name, registry: registry)
     {:via, Registry, {registry, name}}
   end
 
   @spec build_agent(keyword()) :: {:ok, struct()} | {:error, :invalid_agent}
   defp build_agent(opts) do
+    dbug("Building agent", opts: opts)
+
     case Keyword.fetch(opts, :agent) do
       {:ok, agent_input} when not is_nil(agent_input) ->
         cond do
@@ -325,16 +366,20 @@ defmodule Jido.Agent.Server do
             {:ok, agent_input}
 
           true ->
+            dbug("Invalid agent input")
             {:error, :invalid_agent}
         end
 
       _ ->
+        dbug("Missing agent input")
         {:error, :invalid_agent}
     end
   end
 
   @spec build_initial_state_from_opts(keyword()) :: {:ok, ServerState.t()}
   defp build_initial_state_from_opts(opts) do
+    dbug("Building initial state", opts: opts)
+
     {:ok,
      %ServerState{
        agent: opts[:agent],

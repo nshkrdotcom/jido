@@ -83,8 +83,6 @@ defmodule Jido.Agent.Directive do
     Manage Dispatchers (add/remove/etc)
 
   """
-  use ExDbug, enabled: false
-  @decorate_all dbug()
   use TypedStruct
   alias Jido.Agent
   alias Jido.Agent.Server.State, as: ServerState

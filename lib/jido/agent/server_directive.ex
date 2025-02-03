@@ -5,6 +5,7 @@ defmodule Jido.Agent.Server.Directive do
   # This module handles applying directive structs to modify server state and behavior.
   # Only directives defined in Jido.Agent.Directive are valid.
 
+  use ExDbug, enabled: true
   alias Jido.Agent.Server.Process, as: ServerProcess
   alias Jido.Agent.Server.State, as: ServerState
 
@@ -43,15 +44,23 @@ defmodule Jido.Agent.Server.Directive do
   @spec handle(ServerState.t(), Directive.t() | [Directive.t()]) ::
           {:ok, ServerState.t()} | {:error, Error.t()}
   def handle(%ServerState{} = state, directives) when is_list(directives) do
+    dbug("Processing multiple directives", directives: directives)
+
     Enum.reduce_while(directives, {:ok, state}, fn directive, {:ok, acc_state} ->
       case execute(acc_state, directive) do
-        {:ok, new_state} -> {:cont, {:ok, new_state}}
-        {:error, _} = error -> {:halt, error}
+        {:ok, new_state} ->
+          dbug("Directive executed successfully", directive: directive)
+          {:cont, {:ok, new_state}}
+
+        {:error, _} = error ->
+          dbug("Directive execution failed", directive: directive, error: error)
+          {:halt, error}
       end
     end)
   end
 
   def handle(%ServerState{} = state, directive) do
+    dbug("Processing single directive", directive: directive)
     execute(state, directive)
   end
 
@@ -80,32 +89,42 @@ defmodule Jido.Agent.Server.Directive do
   @spec execute(ServerState.t(), Directive.t()) :: {:ok, ServerState.t()} | {:error, Error.t()}
 
   def execute(%ServerState{} = state, %Spawn{module: module, args: args}) do
+    dbug("Executing spawn directive", module: module, args: args)
     child_spec = build_child_spec({module, args})
 
     case ServerProcess.start(state, child_spec) do
-      {:ok, state, _pid} ->
+      {:ok, state, pid} ->
+        dbug("Process spawned successfully", pid: pid)
         {:ok, state}
 
       {:error, reason} ->
+        dbug("Failed to spawn process", reason: reason)
         {:error, Error.execution_error("Failed to spawn process", %{reason: reason})}
     end
   end
 
   def execute(%ServerState{} = state, %Kill{pid: pid}) do
+    dbug("Executing kill directive", pid: pid)
+
     case ServerProcess.terminate(state, pid) do
       :ok ->
+        dbug("Process terminated successfully", pid: pid)
         {:ok, state}
 
       {:error, :not_found} ->
+        dbug("Process not found", pid: pid)
         {:error, Error.execution_error("Process not found", %{pid: pid})}
 
       {:error, reason} ->
+        dbug("Failed to terminate process", pid: pid, reason: reason)
+
         {:error,
          Error.execution_error("Failed to terminate process", %{reason: reason, pid: pid})}
     end
   end
 
   def execute(_state, invalid_directive) do
+    dbug("Invalid directive received", directive: invalid_directive)
     {:error, Error.validation_error("Invalid directive", %{directive: invalid_directive})}
   end
 
@@ -121,6 +140,8 @@ defmodule Jido.Agent.Server.Directive do
   # ## Returns
   #   - A proper child specification map or tuple
   defp build_child_spec({Task, fun}) when is_function(fun) do
+    dbug("Building task child spec", fun: fun)
+
     %{
       id: make_ref(),
       start: {Task, :start_link, [fun]},
@@ -130,6 +151,7 @@ defmodule Jido.Agent.Server.Directive do
   end
 
   defp build_child_spec({module, args}) do
+    dbug("Building module child spec", module: module, args: args)
     {module, args}
   end
 end

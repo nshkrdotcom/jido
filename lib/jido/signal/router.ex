@@ -1,6 +1,5 @@
 defmodule Jido.Signal.Router do
   use Private
-  use ExDbug, enabled: false
   use TypedStruct
   alias Jido.Signal
   alias Jido.Instruction

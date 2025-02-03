@@ -27,9 +27,6 @@ defmodule Jido.Runner.Simple do
   """
   @behaviour Jido.Runner
 
-  use ExDbug, enabled: false, truncate: false
-  @decorate_all dbug()
-
   alias Jido.Instruction
   alias Jido.Error
   alias Jido.Agent.Directive

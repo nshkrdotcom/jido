@@ -9,9 +9,8 @@ defmodule Jido.Agent.Server.Signal do
   2. Directive Signals - A specialized subset of command signals for state transitions
   3. Event Signals - Outbound signals that report Agent activity
   """
-  use ExDbug, enabled: false
-  @decorate_all dbug()
 
+  use ExDbug, enabled: true
   alias Jido.Signal
   alias Jido.Agent.Types
   alias UUID
@@ -92,6 +91,8 @@ defmodule Jido.Agent.Server.Signal do
   @spec build_set(%{agent: Types.agent_info()}, map(), Keyword.t()) ::
           {:ok, Signal.t()} | {:error, term()}
   def build_set(%{agent: agent}, attrs, opts \\ []) when is_binary(agent.id) do
+    dbug("Building set signal", agent_id: agent.id, attrs: attrs, opts: opts)
+
     build_base_signal(agent.id, cmd_set(), [{:set, attrs}], %{
       strict_validation: Keyword.get(opts, :strict_validation, false)
     })
@@ -103,6 +104,8 @@ defmodule Jido.Agent.Server.Signal do
   @spec build_validate(%{agent: Types.agent_info()}, Keyword.t()) ::
           {:ok, Signal.t()} | {:error, term()}
   def build_validate(%{agent: agent}, opts \\ []) when is_binary(agent.id) do
+    dbug("Building validate signal", agent_id: agent.id, opts: opts)
+
     build_base_signal(agent.id, cmd_validate(), [{:validate, %{}}], %{
       strict_validation: Keyword.get(opts, :strict_validation, false)
     })
@@ -114,6 +117,8 @@ defmodule Jido.Agent.Server.Signal do
   @spec build_plan(%{agent: Types.agent_info()}, term(), map()) ::
           {:ok, Signal.t()} | {:error, term()}
   def build_plan(%{agent: agent}, instructions, context \\ %{}) when is_binary(agent.id) do
+    dbug("Building plan signal", agent_id: agent.id, instructions: instructions, context: context)
+
     with {:ok, normalized} <- normalize_instruction(instructions, %{}) do
       build_base_signal(agent.id, cmd_plan(), normalized, %{context: context})
     end
@@ -125,6 +130,8 @@ defmodule Jido.Agent.Server.Signal do
   @spec build_run(%{agent: Types.agent_info()}, Keyword.t()) ::
           {:ok, Signal.t()} | {:error, term()}
   def build_run(%{agent: agent}, opts \\ []) when is_binary(agent.id) do
+    dbug("Building run signal", agent_id: agent.id, opts: opts)
+
     build_base_signal(agent.id, cmd_run(), [{:run, %{}}], %{
       runner: Keyword.get(opts, :runner, nil),
       context: Keyword.get(opts, :context, %{})
@@ -135,6 +142,13 @@ defmodule Jido.Agent.Server.Signal do
   @spec build_base_signal(String.t(), String.t(), list(), map()) ::
           {:ok, Signal.t()} | {:error, term()}
   defp build_base_signal(agent_id, signal_type, instructions, opts) do
+    dbug("Building base signal",
+      agent_id: agent_id,
+      signal_type: signal_type,
+      instructions: instructions,
+      opts: opts
+    )
+
     build_signal(signal_type, agent_id, %{},
       jido_instructions: instructions,
       jido_opts: opts
@@ -148,6 +162,13 @@ defmodule Jido.Agent.Server.Signal do
           {:ok, Signal.t()} | {:error, term()}
   def build_cmd(%{agent: agent}, instruction, params \\ %{}, opts \\ [])
       when is_binary(agent.id) do
+    dbug("Building command signal",
+      agent_id: agent.id,
+      instruction: instruction,
+      params: params,
+      opts: opts
+    )
+
     case normalize_instruction(instruction, params) do
       {:ok, instructions} ->
         build_signal(cmd(), agent.id, %{},
@@ -180,15 +201,18 @@ defmodule Jido.Agent.Server.Signal do
           {:ok, {list(), map(), Keyword.t()}} | {:error, :invalid_signal_format}
   def extract_instructions(%Signal{jido_instructions: instructions, jido_opts: opts, data: data})
       when is_list(instructions) and is_map(opts) do
+    dbug("Extracting instructions", instructions: instructions, opts: opts, data: data)
     {:ok, {instructions, data, Map.to_list(opts)}}
   end
 
   def extract_instructions(_), do: {:error, :invalid_signal_format}
 
   # Private Helpers
-  defp build_signal(type, subject, data, extra_fields \\ %{})
+  defp build_signal(type, subject, data, extra_fields)
        when is_binary(type) and is_binary(subject) and
               (is_map(extra_fields) or is_list(extra_fields)) do
+    dbug("Building signal", type: type, subject: subject, data: data, extra_fields: extra_fields)
+
     base = %{
       type: type,
       source: "jido://agent/#{subject}",
@@ -203,14 +227,18 @@ defmodule Jido.Agent.Server.Signal do
   end
 
   defp normalize_instruction(instruction, params) when is_atom(instruction) do
+    dbug("Normalizing atom instruction", instruction: instruction, params: params)
     {:ok, [{instruction, params}]}
   end
 
   defp normalize_instruction({action, params}, _) when is_atom(action) and is_map(params) do
+    dbug("Normalizing tuple instruction", action: action, params: params)
     {:ok, [{action, params}]}
   end
 
   defp normalize_instruction(instructions, _) when is_list(instructions) do
+    dbug("Normalizing list of instructions", instructions: instructions)
+
     if Enum.all?(instructions, &valid_instruction?/1) do
       {:ok, instructions}
     else

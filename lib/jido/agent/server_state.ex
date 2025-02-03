@@ -55,12 +55,11 @@ defmodule Jido.Agent.Server.State do
   #     :running
 
   use TypedStruct
+  use ExDbug, enabled: true
   alias Jido.Signal
   alias Jido.Agent.Server.Signal, as: ServerSignal
   alias Jido.Agent.Server.Output, as: ServerOutput
   alias Jido.Signal.Dispatch
-  use ExDbug, enabled: false
-  @decorate_all dbug()
 
   @typedoc """
   Represents the possible states of a worker.
@@ -159,8 +158,12 @@ defmodule Jido.Agent.Server.State do
   @spec transition(%__MODULE__{status: status()}, status()) ::
           {:ok, %__MODULE__{}} | {:error, {:invalid_transition, status(), status()}}
   def transition(%__MODULE__{status: current} = state, desired) do
+    dbug("Attempting state transition", current: current, desired: desired)
+
     case @transitions[current][desired] do
       nil ->
+        dbug("Invalid state transition", current: current, desired: desired)
+
         ServerOutput.emit_log(state, ServerSignal.transition_failed(), %{
           from: current,
           to: desired
@@ -168,7 +171,9 @@ defmodule Jido.Agent.Server.State do
 
         {:error, {:invalid_transition, current, desired}}
 
-      _reason ->
+      reason ->
+        dbug("Valid state transition", current: current, desired: desired, reason: reason)
+
         ServerOutput.emit_log(state, ServerSignal.transition_succeeded(), %{
           from: current,
           to: desired
@@ -206,9 +211,13 @@ defmodule Jido.Agent.Server.State do
   """
   @spec enqueue(%__MODULE__{}, Signal.t()) :: {:ok, %__MODULE__{}} | {:error, :queue_overflow}
   def enqueue(%__MODULE__{} = state, %Signal{} = signal) do
+    dbug("Attempting to enqueue signal", signal: signal)
     queue_size = :queue.len(state.pending_signals)
+    dbug("Current queue size", size: queue_size, max_size: state.max_queue_size)
 
     if queue_size >= state.max_queue_size do
+      dbug("Queue overflow detected", queue_size: queue_size, max_size: state.max_queue_size)
+
       ServerOutput.emit_log(state, ServerSignal.queue_overflow(), %{
         queue_size: queue_size,
         max_size: state.max_queue_size
@@ -216,6 +225,7 @@ defmodule Jido.Agent.Server.State do
 
       {:error, :queue_overflow}
     else
+      dbug("Enqueuing signal", signal: signal)
       {:ok, %{state | pending_signals: :queue.in(signal, state.pending_signals)}}
     end
   end
@@ -247,8 +257,12 @@ defmodule Jido.Agent.Server.State do
   """
   @spec dequeue(%__MODULE__{}) :: {:ok, term(), %__MODULE__{}} | {:error, :empty_queue}
   def dequeue(%__MODULE__{} = state) do
+    dbug("Attempting to dequeue signal")
+
     case :queue.out(state.pending_signals) do
       {{:value, signal}, new_queue} ->
+        dbug("Signal dequeued successfully", signal: signal)
+
         {:ok, signal,
          %{
            state
@@ -258,6 +272,7 @@ defmodule Jido.Agent.Server.State do
          }}
 
       {:empty, _} ->
+        dbug("Queue is empty")
         {:error, :empty_queue}
     end
   end
@@ -283,6 +298,8 @@ defmodule Jido.Agent.Server.State do
   """
   @spec clear_queue(%__MODULE__{}) :: {:ok, %__MODULE__{}}
   def clear_queue(%__MODULE__{} = state) do
+    dbug("Clearing signal queue", queue_size: :queue.len(state.pending_signals))
+
     ServerOutput.emit_log(state, ServerSignal.queue_cleared(), %{
       queue_size: :queue.len(state.pending_signals)
     })
@@ -316,9 +333,13 @@ defmodule Jido.Agent.Server.State do
   """
   @spec check_queue_size(%__MODULE__{}) :: {:ok, non_neg_integer()} | {:error, :queue_overflow}
   def check_queue_size(%__MODULE__{} = state) do
+    dbug("Checking queue size")
     queue_size = :queue.len(state.pending_signals)
+    dbug("Current queue metrics", size: queue_size, max_size: state.max_queue_size)
 
     if queue_size > state.max_queue_size do
+      dbug("Queue size exceeds maximum", queue_size: queue_size, max_size: state.max_queue_size)
+
       ServerOutput.emit_log(state, ServerSignal.queue_overflow(), %{
         queue_size: queue_size,
         max_size: state.max_queue_size
@@ -326,6 +347,7 @@ defmodule Jido.Agent.Server.State do
 
       {:error, :queue_overflow}
     else
+      dbug("Queue size within limits", size: queue_size)
       {:ok, queue_size}
     end
   end

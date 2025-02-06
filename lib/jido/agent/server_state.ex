@@ -55,7 +55,7 @@ defmodule Jido.Agent.Server.State do
   #     :running
 
   use TypedStruct
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
   alias Jido.Signal
   alias Jido.Agent.Server.Signal, as: ServerSignal
   alias Jido.Agent.Server.Output, as: ServerOutput
@@ -73,7 +73,7 @@ defmodule Jido.Agent.Server.State do
   @type status :: :initializing | :idle | :planning | :running | :paused
   @type modes :: :auto | :step
   @type log_levels :: :debug | :info | :warn | :error
-  @type output_config :: [
+  @type dispatch_config :: [
           out: Dispatch.dispatch_config(),
           log: Dispatch.dispatch_config(),
           err: Dispatch.dispatch_config()
@@ -86,7 +86,7 @@ defmodule Jido.Agent.Server.State do
     field(:max_queue_size, non_neg_integer(), default: 10_000)
     field(:registry, atom(), default: Jido.AgentRegistry)
 
-    field(:output, output_config(),
+    field(:dispatch, dispatch_config(),
       default: [
         out: {:bus, [target: :default, stream: "agent"]},
         log: {:logger, []},
@@ -103,6 +103,8 @@ defmodule Jido.Agent.Server.State do
 
     field(:current_correlation_id, String.t(), default: nil)
     field(:current_causation_id, String.t(), default: nil)
+    field(:current_signal_type, atom(), default: nil)
+    field(:current_signal, Jido.Signal.t(), default: nil)
   end
 
   # Define valid state transitions and their conditions
@@ -164,20 +166,18 @@ defmodule Jido.Agent.Server.State do
       nil ->
         dbug("Invalid state transition", current: current, desired: desired)
 
-        ServerOutput.emit_log(state, ServerSignal.transition_failed(), %{
-          from: current,
-          to: desired
-        })
+        :transition_failed
+        |> ServerSignal.event_signal(state, %{from: current, to: desired})
+        |> ServerOutput.emit()
 
         {:error, {:invalid_transition, current, desired}}
 
       reason ->
         dbug("Valid state transition", current: current, desired: desired, reason: reason)
 
-        ServerOutput.emit_log(state, ServerSignal.transition_succeeded(), %{
-          from: current,
-          to: desired
-        })
+        :transition_succeeded
+        |> ServerSignal.event_signal(state, %{from: current, to: desired})
+        |> ServerOutput.emit()
 
         {:ok, %{state | status: desired}}
     end
@@ -218,10 +218,12 @@ defmodule Jido.Agent.Server.State do
     if queue_size >= state.max_queue_size do
       dbug("Queue overflow detected", queue_size: queue_size, max_size: state.max_queue_size)
 
-      ServerOutput.emit_log(state, ServerSignal.queue_overflow(), %{
+      :queue_overflow
+      |> ServerSignal.event_signal(state, %{
         queue_size: queue_size,
         max_size: state.max_queue_size
       })
+      |> ServerOutput.emit()
 
       {:error, :queue_overflow}
     else
@@ -300,9 +302,11 @@ defmodule Jido.Agent.Server.State do
   def clear_queue(%__MODULE__{} = state) do
     dbug("Clearing signal queue", queue_size: :queue.len(state.pending_signals))
 
-    ServerOutput.emit_log(state, ServerSignal.queue_cleared(), %{
+    :queue_cleared
+    |> ServerSignal.event_signal(state, %{
       queue_size: :queue.len(state.pending_signals)
     })
+    |> ServerOutput.emit()
 
     {:ok, %{state | pending_signals: :queue.new()}}
   end
@@ -340,10 +344,12 @@ defmodule Jido.Agent.Server.State do
     if queue_size > state.max_queue_size do
       dbug("Queue size exceeds maximum", queue_size: queue_size, max_size: state.max_queue_size)
 
-      ServerOutput.emit_log(state, ServerSignal.queue_overflow(), %{
+      :queue_overflow
+      |> ServerSignal.event_signal(state, %{
         queue_size: queue_size,
         max_size: state.max_queue_size
       })
+      |> ServerOutput.emit()
 
       {:error, :queue_overflow}
     else

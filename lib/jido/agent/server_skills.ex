@@ -4,8 +4,7 @@ defmodule Jido.Agent.Server.Skills do
 
   Handles building and configuring skills, including merging their routes into the server state.
   """
-  use Private
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
   alias Jido.Agent.Server.State, as: ServerState
 
   def build(%ServerState{} = state, opts) do

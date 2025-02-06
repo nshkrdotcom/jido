@@ -139,27 +139,19 @@ defmodule Jido.Signal.DispatchTest do
 
     test "validates multiple dispatch configurations with default" do
       config = [
-        default: {:bus, [target: :test_bus, stream: "events"]},
-        audit: {:pubsub, [target: {:pubsub, :audit}, topic: "audit.events"]}
+        {:bus, [target: :test_bus, stream: "events"]},
+        {:pubsub, [target: {:pubsub, :audit}, topic: "audit.events"]}
       ]
 
       assert {:ok, validated_config} = Dispatch.validate_opts(config)
-      assert Keyword.has_key?(validated_config, :default)
-      assert Keyword.has_key?(validated_config, :audit)
-    end
-
-    test "returns error when default dispatcher is missing" do
-      config = [
-        audit: {:pubsub, [target: :audit_pubsub, topic: "audit.events"]}
-      ]
-
-      assert {:error, :missing_default_dispatcher} = Dispatch.validate_opts(config)
+      assert length(validated_config) == 2
+      assert Enum.all?(validated_config, fn conf -> match?({_adapter, _opts}, conf) end)
     end
 
     test "returns error when any dispatcher in the list is invalid" do
       config = [
-        default: {:bus, [target: :test_bus, stream: "events"]},
-        audit: {:invalid_adapter, []}
+        {:bus, [target: :test_bus, stream: "events"]},
+        {:invalid_adapter, []}
       ]
 
       assert {:error, _} = Dispatch.validate_opts(config)
@@ -184,8 +176,8 @@ defmodule Jido.Signal.DispatchTest do
 
     test "delivers signal to multiple targets", %{signal: signal, bus_name: bus_name} do
       config = [
-        default: {:bus, [target: bus_name, stream: "events"]},
-        pid: {:pid, [target: self(), delivery_mode: :async]}
+        {:bus, [target: bus_name, stream: "events"]},
+        {:pid, [target: self(), delivery_mode: :async]}
       ]
 
       assert :ok = Dispatch.dispatch(signal, config)
@@ -199,8 +191,8 @@ defmodule Jido.Signal.DispatchTest do
       assert_receive {:DOWN, ^ref, :process, ^dead_pid, _}
 
       config = [
-        default: {:bus, [target: bus_name, stream: "events"]},
-        pid: {:pid, [target: dead_pid, delivery_mode: :async]}
+        {:bus, [target: bus_name, stream: "events"]},
+        {:pid, [target: dead_pid, delivery_mode: :async]}
       ]
 
       assert {:error, :process_not_alive} = Dispatch.dispatch(signal, config)

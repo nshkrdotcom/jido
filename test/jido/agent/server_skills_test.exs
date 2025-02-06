@@ -61,7 +61,7 @@ defmodule Jido.Agent.Server.SkillsTest do
         pending_signals: [],
         max_queue_size: 1000,
         mode: :default,
-        output: nil,
+        dispatch: nil,
         child_supervisor: nil,
         current_causation_id: nil,
         current_correlation_id: nil,

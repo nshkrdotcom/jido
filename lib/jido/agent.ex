@@ -617,7 +617,7 @@ defmodule Jido.Agent do
 
           def set(server, attrs, opts) do
             with {:ok, pid} <- Jido.resolve_pid(server),
-                 {:ok, signal} <- ServerSignal.build_set(%{agent: %{id: nil}}, attrs, opts) do
+                 signal <- ServerSignal.cmd_signal(:set, server, attrs, opts) do
               GenServer.call(pid, signal)
             end
           end
@@ -712,8 +712,9 @@ defmodule Jido.Agent do
           end
 
           def validate(server, opts) do
-            with {:ok, pid} <- Jido.resolve_pid(server) do
-              GenServer.call(pid, {:validate, opts})
+            with {:ok, pid} <- Jido.resolve_pid(server),
+                 signal <- ServerSignal.cmd_signal(:validate, server, opts) do
+              GenServer.call(pid, signal)
             end
           end
 
@@ -858,8 +859,9 @@ defmodule Jido.Agent do
           end
 
           def plan(server, instructions, context) do
-            with {:ok, pid} <- Jido.resolve_pid(server) do
-              GenServer.call(pid, {:plan, instructions, context})
+            with {:ok, pid} <- Jido.resolve_pid(server),
+                 signal <- ServerSignal.cmd_signal(:plan, server, instructions, context) do
+              GenServer.call(pid, signal)
             end
           end
 
@@ -971,8 +973,9 @@ defmodule Jido.Agent do
           end
 
           def run(server, opts) do
-            with {:ok, pid} <- Jido.resolve_pid(server) do
-              GenServer.call(pid, {:run, opts})
+            with {:ok, pid} <- Jido.resolve_pid(server),
+                 signal <- ServerSignal.cmd_signal(:run, server, opts) do
+              GenServer.call(pid, signal)
             end
           end
 
@@ -1073,8 +1076,9 @@ defmodule Jido.Agent do
           end
 
           def cmd(server, instructions, attrs, opts) do
-            with {:ok, pid} <- Jido.resolve_pid(server) do
-              GenServer.call(pid, {:cmd, instructions, attrs, opts})
+            with {:ok, pid} <- Jido.resolve_pid(server),
+                 signal <- ServerSignal.cmd_signal(:cmd, server, {instructions, attrs}, opts) do
+              GenServer.call(pid, signal)
             end
           end
 

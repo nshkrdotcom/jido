@@ -11,7 +11,7 @@ defmodule Jido.Agent.Server.RouterTest do
     state = %ServerState{
       router: Signal.Router.new!(),
       agent: nil,
-      output: nil,
+      dispatch: nil,
       status: :idle,
       pending_signals: [],
       max_queue_size: 1000

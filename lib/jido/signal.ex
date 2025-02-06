@@ -5,6 +5,7 @@ defmodule Jido.Signal do
   """
 
   alias Jido.Instruction
+  alias Jido.Signal.Dispatch
   use TypedStruct
 
   typedstruct do
@@ -22,7 +23,7 @@ defmodule Jido.Signal do
     field(:jido_opts, map())
     field(:jido_causation_id, String.t())
     field(:jido_correlation_id, String.t())
-    field(:jido_output, Dipatch.t())
+    field(:jido_dispatch, Dispatch.t())
     field(:jido_metadata, map())
   end
 
@@ -139,7 +140,7 @@ defmodule Jido.Signal do
          {:ok, jido_opts} <- parse_jido_opts(map["jido_opts"]),
          {:ok, jido_correlation_id} <- parse_correlation_id(map["jido_correlation_id"]),
          {:ok, jido_causation_id} <- parse_causation_id(map["jido_causation_id"]),
-         {:ok, jido_output} <- parse_jido_output(map["jido_output"]) do
+         {:ok, jido_dispatch} <- parse_jido_dispatch(map["jido_dispatch"]) do
       event = %__MODULE__{
         specversion: "1.0.2",
         type: type,
@@ -154,7 +155,7 @@ defmodule Jido.Signal do
         jido_opts: jido_opts,
         jido_correlation_id: jido_correlation_id,
         jido_causation_id: jido_causation_id,
-        jido_output: jido_output
+        jido_dispatch: jido_dispatch
       }
 
       {:ok, event}
@@ -244,33 +245,15 @@ defmodule Jido.Signal do
   defp parse_causation_id(""), do: {:error, "causation_id given but empty"}
   defp parse_causation_id(_), do: {:error, "causation_id must be a string"}
 
-  defp parse_jido_output(nil), do: {:ok, nil}
+  defp parse_jido_dispatch(nil), do: {:ok, nil}
 
-  defp parse_jido_output({adapter, opts} = config) when is_atom(adapter) and is_list(opts) do
-    case Jido.Signal.Dispatch.validate_opts(config) do
-      {:ok, validated} -> {:ok, validated}
-      {:error, _} -> {:error, "invalid jido_output dispatch config"}
-    end
+  defp parse_jido_dispatch({adapter, opts} = config) when is_atom(adapter) and is_list(opts) do
+    {:ok, config}
   end
 
-  defp parse_jido_output(configs) when is_list(configs) do
-    # Validate each config in the list
-    configs
-    |> Enum.reduce_while({:ok, []}, fn
-      {adapter, opts}, {:ok, acc} when is_atom(adapter) and is_list(opts) ->
-        case Jido.Signal.Dispatch.validate_opts({adapter, opts}) do
-          {:ok, validated} -> {:cont, {:ok, [validated | acc]}}
-          {:error, _} -> {:halt, {:error, "invalid jido_output dispatch config"}}
-        end
-
-      _, _ ->
-        {:halt, {:error, "invalid jido_output dispatch config"}}
-    end)
-    |> case do
-      {:ok, validated} -> {:ok, Enum.reverse(validated)}
-      error -> error
-    end
+  defp parse_jido_dispatch(config) when is_list(config) do
+    {:ok, config}
   end
 
-  defp parse_jido_output(_), do: {:error, "jido_output must be a valid dispatch config"}
+  defp parse_jido_dispatch(_), do: {:error, "invalid dispatch config"}
 end

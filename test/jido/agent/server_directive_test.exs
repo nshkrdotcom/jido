@@ -26,10 +26,8 @@ defmodule Jido.Agent.Server.DirectiveTest do
     state = %State{
       agent: agent,
       child_supervisor: supervisor,
-      output: [
-        out: {:pid, [target: self(), delivery_mode: :async]},
-        log: {:pid, [target: self(), delivery_mode: :async]},
-        err: {:pid, [target: self(), delivery_mode: :async]}
+      dispatch: [
+        {:pid, [target: self(), delivery_mode: :async]}
       ],
       status: :idle,
       pending_signals: :queue.new()
@@ -84,7 +82,7 @@ defmodule Jido.Agent.Server.DirectiveTest do
     end
 
     test "handles single directive", %{state: state} do
-      task = fn -> Process.sleep(1000) end
+      task = fn -> Process.sleep(350) end
       directive = %Spawn{module: Task, args: task}
 
       {:ok, new_state} = Directive.handle(state, directive)

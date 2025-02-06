@@ -29,7 +29,7 @@ defmodule Jido.Agent.Server.Router do
       {:ok, instructions} = Router.route(state, signal)
   """
 
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Signal
   alias Jido.Signal.Router

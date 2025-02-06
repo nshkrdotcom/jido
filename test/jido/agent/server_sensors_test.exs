@@ -7,7 +7,7 @@ defmodule JidoTest.Agent.ServerSensorsTest do
     state = %ServerState{
       router: nil,
       agent: nil,
-      output: nil,
+      dispatch: nil,
       status: :idle,
       pending_signals: [],
       max_queue_size: 1000

@@ -29,11 +29,10 @@ defmodule Jido.Agent.Server.Process do
       {:ok, new_pid} = Process.restart(state, old_pid, child_spec)
   """
 
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Agent.Server.Signal, as: ServerSignal
   alias Jido.Agent.Server.Output, as: ServerOutput
-  alias Jido.Signal
 
   @typedoc "Child process specification"
   @type child_spec :: Supervisor.child_spec() | {module(), term()} | module()
@@ -83,21 +82,21 @@ defmodule Jido.Agent.Server.Process do
   - `{:error, reason}` - Failed to stop supervisor
   """
   @spec stop_supervisor(%ServerState{}) :: :ok | {:error, term()}
-  def stop_supervisor(%ServerState{child_supervisor: supervisor} = state)
+  def stop_supervisor(%ServerState{child_supervisor: supervisor})
       when is_pid(supervisor) do
-    dbug("Stopping supervisor", state: state, supervisor: supervisor)
+    dbug("Stopping supervisor", supervisor: supervisor)
 
     try do
       DynamicSupervisor.stop(supervisor, :shutdown)
     catch
-      :exit, reason ->
-        dbug("Supervisor already stopped", reason: reason)
+      :exit, _reason ->
+        dbug("Supervisor already stopped", reason: _reason)
         :ok
     end
   end
 
-  def stop_supervisor(%ServerState{} = state) do
-    dbug("No supervisor to stop", state: state)
+  def stop_supervisor(%ServerState{} = _state) do
+    dbug("No supervisor to stop")
     :ok
   end
 
@@ -200,14 +199,10 @@ defmodule Jido.Agent.Server.Process do
       :ok ->
         dbug("Child process terminated successfully")
 
-        {:ok, signal} =
-          Signal.new(%{
-            type: ServerSignal.process_terminated(),
-            data: %{child_pid: child_pid},
-            jido_correlation_id: state.current_correlation_id
-          })
+        :process_terminated
+        |> ServerSignal.event_signal(state, %{child_pid: child_pid})
+        |> ServerOutput.emit()
 
-        ServerOutput.emit_signal(state, signal)
         :ok
 
       {:error, _reason} = error ->
@@ -240,23 +235,24 @@ defmodule Jido.Agent.Server.Process do
     with :ok <- terminate(state, child_pid),
          {:ok, _new_pid} = result <- start(state, child_spec) do
       dbug("Successfully restarted child process", result: result)
+
+      :process_restarted
+      |> ServerSignal.event_signal(state, %{child_pid: child_pid, child_spec: child_spec})
+      |> ServerOutput.emit()
+
       result
     else
       error ->
         dbug("Failed to restart child process", error: error)
 
-        {:ok, signal} =
-          Signal.new(%{
-            type: ServerSignal.process_failed(),
-            data: %{
-              child_pid: child_pid,
-              child_spec: child_spec,
-              error: error
-            },
-            jido_correlation_id: state.current_correlation_id
-          })
+        :process_failed
+        |> ServerSignal.event_signal(state, %{
+          child_pid: child_pid,
+          child_spec: child_spec,
+          error: error
+        })
+        |> ServerOutput.emit()
 
-        ServerOutput.emit_signal(state, signal)
         error
     end
   end
@@ -271,33 +267,19 @@ defmodule Jido.Agent.Server.Process do
       {:ok, pid} = result ->
         dbug("Child process started successfully", pid: pid)
 
-        {:ok, signal} =
-          Signal.new(%{
-            type: ServerSignal.process_started(),
-            data: %{
-              child_pid: pid,
-              child_spec: child_spec
-            },
-            jido_correlation_id: state.current_correlation_id
-          })
+        :process_started
+        |> ServerSignal.event_signal(state, %{child_pid: pid, child_spec: child_spec})
+        |> ServerOutput.emit()
 
-        ServerOutput.emit_signal(state, signal)
         result
 
       {:error, reason} = error ->
         dbug("Failed to start child process", reason: reason)
 
-        {:ok, signal} =
-          Signal.new(%{
-            type: ServerSignal.process_failed(),
-            data: %{
-              child_spec: child_spec,
-              error: reason
-            },
-            jido_correlation_id: state.current_correlation_id
-          })
+        :process_failed
+        |> ServerSignal.event_signal(state, %{child_spec: child_spec, error: reason})
+        |> ServerOutput.emit(dispatch: state.dispatch)
 
-        ServerOutput.emit_signal(state, signal)
         error
     end
   end

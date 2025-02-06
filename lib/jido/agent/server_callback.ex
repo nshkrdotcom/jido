@@ -11,7 +11,7 @@ defmodule Jido.Agent.Server.Callback do
   All callbacks are called with proper error handling and propagation.
   """
 
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Signal
   require OK

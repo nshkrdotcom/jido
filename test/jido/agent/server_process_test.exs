@@ -15,10 +15,8 @@ defmodule Jido.Agent.Server.ProcessTest do
     state = %ServerState{
       agent: agent,
       child_supervisor: supervisor,
-      output: [
-        out: {:pid, [target: self(), delivery_mode: :async]},
-        log: {:pid, [target: self(), delivery_mode: :async]},
-        err: {:pid, [target: self(), delivery_mode: :async]}
+      dispatch: [
+        {:pid, [target: self(), delivery_mode: :async]}
       ],
       status: :idle,
       pending_signals: :queue.new()
@@ -38,7 +36,7 @@ defmodule Jido.Agent.Server.ProcessTest do
       assert Process.alive?(pid)
 
       assert_receive {:signal, signal}
-      assert signal.type =~ ServerSignal.process_started()
+      assert signal.type == ServerSignal.join_type(ServerSignal.type({:event, :process_started}))
       assert signal.data.child_pid == pid
       assert signal.data.child_spec == child_spec
     end
@@ -54,7 +52,7 @@ defmodule Jido.Agent.Server.ProcessTest do
       end)
 
       assert_receive {:signal, signal}
-      assert signal.type =~ ServerSignal.process_failed()
+      assert signal.type == ServerSignal.join_type(ServerSignal.type({:event, :process_failed}))
       assert signal.data.child_spec == invalid_spec
       assert signal.data.error != nil
     end
@@ -106,7 +104,10 @@ defmodule Jido.Agent.Server.ProcessTest do
       refute Process.alive?(pid)
 
       assert_receive {:signal, signal}
-      assert signal.type =~ ServerSignal.process_terminated()
+
+      assert signal.type ==
+               ServerSignal.join_type(ServerSignal.type({:event, :process_terminated}))
+
       assert signal.data.child_pid == pid
     end
 
@@ -138,11 +139,14 @@ defmodule Jido.Agent.Server.ProcessTest do
 
       # Should receive terminated and started signals
       assert_receive {:signal, signal1}
-      assert signal1.type =~ ServerSignal.process_terminated()
+
+      assert signal1.type ==
+               ServerSignal.join_type(ServerSignal.type({:event, :process_terminated}))
+
       assert signal1.data.child_pid == old_pid
 
       assert_receive {:signal, signal2}
-      assert signal2.type =~ ServerSignal.process_started()
+      assert signal2.type == ServerSignal.join_type(ServerSignal.type({:event, :process_started}))
       assert signal2.data.child_pid == new_pid
       assert signal2.data.child_spec == child_spec
     end
@@ -168,11 +172,14 @@ defmodule Jido.Agent.Server.ProcessTest do
 
       # Should receive terminated and failed signals
       assert_receive {:signal, signal1}
-      assert signal1.type =~ ServerSignal.process_terminated()
+
+      assert signal1.type ==
+               ServerSignal.join_type(ServerSignal.type({:event, :process_terminated}))
+
       assert signal1.data.child_pid == old_pid
 
       assert_receive {:signal, signal2}
-      assert signal2.type =~ ServerSignal.process_failed()
+      assert signal2.type == ServerSignal.join_type(ServerSignal.type({:event, :process_failed}))
       assert signal2.data.child_spec == invalid_spec
       assert signal2.data.error != nil
     end
@@ -189,7 +196,7 @@ defmodule Jido.Agent.Server.ProcessTest do
       assert {:error, :not_found} = ServerProcess.restart(state, non_existent_pid, child_spec)
 
       assert_receive {:signal, signal}
-      assert signal.type =~ ServerSignal.process_failed()
+      assert signal.type == ServerSignal.join_type(ServerSignal.type({:event, :process_failed}))
       assert signal.data.child_pid == non_existent_pid
       assert signal.data.child_spec == child_spec
       assert signal.data.error == {:error, :not_found}

@@ -1,5 +1,5 @@
 defmodule Jido.Agent.Server.Options do
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
 
   @server_state_opts_schema NimbleOptions.new!(
                               id: [
@@ -32,13 +32,9 @@ defmodule Jido.Agent.Server.Options do
                                 default: Jido.AgentRegistry,
                                 doc: "Registry to register the server process with"
                               ],
-                              output: [
-                                type: {:custom, __MODULE__, :validate_output_opts, []},
-                                default: [
-                                  out: {:logger, [level: :info]},
-                                  err: {:logger, [level: :error]},
-                                  log: {:logger, [level: :debug]}
-                                ],
+                              dispatch: [
+                                type: {:custom, __MODULE__, :validate_dispatch_opts, []},
+                                default: {:logger, [level: :info]},
                                 doc: "Dispatch configuration for signal routing"
                               ],
                               routes: [
@@ -96,7 +92,7 @@ defmodule Jido.Agent.Server.Options do
         {:ok,
          [
            agent: validated_opts[:agent],
-           output: validated_opts[:output],
+           dispatch: validated_opts[:dispatch],
            routes: validated_opts[:routes],
            skills: validated_opts[:skills],
            child_specs: validated_opts[:child_specs],
@@ -130,35 +126,17 @@ defmodule Jido.Agent.Server.Options do
     end
   end
 
-  def validate_output_opts(output, _opts \\ []) do
-    dbug("Validating output options", output: output)
-    out_config = validate_output_dispatch(output[:out])
-    err_config = validate_output_dispatch(output[:err])
-    log_config = validate_output_dispatch(output[:log])
-
-    dbug("Output configurations", out: out_config, err: err_config, log: log_config)
-
-    {:ok,
-     [
-       out: out_config,
-       err: err_config,
-       log: log_config
-     ]}
-  end
-
-  defp validate_output_dispatch(nil), do: {:console, []}
-
-  defp validate_output_dispatch(config) do
-    dbug("Validating output dispatch configuration", config: config)
+  def validate_dispatch_opts(config, _opts \\ []) do
+    dbug("Validating dispatch configuration", config: config)
 
     case Jido.Signal.Dispatch.validate_opts(config) do
       {:ok, validated} ->
-        dbug("Output dispatch validated", validated: validated)
-        validated
+        dbug("Dispatch configuration validated", validated: validated)
+        {:ok, validated}
 
       {:error, reason} ->
-        dbug("Output dispatch validation failed, using default", reason: reason)
-        {:console, []}
+        dbug("Dispatch configuration validation failed", reason: reason)
+        {:error, reason}
     end
   end
 

@@ -207,7 +207,7 @@ defmodule Jido do
           :log_level,
           :max_queue_size,
           :registry,
-          :output,
+          :dispatch,
           :skills
         ])
         |> Map.to_list()
@@ -221,10 +221,9 @@ defmodule Jido do
         |> Keyword.put_new(:mode, :auto)
         |> Keyword.put_new(:log_level, :info)
         |> Keyword.put_new(:registry, Jido.AgentRegistry)
-        |> Keyword.put_new(:output,
-          out: {:bus, [target: :default, stream: "agent"]},
-          log: {:logger, []},
-          err: {:console, []}
+        |> Keyword.put_new(
+          :dispatch,
+          {:logger, []}
         )
         |> Keyword.put_new(:skills, [])
 

@@ -13,7 +13,7 @@ defmodule Jido.Agent.Server do
   both synchronous (call) and asynchronous (cast) signal handling.
   """
 
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
   use GenServer
 
   alias Jido.Agent.Server.Callback, as: ServerCallback
@@ -27,19 +27,18 @@ defmodule Jido.Agent.Server do
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Signal
 
-  @cmd_state ServerSignal.cmd_state()
-  @cmd_queue_size ServerSignal.cmd_queue_size()
-
   @type start_option ::
           {:id, String.t()}
           | {:agent, module() | struct()}
           | {:initial_state, map()}
           | {:registry, module()}
           | {:mode, :auto | :manual}
-          | {:output, pid() | {module(), term()}}
+          | {:dispatch, pid() | {module(), term()}}
           | {:log_level, Logger.level()}
           | {:max_queue_size, non_neg_integer()}
 
+  @cmd_state ServerSignal.join_type(ServerSignal.type({:cmd, :state}))
+  @cmd_queue_size ServerSignal.join_type(ServerSignal.type({:cmd, :queue_size}))
   @doc """
   Starts a new agent server process.
 
@@ -101,7 +100,7 @@ defmodule Jido.Agent.Server do
     dbug("Getting state for agent", agent: agent)
 
     with {:ok, pid} <- Jido.resolve_pid(agent),
-         {:ok, signal} <- Signal.new(%{type: ServerSignal.cmd_state()}) do
+         signal <- ServerSignal.cmd_signal(:state, nil) do
       GenServer.call(pid, {:signal, signal})
     end
   end
@@ -159,9 +158,13 @@ defmodule Jido.Agent.Server do
          {:ok, state} <- ServerRouter.build(state, opts),
          {:ok, state, _pids} <- ServerProcess.start(state, opts[:child_specs]),
          {:ok, state} <- ServerCallback.mount(state),
-         {:ok, state} <- ServerState.transition(state, :idle),
-         :ok <- ServerOutput.emit_log(state, ServerSignal.started(), %{agent_id: state.agent.id}) do
+         {:ok, state} <- ServerState.transition(state, :idle) do
       dbug("Agent server initialized successfully")
+
+      :started
+      |> ServerSignal.event_signal(state, %{agent_id: state.agent.id})
+      |> ServerOutput.emit()
+
       {:ok, state}
     else
       {:error, reason} ->
@@ -177,7 +180,7 @@ defmodule Jido.Agent.Server do
   end
 
   def handle_call(
-        {:signal, %Signal{type: @cmd_queue_size} = _signal},
+        {:signal, %Signal{type: @cmd_queue_size}},
         _from,
         %ServerState{} = state
       ) do
@@ -193,9 +196,9 @@ defmodule Jido.Agent.Server do
   end
 
   def handle_call({:signal, %Signal{} = signal}, _from, %ServerState{} = state) do
-    dbug("Handling signal", signal: signal)
+    dbug("Handling signal", type: signal.type, signal: signal)
 
-    case ServerRuntime.execute(state, signal) do
+    case ServerRuntime.handle_sync_signal(state, signal) do
       {:ok, new_state, result} ->
         dbug("Signal executed successfully", result: result)
         {:reply, {:ok, result}, new_state}
@@ -215,7 +218,7 @@ defmodule Jido.Agent.Server do
   def handle_cast({:signal, %Signal{} = signal}, %ServerState{} = state) do
     dbug("Handling cast signal", signal: signal)
 
-    case ServerRuntime.enqueue_and_execute(state, signal) do
+    case ServerRuntime.handle_async_signal(state, signal) do
       {:ok, state} ->
         {:noreply, state}
 
@@ -250,7 +253,7 @@ defmodule Jido.Agent.Server do
   def handle_info({:signal, %Signal{} = signal}, %ServerState{} = state) do
     dbug("Handling info signal", signal: signal)
 
-    case ServerRuntime.enqueue_and_execute(state, signal) do
+    case ServerRuntime.handle_async_signal(state, signal) do
       {:ok, state} ->
         {:noreply, state}
 
@@ -268,7 +271,10 @@ defmodule Jido.Agent.Server do
   def handle_info({:DOWN, ref, :process, pid, reason}, %ServerState{} = state) do
     dbug("DOWN message received", ref: ref, pid: pid, reason: reason)
 
-    ServerOutput.emit_log(state, ServerSignal.process_terminated(), %{pid: pid, reason: reason})
+    :process_terminated
+    |> ServerSignal.event_signal(state, %{pid: pid, reason: reason})
+    |> ServerOutput.emit()
+
     {:noreply, state}
   end
 
@@ -309,9 +315,9 @@ defmodule Jido.Agent.Server do
 
     case ServerCallback.shutdown(state, reason) do
       {:ok, new_state} ->
-        ServerOutput.emit_log(state, ServerSignal.stopped(), %{
-          reason: reason
-        })
+        :stopped
+        |> ServerSignal.event_signal(state, %{reason: reason})
+        |> ServerOutput.emit()
 
         ServerProcess.stop_supervisor(new_state)
         :ok
@@ -378,16 +384,18 @@ defmodule Jido.Agent.Server do
 
   @spec build_initial_state_from_opts(keyword()) :: {:ok, ServerState.t()}
   defp build_initial_state_from_opts(opts) do
-    dbug("Building initial state", opts: opts)
+    dbug("Building initial state from options", opts: opts)
 
-    {:ok,
-     %ServerState{
-       agent: opts[:agent],
-       output: opts[:output],
-       log_level: opts[:log_level],
-       mode: opts[:mode],
-       registry: opts[:registry],
-       max_queue_size: opts[:max_queue_size]
-     }}
+    state = %ServerState{
+      agent: opts[:agent],
+      mode: opts[:mode],
+      log_level: opts[:log_level],
+      max_queue_size: opts[:max_queue_size],
+      registry: opts[:registry],
+      dispatch: opts[:dispatch],
+      skills: []
+    }
+
+    {:ok, state}
   end
 end

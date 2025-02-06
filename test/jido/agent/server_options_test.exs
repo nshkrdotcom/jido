@@ -25,11 +25,7 @@ defmodule Jido.Agent.Server.OptionsTest do
         log_level: :debug,
         max_queue_size: 100,
         registry: MyRegistry,
-        output: [
-          out: {:logger, []},
-          err: {:logger, []},
-          log: {:logger, []}
-        ],
+        dispatch: {:logger, [level: :info]},
         routes: [],
         sensors: [],
         skills: [],
@@ -79,25 +75,17 @@ defmodule Jido.Agent.Server.OptionsTest do
     end
   end
 
-  describe "validate_output_opts/1" do
-    test "validates default output configuration" do
-      assert {:ok, validated} = Options.validate_output_opts([])
-      assert Keyword.get(validated, :out) == {:console, []}
-      assert Keyword.get(validated, :err) == {:console, []}
-      assert Keyword.get(validated, :log) == {:console, []}
+  describe "validate_dispatch_opts/1" do
+    test "validates default dispatch configuration" do
+      assert {:ok, validated} = Options.validate_dispatch_opts({:logger, [level: :info]})
+      assert validated == {:logger, [level: :info]}
     end
 
-    test "validates custom output configuration" do
-      config = [
-        out: {:logger, level: :info},
-        err: {:logger, level: :error},
-        log: {:logger, []}
-      ]
-
-      assert {:ok, validated} = Options.validate_output_opts(config)
-      assert Keyword.get(validated, :out) == {:logger, level: :info}
-      assert Keyword.get(validated, :err) == {:logger, level: :error}
-      assert Keyword.get(validated, :log) == {:logger, []}
+    test "validates custom dispatch configuration" do
+      config = {:pid, [target: self(), delivery_mode: :async]}
+      assert {:ok, validated} = Options.validate_dispatch_opts(config)
+      assert elem(validated, 0) == :pid
+      assert Keyword.equal?(elem(validated, 1), target: self(), delivery_mode: :async)
     end
   end
 

@@ -6,9 +6,9 @@ defmodule Jido.Signal.Dispatch do
   Supports built-in adapters for common use cases and allows custom adapters for extensibility.
   """
 
-  @type adapter :: :pid | :bus | :named | :pubsub | nil | module()
+  @type adapter :: :pid | :bus | :named | :pubsub | :logger | :console | :noop | nil | module()
   @type dispatch_config :: {adapter(), Keyword.t()}
-  @type dispatch_configs :: dispatch_config() | [default: dispatch_config()] | keyword()
+  @type dispatch_configs :: dispatch_config() | [dispatch_config()]
 
   @builtin_adapters %{
     pid: Jido.Signal.Dispatch.PidAdapter,
@@ -26,8 +26,7 @@ defmodule Jido.Signal.Dispatch do
 
   ## Parameters
 
-  - `config` - Either a single dispatch configuration tuple or a keyword list of named configurations
-    where at least one must be named :default
+  - `config` - Either a single dispatch configuration tuple or a list of dispatch configurations
 
   ## Returns
 
@@ -36,30 +35,32 @@ defmodule Jido.Signal.Dispatch do
 
   ## Examples
 
-      # Single config (backward compatible)
+      # Single config
       iex> config = {:pid, [target: {:pid, self()}, delivery_mode: :async]}
       iex> Jido.Signal.Dispatch.validate_opts(config)
       {:ok, ^config}
 
-      # Multiple configs with default
+      # Multiple configs
       iex> config = [
-      ...>   default: {:bus, [target: {:bus, :default}, stream: "events"]},
-      ...>   audit: {:pubsub, [target: {:pubsub, :audit}, topic: "audit"]}
+      ...>   {:bus, [target: {:bus, :default}, stream: "events"]},
+      ...>   {:pubsub, [target: {:pubsub, :audit}, topic: "audit"]}
       ...> ]
       iex> Jido.Signal.Dispatch.validate_opts(config)
       {:ok, ^config}
   """
   @spec validate_opts(dispatch_configs()) :: {:ok, dispatch_configs()} | {:error, term()}
-  # Handle single dispatcher config (backward compatibility)
+  # Handle single dispatcher config
   def validate_opts(config = {adapter, opts}) when is_atom(adapter) and is_list(opts) do
     validate_single_config(config)
   end
 
-  # Handle keyword list of dispatchers
+  # Handle list of dispatchers
   def validate_opts(configs) when is_list(configs) do
-    with {:ok, _} <- validate_has_default(configs),
-         {:ok, validated_configs} <- validate_all_configs(configs) do
-      {:ok, validated_configs}
+    results = Enum.map(configs, &validate_single_config/1)
+
+    case Enum.find(results, &match?({:error, _}, &1)) do
+      nil -> {:ok, Enum.map(results, fn {:ok, value} -> value end)}
+      error -> error
     end
   end
 
@@ -71,35 +72,32 @@ defmodule Jido.Signal.Dispatch do
   ## Parameters
 
   - `signal` - The signal to dispatch
-  - `config` - Either a single dispatch configuration tuple or a keyword list of named configurations
+  - `config` - Either a single dispatch configuration tuple or a list of configurations
 
   ## Examples
 
-      # Single destination (backward compatible)
+      # Single destination
       iex> config = {:pid, [target: {:pid, pid}, delivery_mode: :async]}
       iex> Jido.Signal.Dispatch.dispatch(signal, config)
       :ok
 
       # Multiple destinations
       iex> config = [
-      ...>   default: {:bus, [target: {:bus, :default}, stream: "events"]},
-      ...>   audit: {:pubsub, [target: {:pubsub, :audit}, topic: "audit"]}
+      ...>   {:bus, [target: {:bus, :default}, stream: "events"]},
+      ...>   {:pubsub, [target: {:pubsub, :audit}, topic: "audit"]}
       ...> ]
       iex> Jido.Signal.Dispatch.dispatch(signal, config)
       :ok
   """
   @spec dispatch(Jido.Signal.t(), dispatch_configs()) :: :ok | {:error, term()}
-  # Handle single dispatcher (backward compatibility)
+  # Handle single dispatcher
   def dispatch(signal, config = {adapter, opts}) when is_atom(adapter) and is_list(opts) do
     dispatch_single(signal, config)
   end
 
   # Handle multiple dispatchers
   def dispatch(signal, configs) when is_list(configs) do
-    results =
-      Enum.map(configs, fn {_name, config} ->
-        dispatch_single(signal, config)
-      end)
+    results = Enum.map(configs, &dispatch_single(signal, &1))
 
     case Enum.find(results, &match?({:error, _}, &1)) do
       nil -> :ok
@@ -112,29 +110,6 @@ defmodule Jido.Signal.Dispatch do
   end
 
   # Private helpers
-
-  defp validate_has_default(configs) do
-    if Keyword.has_key?(configs, :default) do
-      {:ok, configs}
-    else
-      {:error, :missing_default_dispatcher}
-    end
-  end
-
-  defp validate_all_configs(configs) do
-    results =
-      Enum.map(configs, fn {name, config} ->
-        case validate_single_config(config) do
-          {:ok, validated_config} -> {:ok, {name, validated_config}}
-          error -> error
-        end
-      end)
-
-    case Enum.find(results, &match?({:error, _}, &1)) do
-      nil -> {:ok, Enum.map(results, fn {:ok, value} -> value end)}
-      error -> error
-    end
-  end
 
   defp validate_single_config({nil, opts}) when is_list(opts) do
     {:ok, {nil, opts}}

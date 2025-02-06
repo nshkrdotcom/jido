@@ -1,6 +1,6 @@
 defmodule Jido.Agent.Server.Runtime do
   use Private
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
   require Logger
 
   alias Jido.Error
@@ -13,11 +13,17 @@ defmodule Jido.Agent.Server.Runtime do
   alias Jido.Agent.Server.Output, as: ServerOutput
   alias Jido.Agent.Server.Directive, as: ServerDirective
 
-  @spec execute(ServerState.t(), Signal.t()) ::
+  @spec handle_sync_signal(ServerState.t(), Signal.t()) ::
           {:ok, ServerState.t(), term()} | {:error, term()}
-  def execute(%ServerState{} = state, %Signal{} = signal) do
+  def handle_sync_signal(%ServerState{} = state, %Signal{} = signal) do
     dbug("Executing signal", signal: signal)
-    state = %{state | current_correlation_id: signal.jido_correlation_id}
+
+    state = %{
+      state
+      | current_correlation_id: signal.jido_correlation_id,
+        current_signal_type: :sync,
+        current_signal: signal
+    }
 
     case execute_signal(state, signal) do
       {:ok, state, result} ->
@@ -30,10 +36,11 @@ defmodule Jido.Agent.Server.Runtime do
     end
   end
 
-  @spec enqueue_and_execute(ServerState.t(), Signal.t()) ::
+  @spec handle_async_signal(ServerState.t(), Signal.t()) ::
           {:ok, ServerState.t()} | {:error, term()}
-  def enqueue_and_execute(%ServerState{} = state, %Signal{} = signal) do
+  def handle_async_signal(%ServerState{} = state, %Signal{} = signal) do
     dbug("Enqueuing and executing signal", signal: signal)
+    state = %{state | current_signal_type: :async, current_signal: signal}
 
     with {:ok, state} <- ServerState.enqueue(state, signal),
          {:ok, state} <- process_signal_queue(state) do
@@ -73,9 +80,12 @@ defmodule Jido.Agent.Server.Runtime do
             {:error, reason} ->
               dbug("Signal execution failed", reason: reason)
 
-              ServerOutput.emit_err(new_state, "jido.agent.error", %{reason: reason},
-                correlation_id: new_state.current_correlation_id
+              :execution_error
+              |> ServerSignal.err_signal(
+                new_state,
+                Error.execution_error("Error processing signal queue", %{reason: reason})
               )
+              |> ServerOutput.emit()
 
               {:error, reason}
           end
@@ -83,11 +93,12 @@ defmodule Jido.Agent.Server.Runtime do
         error ->
           dbug("Queue processing error", error: error)
 
-          ServerOutput.emit_err(
+          :execution_error
+          |> ServerSignal.err_signal(
             state,
-            "jido.agent.error",
             Error.execution_error("Error processing signal queue", %{reason: error})
           )
+          |> ServerOutput.emit()
 
           {:error, error}
       end
@@ -101,8 +112,7 @@ defmodule Jido.Agent.Server.Runtime do
       with {:ok, signal} <- ServerCallback.handle_signal(state, signal),
            {:ok, instructions} <- route_signal(state, signal),
            {:ok, signal_instructions} <- apply_signal_to_first_instruction(signal, instructions),
-           {:ok, state} <- plan_agent_instructions(state, signal_instructions),
-           {:ok, state, result} <- run_agent_instructions(state),
+           {:ok, state, result} <- execute_agent_instructions(state, signal_instructions),
            {:ok, state, result} <- handle_agent_final_result(state, result) do
         dbug("Signal execution completed successfully", result: result)
         {:ok, state, result}
@@ -110,9 +120,59 @@ defmodule Jido.Agent.Server.Runtime do
         {:error, reason} ->
           dbug("Signal execution failed", reason: reason)
 
-          ServerOutput.emit_err(state, "jido.agent.error", %{reason: reason},
-            correlation_id: state.current_correlation_id
+          :execution_error
+          |> ServerSignal.err_signal(
+            state,
+            Error.execution_error("Error executing signal", %{reason: reason})
           )
+          |> ServerOutput.emit()
+
+          {:error, reason}
+      end
+    end
+
+    @spec execute_agent_instructions(ServerState.t(), [Instruction.t()]) ::
+            {:ok, ServerState.t(), term()} | {:error, term()}
+    defp execute_agent_instructions(%ServerState{agent: agent} = state, instructions) do
+      dbug("Executing agent instructions", instructions: instructions)
+
+      # Set causation_id from first instruction if available
+      causation_id =
+        case instructions do
+          [%Instruction{id: id} | _] when not is_nil(id) -> id
+          _ -> nil
+        end
+
+      state = %{state | current_causation_id: causation_id}
+
+      case agent.__struct__.cmd(agent, instructions, %{}) do
+        {:ok, updated_agent, directives} ->
+          dbug("Instructions executed successfully")
+          state = %{state | agent: updated_agent}
+
+          case handle_cmd_result(state, updated_agent, directives) do
+            {:ok, final_state} ->
+              # Update the agent's result in the state
+              final_state = %{
+                final_state
+                | agent: %{final_state.agent | result: updated_agent.result}
+              }
+
+              {:ok, final_state, updated_agent.result}
+
+            error ->
+              error
+          end
+
+        {:error, reason} ->
+          dbug("Instruction execution failed", reason: reason)
+
+          :execution_error
+          |> ServerSignal.err_signal(
+            state,
+            Error.execution_error("Error executing instructions", %{reason: reason})
+          )
+          |> ServerOutput.emit()
 
           {:error, reason}
       end
@@ -128,17 +188,20 @@ defmodule Jido.Agent.Server.Runtime do
     defp route_signal(%ServerState{} = state, %Signal{} = signal) do
       dbug("Routing signal", signal: signal)
 
-      with {:ok, instructions} <- ServerRouter.route(state, signal),
-           {:ok, signal_instructions} <- apply_signal_to_first_instruction(signal, instructions) do
-        dbug("Signal routed successfully", instructions: signal_instructions)
-        {:ok, signal_instructions}
-      else
+      case ServerRouter.route(state, signal) do
+        {:ok, instructions} ->
+          dbug("Signal routed successfully", instructions: instructions)
+          {:ok, instructions}
+
         {:error, reason} ->
           dbug("Signal routing failed", reason: reason)
 
-          ServerOutput.emit_err(state, ServerSignal.route_failed(), %{reason: reason},
-            correlation_id: state.current_correlation_id
+          :route_failed
+          |> ServerSignal.err_signal(
+            state,
+            Error.execution_error("Error routing signal", %{reason: reason})
           )
+          |> ServerOutput.emit()
 
           {:error, reason}
       end
@@ -149,130 +212,12 @@ defmodule Jido.Agent.Server.Runtime do
       {:error, :invalid_signal}
     end
 
-    @spec plan_agent_instructions(ServerState.t(), [Instruction.t()]) ::
-            {:ok, ServerState.t()} | {:error, term()}
-    defp plan_agent_instructions(%ServerState{agent: agent} = state, instructions) do
-      dbug("Planning agent instructions", instructions: instructions)
-
-      case agent.__struct__.plan(agent, instructions, %{}) do
-        {:ok, planned_agent} ->
-          dbug("Instructions planned successfully")
-          {:ok, %{state | agent: planned_agent}}
-
-        {:error, reason} ->
-          dbug("Instruction planning failed", reason: reason)
-
-          ServerOutput.emit_err(state, ServerSignal.plan_failed(), %{error: reason},
-            correlation_id: state.current_correlation_id
-          )
-
-          {:error, reason}
-
-        error ->
-          dbug("Unexpected planning error", error: error)
-
-          ServerOutput.emit_err(state, ServerSignal.plan_failed(), %{error: error},
-            correlation_id: state.current_correlation_id
-          )
-
-          {:error, error}
-      end
-    end
-
-    @spec run_agent_instructions(ServerState.t(), keyword()) ::
-            {:ok, ServerState.t(), term()} | {:error, term()}
-    defp run_agent_instructions(%ServerState{} = state, opts \\ []) do
-      dbug("Running agent instructions", opts: opts)
-
-      with {:ok, running_state} <- ensure_running_state(state),
-           {:ok, final_state, result} <- do_execute_all_instructions(running_state, opts) do
-        dbug("Instructions executed successfully", result: result)
-        {:ok, final_state, result}
-      else
-        {:error, reason} ->
-          dbug("Instruction execution failed", reason: reason)
-          {:error, reason}
-      end
-    end
-
-    # Recursively executes all instructions in the agent's queue
-    @spec do_execute_all_instructions(ServerState.t(), keyword()) ::
-            {:ok, ServerState.t(), term()} | {:error, term()}
-    defp do_execute_all_instructions(%ServerState{agent: agent} = state, opts) do
-      queue_length = :queue.len(agent.pending_instructions)
-      dbug("Executing instructions", queue_length: queue_length)
-
-      case queue_length do
-        0 ->
-          dbug("No pending instructions")
-
-          case state.status do
-            :running ->
-              dbug("State is running, transitioning to idle")
-
-              case ServerState.transition(state, :idle) do
-                {:ok, idle_state} ->
-                  dbug("Successfully transitioned to idle")
-                  {:ok, idle_state, agent.result}
-
-                error ->
-                  dbug("Failed to transition to idle", error: error)
-                  error
-              end
-
-            _ ->
-              dbug("State is not running, returning current state")
-              {:ok, state, agent.result}
-          end
-
-        _count ->
-          try do
-            dbug("Running agent", opts: opts)
-
-            case agent.__struct__.run(agent, Keyword.merge([timeout: 5000], opts)) do
-              {:ok, updated_agent, directives} ->
-                dbug("Agent run successful", directives: directives)
-
-                state = %{state | agent: updated_agent}
-
-                case handle_cmd_result(state, updated_agent, directives) do
-                  {:ok, updated_state} ->
-                    dbug("Command result handled successfully")
-                    do_execute_all_instructions(updated_state, opts)
-
-                  error ->
-                    dbug("Failed to handle command result", error: error)
-                    error
-                end
-
-              {:error, reason} ->
-                dbug("Agent run failed", reason: reason)
-
-                ServerOutput.emit_err(state, ServerSignal.cmd_failed(), %{error: reason},
-                  correlation_id: state.current_correlation_id
-                )
-
-                {:error, reason}
-            end
-          rescue
-            error ->
-              dbug("Agent run crashed", error: error, stacktrace: __STACKTRACE__)
-
-              ServerOutput.emit_err(state, ServerSignal.cmd_failed(), %{error: error},
-                correlation_id: state.current_correlation_id
-              )
-
-              {:error, error}
-          end
-      end
-    end
-
     @spec handle_cmd_result(ServerState.t(), term(), [Directive.t()]) ::
             {:ok, ServerState.t()} | {:error, term()}
     defp handle_cmd_result(%ServerState{} = state, agent, directives) do
       dbug("Handling command result", directive_count: length(directives))
 
-      with {:ok, state} <- handle_agent_step_result(state, agent.result),
+      with {:ok, state} <- handle_agent_instruction_result(state, agent.result, []),
            {:ok, state} <- ServerDirective.handle(state, directives) do
         dbug("Command result handled successfully")
         {:ok, state}
@@ -283,26 +228,79 @@ defmodule Jido.Agent.Server.Runtime do
       end
     end
 
-    @spec handle_agent_step_result(ServerState.t(), term()) :: {:ok, ServerState.t()}
-    defp handle_agent_step_result(%ServerState{} = state, result, opts \\ []) do
-      dbug("Handling agent step result", result: result)
-      opts = Keyword.put_new(opts, :correlation_id, state.current_correlation_id)
-      ServerOutput.emit_out(state, result, opts)
-      {:ok, state}
+    @spec handle_agent_instruction_result(ServerState.t(), term(), Keyword.t()) ::
+            {:ok, ServerState.t()} | {:error, term()}
+    defp handle_agent_instruction_result(%ServerState{} = state, result, _opts) do
+      dbug("Handling agent instruction", result: result)
+
+      # Process the instruction result through callbacks first
+      with {:ok, processed_result} <-
+             ServerCallback.process_result(state, state.current_signal, result) do
+        # Use the signal's dispatch config if present, otherwise use server's default
+        dispatch_config =
+          case state.current_signal do
+            %Signal{jido_dispatch: dispatch} when not is_nil(dispatch) ->
+              dbug("Using signal's dispatch config", dispatch: dispatch)
+              dispatch
+
+            _ ->
+              dbug("Using server's default dispatch config")
+              state.dispatch
+          end
+
+        opts = [
+          correlation_id: state.current_correlation_id,
+          causation_id: state.current_causation_id,
+          dispatch: dispatch_config
+        ]
+
+        :instruction_result
+        |> ServerSignal.out_signal(state, processed_result, opts)
+        |> ServerOutput.emit(opts)
+
+        {:ok, state}
+      end
     end
 
-    @spec handle_agent_final_result(ServerState.t(), term()) :: {:ok, ServerState.t(), term()}
+    @spec handle_agent_final_result(ServerState.t(), term(), Keyword.t()) ::
+            {:ok, ServerState.t(), term()}
     defp handle_agent_final_result(%ServerState{} = state, result, opts \\ []) do
       dbug("Handling agent final result", result: result)
 
-      opts =
-        Keyword.merge(opts,
-          correlation_id: state.current_correlation_id,
-          causation_id: state.current_causation_id
-        )
+      # Process the final result through callbacks first
+      with {:ok, processed_result} <-
+             ServerCallback.process_result(state, state.current_signal, result) do
+        case state.current_signal_type do
+          :sync ->
+            dbug("Sync signal result", result: processed_result)
+            {:ok, state, processed_result}
 
-      ServerOutput.emit_out(state, result, opts)
-      {:ok, state, result}
+          :async ->
+            # Use the signal's dispatch config if present, otherwise use server's default
+            dispatch_config =
+              case state.current_signal do
+                %Signal{jido_dispatch: dispatch} when not is_nil(dispatch) ->
+                  dbug("Using signal's dispatch config", dispatch: dispatch)
+                  dispatch
+
+                _ ->
+                  dbug("Using server's default dispatch config")
+                  state.dispatch
+              end
+
+            opts = [
+              correlation_id: state.current_correlation_id,
+              causation_id: state.current_causation_id,
+              dispatch: dispatch_config
+            ]
+
+            :signal_result
+            |> ServerSignal.out_signal(state, processed_result, opts)
+            |> ServerOutput.emit(opts)
+
+            {:ok, state, processed_result}
+        end
+      end
     end
 
     @spec apply_signal_to_first_instruction(Signal.t(), [Instruction.t()]) ::
@@ -330,22 +328,6 @@ defmodule Jido.Agent.Server.Runtime do
     defp apply_signal_to_first_instruction(%Signal{}, _) do
       dbug("Invalid instruction format")
       {:error, :invalid_instruction}
-    end
-
-    @spec ensure_running_state(ServerState.t()) :: {:ok, ServerState.t()} | {:error, term()}
-    defp ensure_running_state(%ServerState{status: :idle} = state) do
-      dbug("Transitioning from idle to running state")
-      ServerState.transition(state, :running)
-    end
-
-    defp ensure_running_state(%ServerState{status: :running} = state) do
-      dbug("State already running")
-      {:ok, state}
-    end
-
-    defp ensure_running_state(%ServerState{status: status}) do
-      dbug("Invalid state for running", status: status)
-      {:error, {:invalid_state, status}}
     end
   end
 end

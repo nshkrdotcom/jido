@@ -1,5 +1,5 @@
 defmodule Jido.Agent.ServerSensors do
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
 
   @doc """
   Builds sensor configuration by injecting the agent pid into sensor targets and preparing child specs.

@@ -195,22 +195,31 @@ defmodule Jido.Agent.Server do
     end
   end
 
-  def handle_call({:signal, %Signal{} = signal}, _from, %ServerState{} = state) do
+  def handle_call({:signal, %Signal{} = signal}, from, %ServerState{} = state) do
     dbug("Handling signal", type: signal.type, signal: signal)
 
-    case ServerRuntime.handle_sync_signal(state, signal) do
-      {:ok, new_state, result} ->
-        dbug("Signal executed successfully", result: result)
-        {:reply, {:ok, result}, new_state}
+    # Ensure correlation_id
+    signal_id = signal.jido_correlation_id || UUID.uuid4()
+    signal = %{signal | id: signal_id, jido_correlation_id: signal_id}
+
+    # Store the from reference for reply later
+    state = ServerState.store_reply_ref(state, signal_id, from)
+
+    # Enqueue the signal
+    case ServerState.enqueue(state, signal) do
+      {:ok, new_state} ->
+        # Trigger queue processing
+        Process.send_after(self(), :process_queue, 0)
+        {:noreply, new_state}
 
       {:error, reason} ->
-        dbug("Signal execution failed", reason: reason)
+        dbug("Failed to enqueue signal", reason: reason)
         {:reply, {:error, reason}, state}
     end
   end
 
-  def handle_call(unhandled, _from, state) do
-    dbug("Unhandled call", call: unhandled)
+  def handle_call(_unhandled, _from, state) do
+    dbug("Unhandled call", call: _unhandled)
     {:reply, {:error, :unhandled_call}, state}
   end
 
@@ -218,27 +227,33 @@ defmodule Jido.Agent.Server do
   def handle_cast({:signal, %Signal{} = signal}, %ServerState{} = state) do
     dbug("Handling cast signal", signal: signal)
 
-    case ServerRuntime.handle_async_signal(state, signal) do
-      {:ok, state} ->
-        {:noreply, state}
+    # Ensure correlation_id
+    signal_id = signal.jido_correlation_id || UUID.uuid4()
+    signal = %{signal | id: signal_id, jido_correlation_id: signal_id}
 
-      {:error, reason} ->
-        dbug("Failed to handle cast signal", reason: reason)
+    # Enqueue the signal
+    case ServerState.enqueue(state, signal) do
+      {:ok, new_state} ->
+        # Trigger queue processing
+        Process.send_after(self(), :process_queue, 0)
+        {:noreply, new_state}
+
+      {:error, _reason} ->
         {:noreply, state}
     end
   end
 
-  def handle_cast(unhandled, state) do
-    dbug("Unhandled cast", cast: unhandled)
+  def handle_cast(_unhandled, state) do
+    dbug("Unhandled cast", cast: _unhandled)
     {:noreply, state}
   end
 
   @impl true
   def handle_info(
-        {:signal, %Signal{type: @cmd_queue_size} = signal},
+        {:signal, %Signal{type: @cmd_queue_size} = _signal},
         %ServerState{} = state
       ) do
-    dbug("Handling info queue size signal", signal: signal)
+    dbug("Handling info queue size signal", signal: _signal)
 
     case ServerState.check_queue_size(state) do
       {:ok, _queue_size} ->
@@ -253,23 +268,30 @@ defmodule Jido.Agent.Server do
   def handle_info({:signal, %Signal{} = signal}, %ServerState{} = state) do
     dbug("Handling info signal", signal: signal)
 
-    case ServerRuntime.handle_async_signal(state, signal) do
-      {:ok, state} ->
-        {:noreply, state}
+    # Ensure correlation_id
+    signal_id = signal.jido_correlation_id || UUID.uuid4()
+    signal = %{signal | id: signal_id, jido_correlation_id: signal_id}
 
-      {:error, reason} ->
-        dbug("Failed to handle info signal", reason: reason)
+    # Enqueue the signal
+    case ServerState.enqueue(state, signal) do
+      {:ok, new_state} ->
+        # Trigger queue processing
+        Process.send_after(self(), :process_queue, 0)
+        {:noreply, new_state}
+
+      {:error, _reason} ->
+        dbug("Failed to enqueue info signal", reason: _reason)
         {:noreply, state}
     end
   end
 
-  def handle_info({:EXIT, pid, reason}, %ServerState{} = state) do
-    dbug("Process exited", pid: pid, reason: reason)
+  def handle_info({:EXIT, _pid, reason}, %ServerState{} = state) do
+    dbug("Process exited", pid: _pid, reason: reason)
     {:stop, reason, state}
   end
 
-  def handle_info({:DOWN, ref, :process, pid, reason}, %ServerState{} = state) do
-    dbug("DOWN message received", ref: ref, pid: pid, reason: reason)
+  def handle_info({:DOWN, _ref, :process, pid, reason}, %ServerState{} = state) do
+    dbug("DOWN message received", ref: _ref, pid: pid, reason: reason)
 
     :process_terminated
     |> ServerSignal.event_signal(state, %{pid: pid, reason: reason})
@@ -283,8 +305,15 @@ defmodule Jido.Agent.Server do
     {:noreply, state}
   end
 
-  def handle_info(unhandled, state) do
-    dbug("Unhandled info", info: unhandled)
+  def handle_info(:process_queue, state) do
+    case ServerRuntime.process_signals_in_queue(state) do
+      {:ok, new_state} -> {:noreply, new_state}
+      {:error, _reason} -> {:noreply, state}
+    end
+  end
+
+  def handle_info(_unhandled, state) do
+    dbug("Unhandled info", info: _unhandled)
     {:noreply, state}
   end
 

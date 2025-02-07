@@ -105,6 +105,9 @@ defmodule Jido.Agent.Server.State do
     field(:current_causation_id, String.t(), default: nil)
     field(:current_signal_type, atom(), default: nil)
     field(:current_signal, Jido.Signal.t(), default: nil)
+
+    # Map to store GenServer.from() references for reply-later functionality
+    field(:reply_refs, %{String.t() => GenServer.from()}, default: %{})
   end
 
   # Define valid state transitions and their conditions
@@ -356,5 +359,60 @@ defmodule Jido.Agent.Server.State do
       dbug("Queue size within limits", size: queue_size)
       {:ok, queue_size}
     end
+  end
+
+  @doc """
+  Stores a reply reference for a signal.
+
+  ## Parameters
+
+  - `state` - Current server state
+  - `signal_id` - ID of the signal to store ref for
+  - `from` - GenServer.from() tuple to store
+
+  ## Returns
+
+  Updated state with stored reply ref
+  """
+  @spec store_reply_ref(%__MODULE__{}, String.t(), GenServer.from()) :: %__MODULE__{}
+  def store_reply_ref(%__MODULE__{} = state, signal_id, from) do
+    dbug("Storing reply ref", signal_id: signal_id, from: from)
+    %{state | reply_refs: Map.put(state.reply_refs, signal_id, from)}
+  end
+
+  @doc """
+  Retrieves a stored reply reference for a signal.
+
+  ## Parameters
+
+  - `state` - Current server state
+  - `signal_id` - ID of the signal to get ref for
+
+  ## Returns
+
+  The stored GenServer.from() tuple or nil if not found
+  """
+  @spec get_reply_ref(%__MODULE__{}, String.t()) :: GenServer.from() | nil
+  def get_reply_ref(%__MODULE__{} = state, signal_id) do
+    dbug("Getting reply ref", signal_id: signal_id)
+    Map.get(state.reply_refs, signal_id)
+  end
+
+  @doc """
+  Removes a stored reply reference for a signal.
+
+  ## Parameters
+
+  - `state` - Current server state
+  - `signal_id` - ID of the signal to remove ref for
+
+  ## Returns
+
+  Updated state with reply ref removed
+  """
+  @spec remove_reply_ref(%__MODULE__{}, String.t()) :: %__MODULE__{}
+  def remove_reply_ref(%__MODULE__{} = state, signal_id) do
+    dbug("Removing reply ref", signal_id: signal_id)
+    %{state | reply_refs: Map.delete(state.reply_refs, signal_id)}
   end
 end

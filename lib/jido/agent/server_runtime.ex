@@ -13,13 +13,22 @@ defmodule Jido.Agent.Server.Runtime do
   alias Jido.Agent.Server.Output, as: ServerOutput
   alias Jido.Agent.Server.Directive, as: ServerDirective
 
-  @spec handle_sync_signal(ServerState.t(), Signal.t()) ::
+  @doc """
+  Process a signal in a unified way, handling both synchronous and asynchronous signals.
+  """
+  @spec process_signal(ServerState.t(), Signal.t()) ::
           {:ok, ServerState.t(), term()} | {:error, term()}
-  def handle_sync_signal(%ServerState{} = state, %Signal{} = signal) do
+  def process_signal(%ServerState{} = state, %Signal{} = signal) do
     with {:ok, state} <- set_correlation_id(state, signal),
          state <- set_current_signal(state, signal),
-         state <- set_signal_type(state, :sync),
          {:ok, state, result} <- execute_signal(state, signal) do
+      # If there was a reply ref, remove it after processing
+      state =
+        case ServerState.get_reply_ref(state, signal.id) do
+          nil -> state
+          _from -> ServerState.remove_reply_ref(state, signal.id)
+        end
+
       {:ok, state, result}
     else
       {:error, reason} ->
@@ -27,15 +36,38 @@ defmodule Jido.Agent.Server.Runtime do
     end
   end
 
-  @spec handle_async_signal(ServerState.t(), Signal.t()) ::
+  @doc """
+  Process all signals in the queue until empty.
+  """
+  @spec process_signals_in_queue(ServerState.t()) ::
           {:ok, ServerState.t()} | {:error, term()}
-  def handle_async_signal(%ServerState{} = state, %Signal{} = signal) do
-    with {:ok, state} <- ServerState.enqueue(state, signal),
-         {:ok, state} <- process_signal_queue(state) do
-      {:ok, state}
-    else
-      {:error, reason} ->
-        {:error, reason}
+  def process_signals_in_queue(%ServerState{} = state) do
+    case ServerState.dequeue(state) do
+      {:ok, signal, new_state} ->
+        # Process one signal
+        case process_signal(new_state, signal) do
+          {:ok, final_state, result} ->
+            # If there was a reply ref, send the reply
+            case ServerState.get_reply_ref(final_state, signal.id) do
+              nil -> :ok
+              from -> GenServer.reply(from, {:ok, result})
+            end
+
+            # Loop to process next signal
+            process_signals_in_queue(final_state)
+
+          {:error, reason} ->
+            # If there was a reply ref, send the error
+            case ServerState.get_reply_ref(state, signal.id) do
+              nil -> :ok
+              from -> GenServer.reply(from, {:error, reason})
+            end
+
+            {:error, reason}
+        end
+
+      {:error, :empty_queue} ->
+        {:ok, state}
     end
   end
 
@@ -44,10 +76,8 @@ defmodule Jido.Agent.Server.Runtime do
             {:ok, ServerState.t()} | {:error, term()}
     defp process_signal_queue(%ServerState{} = state) do
       with {:ok, signal, state} <- ServerState.dequeue(state),
-           {:ok, state} <- set_correlation_id(state, signal),
-           state <- set_current_signal(state, signal),
            state <- set_signal_type(state, :async),
-           {:ok, state, _result} <- execute_signal(state, signal) do
+           {:ok, state, _result} <- process_signal(state, signal) do
         # Continue processing the queue
         process_signal_queue(state)
       else
@@ -200,7 +230,7 @@ defmodule Jido.Agent.Server.Runtime do
 
     @spec handle_signal_result(ServerState.t(), Signal.t(), term()) ::
             {:ok, ServerState.t(), term()}
-    defp handle_signal_result(%ServerState{} = state, signal, result) do
+    defp handle_signal_result(%ServerState{} = state, _signal, result) do
       # Process the final result through callbacks first
       with {:ok, result} <-
              ServerCallback.process_result(state, state.current_signal, result) do
@@ -342,15 +372,11 @@ defmodule Jido.Agent.Server.Runtime do
       %{state | current_signal: signal}
     end
 
-    defp set_signal_type(%ServerState{} = state, type) when is_atom(type) do
+    defp set_signal_type(%ServerState{} = state, type) do
       %{state | current_signal_type: type}
     end
 
-    defp ensure_state(%ServerState{status: status} = state, target_status)
-         when status == target_status,
-         do: state
-
-    defp ensure_state(%ServerState{status: status} = state, target_status) do
+    defp ensure_state(%ServerState{status: _status} = state, target_status) do
       case ServerState.transition(state, target_status) do
         {:ok, new_state} -> new_state
         {:error, _reason} -> state

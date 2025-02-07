@@ -886,4 +886,15 @@ defmodule JidoTest.TestActions do
       run(%{type: :agent}, %{})
     end
   end
+
+  defmodule Echo do
+    @moduledoc false
+
+    @doc """
+    Simple echo action that returns its input parameters.
+    """
+    def run(params, _context, _opts) do
+      {:ok, params}
+    end
+  end
 end

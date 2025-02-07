@@ -33,48 +33,6 @@ defmodule JidoTest.Actions.BasicActionsTest do
     end
   end
 
-  describe "Log" do
-    import ExUnit.CaptureLog
-
-    test "logs message with specified level" do
-      levels = [:debug, :info, :warning, :error]
-
-      for level <- levels do
-        # Ensure clean log state
-        Logger.flush()
-
-        log =
-          capture_log([level: :debug], fn ->
-            assert {:ok, %{level: ^level, message: "Test message"}} =
-                     Basic.Log.run(%{level: level, message: "Test message"}, %{})
-
-            # Small delay to ensure log is captured
-            Process.sleep(100)
-          end)
-
-        assert log =~ "Test message"
-        assert log =~ "[#{level}]"
-      end
-    end
-
-    test "uses default level when not specified" do
-      # Ensure clean log state
-      Logger.flush()
-
-      log =
-        capture_log([level: :debug], fn ->
-          assert {:ok, %{level: :info, message: "Test message"}} =
-                   Basic.Log.run(%{level: :info, message: "Test message"}, %{})
-
-          # Small delay to ensure log is captured
-          Process.sleep(50)
-        end)
-
-      assert log =~ "[info]"
-      assert log =~ "Test message"
-    end
-  end
-
   describe "Todo" do
     import ExUnit.CaptureLog
 

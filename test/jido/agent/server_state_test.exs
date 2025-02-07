@@ -274,4 +274,30 @@ defmodule Jido.Agent.Server.StateTest do
                       }}
     end
   end
+
+  describe "reply_refs management" do
+    setup do
+      agent = BasicAgent.new("test")
+      state = %State{agent: agent, dispatch: [pid: [target: self()]]}
+      {:ok, state: state}
+    end
+
+    test "can store and retrieve reply refs", %{state: state} do
+      signal_id = "test-signal-1"
+      from = {self(), make_ref()}
+
+      # Store reply ref
+      state = State.store_reply_ref(state, signal_id, from)
+      assert State.get_reply_ref(state, signal_id) == from
+
+      # Remove reply ref
+      state = State.remove_reply_ref(state, signal_id)
+      assert State.get_reply_ref(state, signal_id) == nil
+    end
+
+    test "handles missing reply refs gracefully", %{state: state} do
+      assert State.get_reply_ref(state, "nonexistent") == nil
+      assert State.remove_reply_ref(state, "nonexistent") == state
+    end
+  end
 end

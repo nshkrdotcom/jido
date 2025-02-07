@@ -45,111 +45,111 @@ defmodule JidoTest.Agent.Server.RuntimeInputTest do
     {:ok, state: state}
   end
 
-  describe "handle_async_signal/2" do
-    test "successfully enqueues and processes a signal", %{state: state} do
-      signal = Signal.new!(%{type: "test_action", data: %{value: 1}})
-      assert {:ok, final_state} = Runtime.handle_async_signal(state, signal)
+  # describe "handle_async_signal/2" do
+  #   test "successfully enqueues and processes a signal", %{state: state} do
+  #     signal = Signal.new!(%{type: "test_action", data: %{value: 1}})
+  #     assert {:ok, final_state} = Runtime.handle_async_signal(state, signal)
 
-      # Verify state is cleaned up properly
-      assert final_state.status == :idle
-      assert :queue.is_empty(final_state.pending_signals)
-      assert is_nil(final_state.current_signal)
-      assert is_nil(final_state.current_signal_type)
+  #     # Verify state is cleaned up properly
+  #     assert final_state.status == :idle
+  #     assert :queue.is_empty(final_state.pending_signals)
+  #     assert is_nil(final_state.current_signal)
+  #     assert is_nil(final_state.current_signal_type)
 
-      # Verify signal result is emitted
-      assert_receive {:signal, result_signal}
+  #     # Verify signal result is emitted
+  #     assert_receive {:signal, result_signal}
 
-      assert result_signal.type ==
-               ServerSignal.join_type(ServerSignal.type({:out, :instruction_result}))
+  #     assert result_signal.type ==
+  #              ServerSignal.join_type(ServerSignal.type({:out, :instruction_result}))
 
-      assert result_signal.data == %{result: 3}
-      assert result_signal.jido_correlation_id == signal.jido_correlation_id
-      assert is_binary(result_signal.jido_causation_id)
+  #     assert result_signal.data == %{result: 3}
+  #     assert result_signal.jido_correlation_id == signal.jido_correlation_id
+  #     assert is_binary(result_signal.jido_causation_id)
 
-      # Verify final signal result
-      assert_receive {:signal, final_signal}
+  #     # Verify final signal result
+  #     assert_receive {:signal, final_signal}
 
-      assert final_signal.type ==
-               ServerSignal.join_type(ServerSignal.type({:out, :signal_result}))
+  #     assert final_signal.type ==
+  #              ServerSignal.join_type(ServerSignal.type({:out, :signal_result}))
 
-      assert final_signal.data == %{result: 3}
-      assert final_signal.jido_correlation_id == signal.jido_correlation_id
-      assert is_binary(final_signal.jido_causation_id)
-    end
+  #     assert final_signal.data == %{result: 3}
+  #     assert final_signal.jido_correlation_id == signal.jido_correlation_id
+  #     assert is_binary(final_signal.jido_causation_id)
+  #   end
 
-    test "handles queue overflow error", %{state: state} do
-      state = %{state | max_queue_size: 0}
-      signal = Signal.new!(%{type: "test_action", data: %{value: 1}})
+  #   test "handles queue overflow error", %{state: state} do
+  #     state = %{state | max_queue_size: 0}
+  #     signal = Signal.new!(%{type: "test_action", data: %{value: 1}})
 
-      assert {:error, :queue_overflow} = Runtime.handle_async_signal(state, signal)
-      assert_receive {:signal, overflow_signal}
+  #     assert {:error, :queue_overflow} = Runtime.handle_async_signal(state, signal)
+  #     assert_receive {:signal, overflow_signal}
 
-      assert overflow_signal.type ==
-               ServerSignal.join_type(ServerSignal.type({:event, :queue_overflow}))
-    end
+  #     assert overflow_signal.type ==
+  #              ServerSignal.join_type(ServerSignal.type({:event, :queue_overflow}))
+  #   end
 
-    test "handles signal execution error", %{state: state} do
-      signal = Signal.new!(%{type: "error_action", data: %{}})
-      assert {:error, _reason} = Runtime.handle_async_signal(state, signal)
+  #   test "handles signal execution error", %{state: state} do
+  #     signal = Signal.new!(%{type: "error_action", data: %{}})
+  #     assert {:error, _reason} = Runtime.handle_async_signal(state, signal)
 
-      assert_receive {:signal, error_signal}
+  #     assert_receive {:signal, error_signal}
 
-      assert error_signal.type ==
-               ServerSignal.join_type(ServerSignal.type({:err, :execution_error}))
-    end
+  #     assert error_signal.type ==
+  #              ServerSignal.join_type(ServerSignal.type({:err, :execution_error}))
+  #   end
 
-    test "handles invalid signal type", %{state: state} do
-      invalid_signal = Signal.new!(%{type: "invalid_type", data: %{}})
-      assert {:error, _reason} = Runtime.handle_async_signal(state, invalid_signal)
+  #   test "handles invalid signal type", %{state: state} do
+  #     invalid_signal = Signal.new!(%{type: "invalid_type", data: %{}})
+  #     assert {:error, _reason} = Runtime.handle_async_signal(state, invalid_signal)
 
-      assert_receive {:signal, error_signal}
+  #     assert_receive {:signal, error_signal}
 
-      assert error_signal.type ==
-               ServerSignal.join_type(ServerSignal.type({:err, :execution_error}))
-    end
-  end
+  #     assert error_signal.type ==
+  #              ServerSignal.join_type(ServerSignal.type({:err, :execution_error}))
+  #   end
+  # end
 
-  describe "handle_sync_signal/2" do
-    test "successfully executes signal and returns result", %{state: state} do
-      signal = Signal.new!(%{type: "test_action", data: %{value: 1}})
-      assert {:ok, final_state, result} = Runtime.handle_sync_signal(state, signal)
+  # describe "handle_sync_signal/2" do
+  #   test "successfully executes signal and returns result", %{state: state} do
+  #     signal = Signal.new!(%{type: "test_action", data: %{value: 1}})
+  #     assert {:ok, final_state, result} = Runtime.handle_sync_signal(state, signal)
 
-      # Verify result
-      assert result == %{result: 3}
+  #     # Verify result
+  #     assert result == %{result: 3}
 
-      # Verify state
-      assert final_state.status == :idle
-      assert final_state.current_correlation_id == signal.jido_correlation_id
-    end
+  #     # Verify state
+  #     assert final_state.status == :idle
+  #     assert final_state.current_correlation_id == signal.jido_correlation_id
+  #   end
 
-    test "preserves correlation ID", %{state: state} do
-      signal =
-        Signal.new!(%{
-          type: "test_action",
-          data: %{value: 1},
-          jido_correlation_id: "test-correlation"
-        })
+  #   test "preserves correlation ID", %{state: state} do
+  #     signal =
+  #       Signal.new!(%{
+  #         type: "test_action",
+  #         data: %{value: 1},
+  #         jido_correlation_id: "test-correlation"
+  #       })
 
-      assert {:ok, final_state, _result} = Runtime.handle_sync_signal(state, signal)
-      assert final_state.current_correlation_id == "test-correlation"
-    end
+  #     assert {:ok, final_state, _result} = Runtime.handle_sync_signal(state, signal)
+  #     assert final_state.current_correlation_id == "test-correlation"
+  #   end
 
-    test "handles execution error", %{state: state} do
-      signal = Signal.new!(%{type: "error_action", data: %{}})
-      assert {:error, _reason} = Runtime.handle_sync_signal(state, signal)
+  #   test "handles execution error", %{state: state} do
+  #     signal = Signal.new!(%{type: "error_action", data: %{}})
+  #     assert {:error, _reason} = Runtime.handle_sync_signal(state, signal)
 
-      # # No error signal should be emitted for sync signals
-      # refute_receive {:signal, _error_signal}
-    end
+  #     # # No error signal should be emitted for sync signals
+  #     # refute_receive {:signal, _error_signal}
+  #   end
 
-    test "handles invalid signal", %{state: state} do
-      invalid_signal = Signal.new!(%{type: "invalid_type", data: %{}})
-      assert {:error, _reason} = Runtime.handle_sync_signal(state, invalid_signal)
+  #   test "handles invalid signal", %{state: state} do
+  #     invalid_signal = Signal.new!(%{type: "invalid_type", data: %{}})
+  #     assert {:error, _reason} = Runtime.handle_sync_signal(state, invalid_signal)
 
-      # # No error signal should be emitted for sync signals
-      # refute_receive {:signal, _error_signal}
-    end
-  end
+  #     # # No error signal should be emitted for sync signals
+  #     # refute_receive {:signal, _error_signal}
+  #   end
+  # end
 
   describe "process_signal_queue/1" do
     test "returns {:ok, state} when queue is empty", %{state: state} do

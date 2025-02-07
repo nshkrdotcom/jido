@@ -30,8 +30,7 @@ defmodule Jido.Agent.Server.Output do
     Dispatch.dispatch(signal, dispatch_config)
   end
 
-  def emit(invalid, _opts) do
-    dbug("Invalid signal provided", signal: invalid)
+  def emit(_invalid, _opts) do
     {:error, :invalid_signal}
   end
 end

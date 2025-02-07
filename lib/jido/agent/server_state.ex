@@ -172,8 +172,8 @@ defmodule Jido.Agent.Server.State do
 
         {:error, {:invalid_transition, current, desired}}
 
-      reason ->
-        dbug("Valid state transition", current: current, desired: desired, reason: reason)
+      _reason ->
+        dbug("Valid state transition", current: current, desired: desired, reason: _reason)
 
         :transition_succeeded
         |> ServerSignal.event_signal(state, %{from: current, to: desired})

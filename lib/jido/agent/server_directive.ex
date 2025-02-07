@@ -93,8 +93,8 @@ defmodule Jido.Agent.Server.Directive do
     child_spec = build_child_spec({module, args})
 
     case ServerProcess.start(state, child_spec) do
-      {:ok, state, pid} ->
-        dbug("Process spawned successfully", pid: pid)
+      {:ok, state, _pid} ->
+        dbug("Process spawned successfully", pid: _pid)
         {:ok, state}
 
       {:error, reason} ->

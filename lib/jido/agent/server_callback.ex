@@ -165,19 +165,18 @@ defmodule Jido.Agent.Server.Callback do
     - `{:ok, result}` - Result successfully processed with possibly modified result
     - `{:error, reason}` - Result processing failed with reason
   """
-  @spec process_result(
-          state :: ServerState.t(),
-          signal :: Signal.t() | {:ok, Signal.t()},
-          result :: term()
-        ) :: {:ok, term()} | {:error, term()}
-  def process_result(state, {:ok, signal}, result), do: process_result(state, signal, result)
+  @spec process_result(ServerState.t(), Signal.t() | {:ok, Signal.t()} | nil, term()) ::
+          {:ok, term()}
+  def process_result(state, {:ok, signal}, result) do
+    process_result(state, signal, result)
+  end
 
   def process_result(
         %ServerState{agent: agent, skills: skills} = _state,
         %Signal{} = signal,
         result
       ) do
-    dbug("Processing result", agent: agent, signal: signal, result: result)
+    dbug("Processing result", result: result, signal: signal)
     # First let the agent process the result
     with {:ok, processed_result} <- agent.__struct__.process_result(signal, result) do
       dbug("Agent processed result", processed_result: processed_result)
@@ -200,6 +199,11 @@ defmodule Jido.Agent.Server.Callback do
         end
       end)
     end
+  end
+
+  def process_result(%ServerState{} = _state, nil, result) do
+    dbug("Processing result with no signal", result: result)
+    {:ok, result}
   end
 
   # Finds skills that match a signal's type based on their input/output patterns.

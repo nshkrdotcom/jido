@@ -400,6 +400,10 @@ defmodule Jido.Signal.Router do
       })
   """
   @spec route(Router.t(), Signal.t()) :: {:ok, [Instruction.t()]} | {:error, term()}
+  def route(%Router{trie: _trie}, %Signal{type: nil}) do
+    {:error, Error.routing_error(:invalid_signal_type)}
+  end
+
   def route(%Router{trie: trie}, %Signal{type: type} = signal) do
     results =
       type

@@ -297,12 +297,12 @@ defmodule Jido.Agent.Directive do
   defp validate_directive(_), do: {:error, :invalid_directive}
 
   def split_directives(directives) when is_list(directives) do
-    Enum.split_with(directives, &is_agent_directive?/1)
+    Enum.split_with(directives, &agent_directive?/1)
   end
 
-  def is_agent_directive?(directive) when is_struct(directive) do
+  def agent_directive?(directive) when is_struct(directive) do
     directive.__struct__ in @agent_directives
   end
 
-  def is_agent_directive?(_), do: false
+  def agent_directive?(_), do: false
 end

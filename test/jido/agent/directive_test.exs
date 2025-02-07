@@ -21,16 +21,16 @@ defmodule JidoTest.DirectiveTest do
   setup :verify_on_exit!
 
   describe "directive filtering" do
-    test "is_agent_directive? correctly identifies directives" do
+    test "agent_directive? correctly identifies directives" do
       # Agent directives
-      assert Directive.is_agent_directive?(%Enqueue{action: :test})
-      assert Directive.is_agent_directive?(%RegisterAction{action_module: Add})
-      assert Directive.is_agent_directive?(%DeregisterAction{action_module: Add})
+      assert Directive.agent_directive?(%Enqueue{action: :test})
+      assert Directive.agent_directive?(%RegisterAction{action_module: Add})
+      assert Directive.agent_directive?(%DeregisterAction{action_module: Add})
 
       # Server directives
-      refute Directive.is_agent_directive?(%Spawn{module: Add, args: []})
-      refute Directive.is_agent_directive?(%Kill{pid: self()})
-      refute Directive.is_agent_directive?(:not_a_directive)
+      refute Directive.agent_directive?(%Spawn{module: Add, args: []})
+      refute Directive.agent_directive?(%Kill{pid: self()})
+      refute Directive.agent_directive?(:not_a_directive)
     end
 
     test "split_directives separates agent and server directives" do
@@ -47,8 +47,8 @@ defmodule JidoTest.DirectiveTest do
       assert length(agent_directives) == 3
       assert length(server_directives) == 2
 
-      assert Enum.all?(agent_directives, &Directive.is_agent_directive?/1)
-      refute Enum.any?(server_directives, &Directive.is_agent_directive?/1)
+      assert Enum.all?(agent_directives, &Directive.agent_directive?/1)
+      refute Enum.any?(server_directives, &Directive.agent_directive?/1)
     end
   end
 

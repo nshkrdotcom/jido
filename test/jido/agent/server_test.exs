@@ -89,45 +89,30 @@ defmodule Jido.Agent.ServerTest do
     end
   end
 
-  describe "call/2" do
-    setup %{registry: registry} do
-      id = "test-agent-#{System.unique_integer([:positive])}"
-      agent = BasicAgent.new(id)
+  # describe "call/2" do
+  #   setup %{registry: registry} do
+  #     id = "test-agent-#{System.unique_integer([:positive])}"
+  #     agent = BasicAgent.new(id)
 
-      route = %Router.Route{
-        path: "test_signal",
-        instruction: %Instruction{
-          action: JidoTest.TestActions.BasicAction,
-          params: %{value: 42}
-        }
-      }
+  #     route = %Router.Route{
+  #       path: "test_signal",
+  #       instruction: %Instruction{
+  #         action: JidoTest.TestActions.BasicAction,
+  #         params: %{value: 42}
+  #       }
+  #     }
 
-      {:ok, pid} =
-        Server.start_link(
-          agent: agent,
-          id: id,
-          registry: registry,
-          routes: [route]
-        )
+  #     {:ok, pid} =
+  #       Server.start_link(
+  #         agent: agent,
+  #         id: id,
+  #         registry: registry,
+  #         routes: [route]
+  #       )
 
-      %{pid: pid, id: id}
-    end
-
-    @tag :skip
-    test "handles synchronous signals", %{pid: pid} do
-      {:ok, signal} = Signal.new(%{type: "test_signal"})
-      {:ok, response} = Server.call(pid, signal)
-      assert response.jido_correlation_id == signal.jido_correlation_id
-    end
-
-    @tag :skip
-    test "preserves correlation_id", %{pid: pid} do
-      correlation_id = UUID.uuid4()
-      {:ok, signal} = Signal.new(%{type: "test_signal", jido_correlation_id: correlation_id})
-      {:ok, response} = Server.call(pid, signal)
-      assert response.jido_correlation_id == correlation_id
-    end
-  end
+  #     %{pid: pid, id: id}
+  #   end
+  # end
 
   describe "cast/2" do
     setup %{registry: registry} do

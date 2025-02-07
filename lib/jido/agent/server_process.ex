@@ -128,7 +128,7 @@ defmodule Jido.Agent.Server.Process do
   def start(%ServerState{child_supervisor: supervisor} = state, child_specs)
       when is_pid(supervisor) and is_list(child_specs) do
     dbug("Starting multiple child processes", state: state, specs: child_specs)
-    results = Enum.map(child_specs, &start_single(state, &1))
+    results = Enum.map(child_specs, &start_child(state, &1))
 
     case Enum.split_with(results, &match?({:ok, _}, &1)) do
       {successes, []} ->
@@ -146,7 +146,7 @@ defmodule Jido.Agent.Server.Process do
   def start(%ServerState{} = state, child_spec) do
     dbug("Starting single child process", state: state, spec: child_spec)
 
-    case start_single(state, child_spec) do
+    case start_child(state, child_spec) do
       {:ok, pid} ->
         dbug("Successfully started child", pid: pid)
         {:ok, state, pid}
@@ -259,9 +259,9 @@ defmodule Jido.Agent.Server.Process do
 
   # Private Functions
 
-  @spec start_single(%ServerState{}, child_spec()) :: {:ok, pid()} | {:error, term()}
-  defp start_single(%ServerState{child_supervisor: supervisor} = state, child_spec) do
-    dbug("Starting single child process", supervisor: supervisor, spec: child_spec)
+  @spec start_child(%ServerState{}, child_spec()) :: {:ok, pid()} | {:error, term()}
+  defp start_child(%ServerState{child_supervisor: supervisor} = state, child_spec) do
+    dbug("Starting child process", supervisor: supervisor, spec: child_spec)
 
     case DynamicSupervisor.start_child(supervisor, child_spec) do
       {:ok, pid} = result ->

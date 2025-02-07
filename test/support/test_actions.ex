@@ -837,13 +837,13 @@ defmodule JidoTest.TestActions do
     def run(%{type: :agent}, _context) do
       directives = [
         %Enqueue{
-          action: :action1,
-          params: %{},
+          action: JidoTest.TestActions.NoSchema,
+          params: %{value: 1},
           context: %{}
         },
         %Enqueue{
-          action: :action2,
-          params: %{},
+          action: JidoTest.TestActions.Add,
+          params: %{value: 3, amount: 1},
           context: %{}
         }
       ]

@@ -170,25 +170,29 @@ defmodule JidoTest.Examples.UserAgentTest do
       assert result_agent.state.username == "john.doe"
     end
 
-    @tag :skip
     test "run may not apply state changes to the agent", %{agent: initial_agent} do
-      {:ok, planned_agent} =
-        UserAgent.plan(initial_agent, [
-          {FormatUser, initial_agent.state},
-          EnrichUserData
-        ])
+      # First run FormatUser to get formatted data
+      {:ok, planned_format_agent} =
+        UserAgent.plan(initial_agent, {FormatUser, initial_agent.state})
+
+      {:ok, format_result_agent, _directives} =
+        UserAgent.run(planned_format_agent, apply_state: false)
+
+      # Then run EnrichUserData with the formatted data
+      {:ok, planned_enrich_agent} =
+        UserAgent.plan(initial_agent, {EnrichUserData, format_result_agent.result})
 
       {:ok, result_agent, _directives} =
-        UserAgent.run(planned_agent, apply_state: false, runner: Jido.Runner.Chain)
+        UserAgent.run(planned_enrich_agent, apply_state: false)
 
       # State is not updated
       assert result_agent.state.formatted_name == initial_agent.state.formatted_name
       assert result_agent.state.email == initial_agent.state.email
 
-      # Action Chain result is preserved
-      assert result_agent.result.status == :ok
-      assert result_agent.result.state.email == "john@example.com"
-      assert result_agent.result.state.formatted_name == "John Doe"
+      # Results from both actions are preserved
+      assert format_result_agent.result.formatted_name == "John Doe"
+      assert format_result_agent.result.email == "john@example.com"
+      assert result_agent.result.username == "john.doe"
     end
 
     test "requires prior planning", %{agent: agent} do

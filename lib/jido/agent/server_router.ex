@@ -1,33 +1,5 @@
 defmodule Jido.Agent.Server.Router do
-  @moduledoc """
-  Manages signal routing and instruction mapping for Agent servers.
-
-  This module provides functionality to:
-  - Build and configure signal routers for agents
-  - Add/remove/list routes dynamically
-  - Merge routes from other routers
-  - Route incoming signals to matching instructions
-
-  The router acts as a mediator between incoming signals and the instructions they should trigger,
-  allowing for flexible and configurable signal handling.
-
-  ## Examples
-
-      # Build a new router with initial routes
-      {:ok, state} = Router.build(state, routes: [
-        {"user.created", CreateUserInstruction},
-        {"payment.processed", ProcessPaymentInstruction}
-      ])
-
-      # Add a new route
-      {:ok, state} = Router.add(state, {"metrics.collected", CollectMetricsInstruction})
-
-      # Remove a route
-      {:ok, state} = Router.remove(state, "user.created")
-
-      # Route a signal
-      {:ok, instructions} = Router.route(state, signal)
-  """
+  @moduledoc false
 
   use ExDbug, enabled: false
   alias Jido.Agent.Server.State, as: ServerState

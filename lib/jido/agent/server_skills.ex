@@ -1,12 +1,9 @@
 defmodule Jido.Agent.Server.Skills do
-  @moduledoc """
-  Dedicated module to manage skills for the Agent server.
-
-  Handles building and configuring skills, including merging their routes into the server state.
-  """
+  @moduledoc false
   use ExDbug, enabled: false
   alias Jido.Agent.Server.State, as: ServerState
 
+  @doc false
   def build(%ServerState{} = state, opts) do
     dbug("Building skills", state: state, opts: opts)
 

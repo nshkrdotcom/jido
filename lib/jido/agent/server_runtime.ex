@@ -1,4 +1,5 @@
 defmodule Jido.Agent.Server.Runtime do
+  @moduledoc false
   use Private
   use ExDbug, enabled: false
   require Logger

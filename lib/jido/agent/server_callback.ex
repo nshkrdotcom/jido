@@ -1,15 +1,5 @@
 defmodule Jido.Agent.Server.Callback do
-  @moduledoc """
-  Manages callback invocations for Agent Server, providing a consistent interface
-  for calling agent callbacks with proper error handling.
-
-  This module handles:
-  - Lifecycle callbacks (mount, code_change, shutdown)
-  - Signal handling through agents and skills
-  - Result processing through agents and skills
-
-  All callbacks are called with proper error handling and propagation.
-  """
+  @moduledoc false
 
   use ExDbug, enabled: false
   alias Jido.Agent.Server.State, as: ServerState

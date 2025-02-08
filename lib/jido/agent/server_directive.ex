@@ -1,10 +1,5 @@
 defmodule Jido.Agent.Server.Directive do
   @moduledoc false
-  # Executes validated directives within an agent server context.
-
-  # This module handles applying directive structs to modify server state and behavior.
-  # Only directives defined in Jido.Agent.Directive are valid.
-
   use ExDbug, enabled: false
   alias Jido.Agent.Server.Process, as: ServerProcess
   alias Jido.Agent.Server.State, as: ServerState

@@ -36,7 +36,9 @@ defmodule Jido.Skills.Arithmetic do
     }
 
   defmodule Actions do
+    @moduledoc false
     defmodule Add do
+      @moduledoc false
       use Jido.Action,
         name: "add",
         description: "Adds two numbers",
@@ -51,6 +53,7 @@ defmodule Jido.Skills.Arithmetic do
     end
 
     defmodule Subtract do
+      @moduledoc false
       use Jido.Action,
         name: "subtract",
         description: "Subtracts one number from another",
@@ -65,6 +68,7 @@ defmodule Jido.Skills.Arithmetic do
     end
 
     defmodule Multiply do
+      @moduledoc false
       use Jido.Action,
         name: "multiply",
         description: "Multiplies two numbers",
@@ -79,6 +83,7 @@ defmodule Jido.Skills.Arithmetic do
     end
 
     defmodule Divide do
+      @moduledoc false
       use Jido.Action,
         name: "divide",
         description: "Divides one number by another",
@@ -97,6 +102,7 @@ defmodule Jido.Skills.Arithmetic do
     end
 
     defmodule Square do
+      @moduledoc false
       use Jido.Action,
         name: "square",
         description: "Squares a number",
@@ -110,6 +116,7 @@ defmodule Jido.Skills.Arithmetic do
     end
 
     defmodule Eval do
+      @moduledoc false
       use Jido.Action,
         name: "eval",
         description: "Evaluates a mathematical expression",
@@ -159,6 +166,7 @@ defmodule Jido.Skills.Arithmetic do
     * arithmetic.result: Result of arithmetic operation
     * arithmetic.error: Error from arithmetic operation
   """
+  @spec routes() :: [map()]
   def routes do
     [
       %{
@@ -200,6 +208,10 @@ defmodule Jido.Skills.Arithmetic do
     ]
   end
 
+  @doc """
+  Get the initial state for the arithmetic skill.
+  """
+  @spec initial_state() :: map()
   def initial_state do
     %{
       last_result: nil,
@@ -214,11 +226,19 @@ defmodule Jido.Skills.Arithmetic do
     }
   end
 
+  @doc """
+  Handle an arithmetic signal.
+  """
+  @spec handle_signal(Signal.t()) :: {:ok, Signal.t()}
   def handle_signal(%Signal{} = signal) do
     operation = signal.type |> String.split(".") |> List.last() |> String.to_atom()
     {:ok, %{signal | data: Map.put(signal.data, :operation, operation)}}
   end
 
+  @doc """
+  Process the result of an arithmetic operation.
+  """
+  @spec process_result(Signal.t(), {:ok, map()} | {:error, String.t()}) :: {:ok, Signal.t()}
   def process_result(%Signal{} = signal, {:ok, result}) do
     operation = signal.type |> String.split(".") |> List.last() |> String.to_atom()
 

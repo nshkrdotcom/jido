@@ -1,4 +1,5 @@
 defmodule Jido.Agent.ServerSensors do
+  @moduledoc false
   use ExDbug, enabled: false
 
   @doc """

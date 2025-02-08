@@ -1,4 +1,5 @@
 defmodule Jido.Agent.Server.Output do
+  @moduledoc false
   use ExDbug, enabled: false
   alias Jido.Signal
   alias Jido.Signal.Dispatch

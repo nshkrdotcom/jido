@@ -45,6 +45,7 @@ defprotocol Jido.Serialization.JsonDecoder do
     The default implementation for Any simply returns the data unchanged.
   """
   @fallback_to_any true
+  @spec decode(any()) :: any()
   def decode(data)
 end
 

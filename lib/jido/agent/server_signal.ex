@@ -1,4 +1,5 @@
 defmodule Jido.Agent.Server.Signal do
+  @moduledoc false
   use ExDbug, enabled: false
   alias Jido.Signal
   alias Jido.Error
@@ -20,6 +21,7 @@ defmodule Jido.Agent.Server.Signal do
   @error_base @agent_base ++ [@config.error_prefix]
   @output_base @agent_base ++ [@config.output_prefix]
 
+  @doc false
   def type({:cmd, :state}), do: @cmd_base ++ ["state"]
   def type({:cmd, :queue_size}), do: @cmd_base ++ ["queuesize"]
   def type({:cmd, :set}), do: @cmd_base ++ ["set"]
@@ -50,6 +52,7 @@ defmodule Jido.Agent.Server.Signal do
   def type({category, _subtype}) when category not in [:cmd, :event, :err, :out], do: nil
   def type(_), do: nil
 
+  @doc false
   def cmd_signal(type, state, params \\ %{}, opts \\ %{})
 
   def cmd_signal(:set, %ServerState{} = state, params, opts) when is_map(opts),
@@ -70,6 +73,7 @@ defmodule Jido.Agent.Server.Signal do
   def cmd_signal(:state, _state, _params, _opts),
     do: build(nil, %{type: type({:cmd, :state})})
 
+  @doc false
   def cmd_signal(_, _, _, _), do: nil
 
   def event_signal(type, state, params \\ %{}, extra_attrs \\ %{})

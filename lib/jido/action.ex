@@ -54,6 +54,92 @@ defmodule Jido.Action do
   Actions use the `OK` monad for consistent error handling. Errors are wrapped
   in `Jido.Error` structs for uniform error reporting across the system.
 
+  ## AI Tool Example
+
+  Actions can be converted to LLM compatible tools for use with LLM-based systems. This is particularly
+  useful when building AI agents that need to interact with your system's capabilities:
+
+      # Define a weather action
+      iex> defmodule WeatherAction do
+      ...>   use Jido.Action,
+      ...>     name: "get_weather",
+      ...>     description: "Gets the current weather for a location",
+      ...>     category: "weather",
+      ...>     tags: ["weather", "location"],
+      ...>     vsn: "1.0.0",
+      ...>     schema: [
+      ...>       location: [
+      ...>         type: :string,
+      ...>         required: true,
+      ...>         doc: "The city or location to get weather for"
+      ...>       ]
+      ...>     ]
+      ...>
+      ...>   @impl true
+      ...>   def run(params, _context) do
+      ...>     # Weather API logic here
+      ...>     {:ok, %{temperature: 72, conditions: "sunny"}}
+      ...>   end
+      ...> end
+      {:module, WeatherAction, ...}
+
+      # Convert to tool format
+      iex> WeatherAction.to_tool()
+      %{
+        "name" => "get_weather",
+        "description" => "Gets the current weather for a location",
+        "parameters" => %{
+          "type" => "object",
+          "properties" => %{
+            "location" => %{
+              "type" => "string",
+              "description" => "The city or location to get weather for"
+            }
+          },
+          "required" => ["location"]
+        }
+      }
+
+  This tool definition can then be used with AI systems like OpenAI's function calling
+  or other LLM frameworks that support tool/function specifications. The schema and
+  validation ensure the AI system receives proper parameter constraints.
+
+  ## Testing
+
+  Actions can be tested directly by calling their `run/2` function with test parameters and context:
+
+      defmodule WeatherActionTest do
+        use ExUnit.Case
+
+        test "gets weather for location" do
+          params = %{location: "Portland"}
+          context = %{}
+
+          assert {:ok, result} = WeatherAction.run(params, context)
+          assert is_map(result)
+          assert result.temperature > 0
+        end
+
+        test "handles invalid location" do
+          params = %{location: ""}
+          context = %{}
+
+          assert {:error, error} = WeatherAction.run(params, context)
+          assert error.type == :validation_error
+        end
+      end
+
+  For testing Actions in a more complete runtime environment, including signal routing, state
+  management, and error handling, use `Jido.Workflow`. This provides a full test harness for
+  validating Action behavior within workflows:
+
+      test "weather action in workflow" do
+        {:ok, result} = Workflow.run(WeatherAction, %{location: "Seattle"})
+        assert result.weather_data.temperature > 0
+      end
+
+  See `Jido.Workflow` documentation for more details on workflow-based testing.
+
   ## Parameter Validation
 
   > **Note on Validation:** The validation process for Actions is intentionally open.

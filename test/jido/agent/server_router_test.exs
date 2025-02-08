@@ -150,7 +150,7 @@ defmodule Jido.Agent.Server.RouterTest do
       {:ok, signal} = Signal.new(%{type: "nonexistent.signal", data: "test"})
       assert {:error, error} = Router.route(state, signal)
       assert error.type == :routing_error
-      assert error.message == :no_handler
+      assert error.message == "No matching handlers found for signal"
     end
 
     test "returns error for invalid signal", %{state: state} do

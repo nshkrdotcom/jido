@@ -120,7 +120,7 @@ defmodule Jido.Signal.RouterTest do
 
       assert {:error, error} = Router.route(router, signal)
       assert error.type == :routing_error
-      assert error.message == :no_handler
+      assert error.message == "No matching handlers found for signal"
     end
 
     test "returns empty list for unmatched path", %{router: router} do
@@ -133,7 +133,7 @@ defmodule Jido.Signal.RouterTest do
 
       assert {:error, error} = Router.route(router, signal)
       assert error.type == :routing_error
-      assert error.message == :no_handler
+      assert error.message == "No matching handlers found for signal"
     end
 
     test "routes pid signal", %{router: router} do
@@ -172,7 +172,7 @@ defmodule Jido.Signal.RouterTest do
       # Test multiple consecutive wildcards
       {:error, error} = Router.new({"user.**.**.created", %Instruction{action: TestAction}})
       assert error.type == :routing_error
-      assert error.message == :invalid_path_format
+      assert error.message == "Path cannot contain multiple wildcards"
     end
 
     test "handles priority edge cases", %{router: _router} do
@@ -264,7 +264,7 @@ defmodule Jido.Signal.RouterTest do
       signal = %Signal{type: "test", source: "/test", id: Jido.Util.generate_id()}
       {:error, error} = Router.route(router, signal)
       assert error.type == :routing_error
-      assert error.message == :no_handler
+      assert error.message == "No matching handlers found for signal"
     end
 
     test "handles signal type edge cases", %{router: router} do

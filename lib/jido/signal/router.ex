@@ -1,9 +1,141 @@
 defmodule Jido.Signal.Router do
+  @moduledoc """
+  The Router module implements a high-performance, trie-based signal routing system designed specifically for agent-based architectures. It provides sophisticated message routing capabilities with support for exact matches, wildcards, and pattern matching functions.
+
+  ## Core Concepts
+
+  The Router organizes signal handlers into an efficient trie (prefix tree) structure that enables:
+  - Fast path-based routing using dot-notation (e.g., "user.created.verified")
+  - Priority-based handler execution (-100 to 100)
+  - Complexity-based ordering for wildcard resolution
+  - Dynamic route management (add/remove at runtime)
+  - Pattern matching through custom functions
+
+  ### Path Patterns
+
+  Routes use a dot-notation pattern system supporting:
+  - Exact matches: `"user.created"`
+  - Single wildcards: `"user.*.updated"` (matches one segment)
+  - Multi-level wildcards: `"audit.**"` (matches zero or more segments)
+
+  Pattern rules:
+  - Paths must match: `^[a-zA-Z0-9.*_-]+(\.[a-zA-Z0-9.*_-]+)*$`
+  - Cannot contain consecutive dots (..)
+  - Cannot contain consecutive multi-wildcards (`**...**`)
+
+  ### Handler Priority
+
+  Handlers execute in order based on:
+  1. Path complexity (more specific paths execute first)
+  2. Priority (-100 to 100, higher executes first)
+  3. Registration order (for equal priority/complexity)
+
+  ## Usage Examples
+
+  Basic route creation:
+  ```elixir
+  {:ok, router} = Router.new([
+    # Simple route with default priority
+    {"user.created", %Instruction{action: HandleUserCreated}},
+
+    # High-priority audit logging
+    {"audit.**", %Instruction{action: AuditLogger}, 100},
+
+    # Pattern matching for large payments
+    {"payment.processed",
+      fn signal -> signal.data.amount > 1000 end,
+      %Instruction{action: HandleLargePayment}}
+  ])
+  ```
+
+  Dynamic route management:
+  ```elixir
+  # Add routes
+  {:ok, router} = Router.add(router, [
+    {"metrics.**", %Instruction{action: CollectMetrics}}
+  ])
+
+  # Remove routes
+  {:ok, router} = Router.remove(router, "metrics.**")
+  ```
+
+  Signal routing:
+  ```elixir
+  {:ok, instructions} = Router.route(router, %Signal{
+    type: "payment.processed",
+    data: %{amount: 2000}
+  })
+  ```
+
+  ## Path Complexity Scoring
+
+  The router uses a sophisticated scoring system to determine handler execution order:
+
+  1. Base score from segment count (length * 2000)
+  2. Exact match bonuses (3000 per segment, weighted by position)
+  3. Wildcard penalties:
+     - Single wildcard (*): 1000 - position_index * 100
+     - Multi-wildcard (**): 2000 - position_index * 200
+
+  This ensures more specific routes take precedence over wildcards, while maintaining predictable execution order.
+
+  ## Best Practices
+
+  1. Route Design
+     - Use consistent, hierarchical path patterns
+     - Prefer exact matches over wildcards when possible
+     - Keep path segments meaningful and well-structured
+     - Document your path hierarchy
+
+  2. Priority Management
+     - Reserve high priorities (75-100) for critical handlers
+     - Use default priority (0) for standard business logic
+     - Reserve low priorities (-100 to -75) for metrics/logging
+     - Document priority ranges for your application
+
+  3. Pattern Matching
+     - Keep match functions simple and fast
+     - Handle nil/missing data gracefully
+     - Avoid side effects in match functions
+     - Test edge cases thoroughly
+
+  4. Performance Considerations
+     - Monitor route count in production
+     - Use pattern matching sparingly
+     - Consider complexity scores when designing paths
+     - Profile routing performance under load
+
+  ## Error Handling
+
+  The router provides detailed error feedback for:
+  - Invalid path patterns
+  - Priority out of bounds
+  - Invalid match functions
+  - Missing handlers
+  - Malformed signals
+
+  ## Implementation Details
+
+  The router uses several specialized structs:
+  - `Route` - Defines a single routing rule
+  - `TrieNode` - Internal trie structure node
+  - `HandlerInfo` - Stores handler metadata
+  - `PatternMatch` - Encapsulates pattern matching rules
+
+  See the corresponding typespecs for detailed field information.
+
+  ## See Also
+
+  - `Jido.Signal` - Signal structure and validation
+  - `Jido.Instruction` - Handler instruction format
+  - `Jido.Error` - Error types and handling
+  """
   use Private
   use TypedStruct
   alias Jido.Signal
   alias Jido.Instruction
   alias Jido.Error
+  alias Jido.Signal.Router
 
   @valid_path_regex ~r/^[a-zA-Z0-9.*_-]+(\.[a-zA-Z0-9.*_-]+)*$/
   @default_priority 0
@@ -22,6 +154,7 @@ defmodule Jido.Signal.Router do
           | {String.t(), pid()}
 
   typedstruct module: HandlerInfo do
+    @moduledoc false
     @default_priority 0
     field(:instruction, Instruction.t(), enforce: true)
     field(:priority, Router.priority(), default: @default_priority)
@@ -29,6 +162,7 @@ defmodule Jido.Signal.Router do
   end
 
   typedstruct module: PatternMatch do
+    @moduledoc false
     @default_priority 0
     field(:match, Router.match(), enforce: true)
     field(:instruction, Instruction.t(), enforce: true)
@@ -36,22 +170,26 @@ defmodule Jido.Signal.Router do
   end
 
   typedstruct module: NodeHandlers do
+    @moduledoc false
     field(:handlers, [HandlerInfo.t()], default: [])
     field(:matchers, [PatternMatch.t()], default: [])
   end
 
   typedstruct module: WildcardHandlers do
+    @moduledoc false
     field(:type, Router.wildcard_type(), enforce: true)
     field(:handlers, NodeHandlers.t(), enforce: true)
   end
 
   typedstruct module: TrieNode do
+    @moduledoc false
     field(:segments, %{String.t() => TrieNode.t()}, default: %{})
     field(:wildcards, [WildcardHandlers.t()], default: [])
     field(:handlers, NodeHandlers.t())
   end
 
   typedstruct module: Route do
+    @moduledoc false
     @default_priority 0
     field(:path, String.t(), enforce: true)
     field(:instruction, Instruction.t(), enforce: true)
@@ -60,6 +198,7 @@ defmodule Jido.Signal.Router do
   end
 
   typedstruct module: Router do
+    @moduledoc false
     field(:trie, TrieNode.t(), default: %TrieNode{})
     field(:route_count, non_neg_integer(), default: 0)
   end
@@ -401,7 +540,7 @@ defmodule Jido.Signal.Router do
   """
   @spec route(Router.t(), Signal.t()) :: {:ok, [Instruction.t()]} | {:error, term()}
   def route(%Router{trie: _trie}, %Signal{type: nil}) do
-    {:error, Error.routing_error(:invalid_signal_type)}
+    {:error, Error.routing_error("Signal type cannot be nil")}
   end
 
   def route(%Router{trie: trie}, %Signal{type: type} = signal) do
@@ -412,7 +551,7 @@ defmodule Jido.Signal.Router do
       |> sort_and_execute(signal)
 
     if Enum.empty?(results) do
-      {:error, Error.routing_error(:no_handler)}
+      {:error, Error.routing_error("No matching handlers found for signal")}
     else
       {:ok, results}
     end
@@ -423,13 +562,13 @@ defmodule Jido.Signal.Router do
     defp validate_path(path) when is_binary(path) do
       cond do
         String.contains?(path, "..") ->
-          {:error, Error.routing_error(:invalid_path_format)}
+          {:error, Error.routing_error("Path cannot contain consecutive dots")}
 
         String.match?(path, ~r/\*\*.*\*\*/) ->
-          {:error, Error.routing_error(:invalid_path_format)}
+          {:error, Error.routing_error("Path cannot contain multiple wildcards")}
 
         not String.match?(path, @valid_path_regex) ->
-          {:error, Error.routing_error(:invalid_path_format)}
+          {:error, Error.routing_error("Path contains invalid characters")}
 
         true ->
           {:ok, path}
@@ -437,7 +576,7 @@ defmodule Jido.Signal.Router do
     end
 
     defp validate_path(_invalid) do
-      {:error, Error.routing_error(:invalid_path)}
+      {:error, Error.routing_error("Path must be a string")}
     end
 
     # Validates that an instruction has a valid action
@@ -446,7 +585,7 @@ defmodule Jido.Signal.Router do
     end
 
     defp validate_instruction(_invalid) do
-      {:error, Error.routing_error(:invalid_instruction)}
+      {:error, Error.routing_error("Invalid instruction format")}
     end
 
     # Validates that a match function returns boolean for a test signal
@@ -471,16 +610,16 @@ defmodule Jido.Signal.Router do
             {:ok, match_fn}
 
           _other ->
-            {:error, Error.routing_error(:invalid_match_function)}
+            {:error, Error.routing_error("Match function must return a boolean")}
         end
       rescue
         _error ->
-          {:error, Error.routing_error(:invalid_match_function)}
+          {:error, Error.routing_error("Match function raised an error during validation")}
       end
     end
 
     defp validate_match(_invalid) do
-      {:error, Error.routing_error(:invalid_match_function)}
+      {:error, Error.routing_error("Match must be a function that takes one argument")}
     end
 
     # Validates that a priority is within allowed bounds
@@ -489,10 +628,10 @@ defmodule Jido.Signal.Router do
     defp validate_priority(priority) when is_integer(priority) do
       cond do
         priority > @max_priority ->
-          {:error, Error.routing_error({:priority_out_of_bounds, :too_high})}
+          {:error, Error.routing_error("Priority value exceeds maximum allowed")}
 
         priority < @min_priority ->
-          {:error, Error.routing_error({:priority_out_of_bounds, :too_low})}
+          {:error, Error.routing_error("Priority value below minimum allowed")}
 
         true ->
           {:ok, priority}
@@ -500,7 +639,7 @@ defmodule Jido.Signal.Router do
     end
 
     defp validate_priority(_invalid) do
-      {:error, Error.routing_error(:invalid_priority)}
+      {:error, Error.routing_error("Priority must be an integer")}
     end
 
     # Cleans up a path string by removing extra dots and whitespace

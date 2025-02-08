@@ -1,9 +1,60 @@
 defmodule Jido.Signal.Dispatch do
   @moduledoc """
-  Dispatch signals to the appropriate targets.
+  A flexible signal dispatching system that routes signals to various destinations using configurable adapters.
 
-  Provides functionality to deliver signals to other processes using configurable adapters.
-  Supports built-in adapters for common use cases and allows custom adapters for extensibility.
+  The Dispatch module serves as the central hub for signal delivery in the Jido system. It provides a unified
+  interface for sending signals to different destinations through various adapters. Each adapter implements
+  specific delivery mechanisms suited for different use cases.
+
+  ## Built-in Adapters
+
+  The following adapters are provided out of the box:
+
+  * `:pid` - Direct delivery to a specific process (see `Jido.Signal.Dispatch.PidAdapter`)
+  * `:bus` - Delivery to an event bus (see `Jido.Signal.Dispatch.Bus`)
+  * `:named` - Delivery to a named process (see `Jido.Signal.Dispatch.Named`)
+  * `:pubsub` - Delivery via PubSub mechanism (see `Jido.Signal.Dispatch.PubSub`)
+  * `:logger` - Log signals using Logger (see `Jido.Signal.Dispatch.LoggerAdapter`)
+  * `:console` - Print signals to console (see `Jido.Signal.Dispatch.ConsoleAdapter`)
+  * `:noop` - No-op adapter for testing/development (see `Jido.Signal.Dispatch.NoopAdapter`)
+
+  ## Configuration
+
+  Each adapter requires specific configuration options. A dispatch configuration is a tuple of
+  `{adapter_type, options}` where:
+
+  * `adapter_type` - One of the built-in adapter types above or a custom module implementing the `Jido.Signal.Dispatch.Adapter` behaviour
+  * `options` - Keyword list of options specific to the chosen adapter
+
+  Multiple dispatch configurations can be provided as a list to send signals to multiple destinations.
+
+  ## Examples
+
+      # Send to a specific PID
+      config = {:pid, [target: {:pid, destination_pid}, delivery_mode: :async]}
+      Jido.Signal.Dispatch.dispatch(signal, config)
+
+      # Send to multiple destinations
+      config = [
+        {:bus, [target: {:bus, :default}, stream: "events"]},
+        {:logger, [level: :info]},
+        {:pubsub, [target: :audit, topic: "audit"]}
+      ]
+      Jido.Signal.Dispatch.dispatch(signal, config)
+
+      # Using a custom adapter
+      config = {MyCustomAdapter, [custom_option: "value"]}
+      Jido.Signal.Dispatch.dispatch(signal, config)
+
+  ## Custom Adapters
+
+  To implement a custom adapter, create a module that implements the `Jido.Signal.Dispatch.Adapter`
+  behaviour. The module must implement:
+
+  * `validate_opts/1` - Validates the adapter-specific options
+  * `deliver/2` - Handles the actual signal delivery
+
+  See `Jido.Signal.Dispatch.Adapter` for more details.
   """
 
   @type adapter :: :pid | :bus | :named | :pubsub | :logger | :console | :noop | nil | module()
@@ -84,7 +135,7 @@ defmodule Jido.Signal.Dispatch do
       # Multiple destinations
       iex> config = [
       ...>   {:bus, [target: {:bus, :default}, stream: "events"]},
-      ...>   {:pubsub, [target: {:pubsub, :audit}, topic: "audit"]}
+      ...>   {:pubsub, [target: :audit, topic: "audit"]}
       ...> ]
       iex> Jido.Signal.Dispatch.dispatch(signal, config)
       :ok

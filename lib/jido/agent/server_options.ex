@@ -1,4 +1,5 @@
 defmodule Jido.Agent.Server.Options do
+  @moduledoc false
   use ExDbug, enabled: false
 
   @server_state_opts_schema NimbleOptions.new!(

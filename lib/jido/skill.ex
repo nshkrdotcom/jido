@@ -1,20 +1,205 @@
 defmodule Jido.Skill do
   @moduledoc """
-  Defines the core behavior and structure for Jido Skills.
+  Defines the core behavior and structure for Jido Skills, the fundamental building blocks
+  of agent capabilities in the Jido framework.
 
-  Skills are the fundamental building blocks of agent capabilities, providing:
-  - Signal routing and handling
-  - State management
+  ## Overview
+
+  Skills encapsulate discrete sets of functionality that agents can use to accomplish tasks.
+  Think of them as feature packs that give agents new abilities - similar to how a person might
+  learn skills like "cooking" or "programming". Each Skill provides:
+
+  - Signal routing and handling patterns
+  - Isolated state management
   - Process supervision
-  - Configuration management
-  """
+  - Configuration validation
+  - Runtime adaptation
 
+  ## Core Concepts
+
+  ### State Isolation
+
+  Skills use schema-based state isolation to prevent different capabilities from interfering
+  with each other. Each skill defines:
+
+  - A unique `schema_key` for namespace isolation
+  - An `initial_state/0` callback for state setup
+  - Validation rules for configuration
+
+  ### Signal Patterns
+
+  Skills define what signals they can handle through pattern matching:
+
+  ```elixir
+  use Jido.Skill,
+    name: "weather_monitor",
+    signals: [
+      input: ["weather.data.*", "weather.alert.**"],
+      output: ["weather.alert.generated"]
+    ]
+  ```
+
+  Pattern rules:
+  - Exact matches: "user.created"
+  - Single wildcards: "user.*.updated"
+  - Multi-wildcards: "audit.**"
+
+  ### Configuration Management
+
+  Skills provide schema-based config validation:
+
+  ```elixir
+  config: [
+    api_key: [
+      type: :string,
+      required: true,
+      doc: "API key for weather service"
+    ],
+    update_interval: [
+      type: :pos_integer,
+      default: 60_000,
+      doc: "Update interval in milliseconds"
+    ]
+  ]
+  ```
+
+  ### Process Supervision
+
+  Skills can define child processes through the `child_spec/1` callback:
+
+  ```elixir
+  def child_spec(config) do
+    [
+      {WeatherAPI.Client, config.api_key},
+      {MetricsCollector, name: config.metrics_name}
+    ]
+  end
+  ```
+
+  ## Usage Example
+
+  Here's a complete skill example:
+
+  ```elixir
+  defmodule MyApp.WeatherSkill do
+    use Jido.Skill,
+      name: "weather_monitor",
+      description: "Monitors weather conditions and generates alerts",
+      category: "monitoring",
+      tags: ["weather", "alerts"],
+      vsn: "1.0.0",
+      schema_key: :weather,
+      signals: [
+        input: ["weather.data.*", "weather.alert.**"],
+        output: ["weather.alert.generated"]
+      ],
+      config: [
+        api_key: [type: :string, required: true]
+      ]
+
+    def initial_state do
+      %{
+        current_conditions: nil,
+        alert_history: [],
+        last_update: nil
+      }
+    end
+
+    def child_spec(config) do
+      [
+        {WeatherAPI.Client, config.api_key}
+      ]
+    end
+
+    def handle_signal(%Signal{type: "weather.data.updated"} = signal) do
+      # Handle weather updates
+      {:ok, signal}
+    end
+  end
+  ```
+
+  ## Callbacks
+
+  Skills implement these callbacks:
+
+  - `initial_state/0` - Returns the skill's initial state map
+  - `child_spec/1` - Returns child process specifications
+  - `routes/0` - Returns signal routing rules
+  - `handle_signal/1` - Processes incoming signals
+  - `process_result/2` - Post-processes signal handling results
+
+  ## Behavior
+
+  The Skill behavior enforces a consistent interface:
+
+  ```elixir
+  @callback initial_state() :: map()
+  @callback child_spec(config :: map()) :: Supervisor.child_spec() | [Supervisor.child_spec()]
+  @callback routes() :: [map()]
+  @callback handle_signal(signal :: Signal.t()) :: {:ok, Signal.t()} | {:error, term()}
+  @callback process_result(signal :: Signal.t(), result :: term()) ::
+              {:ok, term()} | {:error, term()}
+  ```
+
+  ## Configuration
+
+  Skills validate their configuration at compile time using these fields:
+
+  - `name` - Unique identifier (required)
+  - `description` - Human-readable explanation
+  - `category` - Broad classification
+  - `tags` - List of searchable tags
+  - `vsn` - Version string
+  - `schema_key` - State namespace key
+  - `signals` - Input/output patterns
+  - `config` - Configuration schema
+
+  ## Best Practices
+
+  1. **State Isolation**
+     - Use meaningful schema_key names
+     - Keep state focused and minimal
+     - Document state structure
+
+  2. **Signal Design**
+     - Use consistent naming patterns
+     - Document signal formats
+     - Consider routing efficiency
+
+  3. **Configuration**
+     - Validate thoroughly
+     - Provide good defaults
+     - Document all options
+
+  4. **Process Management**
+     - Supervise child processes
+     - Handle crashes gracefully
+     - Monitor resource usage
+
+  ## See Also
+
+  - `Jido.Signal` - Signal structure and validation
+  - `Jido.Error` - Error handling
+  - `Jido.Agent` - Agent integration
+  """
   alias Jido.Signal
   alias Jido.Error
   require OK
   use TypedStruct
 
-  # Core skill structure
+  @typedoc """
+  Represents a skill's core structure and metadata.
+
+  Fields:
+  - `name`: Unique identifier for the skill
+  - `description`: Human-readable explanation of purpose
+  - `category`: Broad classification for organization
+  - `tags`: List of searchable tags
+  - `vsn`: Version string for compatibility
+  - `schema_key`: Atom key for state namespace
+  - `signals`: Input/output signal patterns
+  - `config`: Configuration schema
+  """
   typedstruct do
     field(:name, String.t(), enforce: true)
     field(:description, String.t())
@@ -77,6 +262,24 @@ defmodule Jido.Skill do
 
   @doc """
   Implements the skill behavior and configuration validation.
+
+  This macro:
+  1. Validates configuration at compile time
+  2. Defines metadata accessors
+  3. Provides JSON serialization
+  4. Sets up default implementations
+
+  ## Example
+
+      defmodule MySkill do
+        use Jido.Skill,
+          name: "my_skill",
+          schema_key: :my_skill,
+          signals: [
+            input: ["my.event.*"],
+            output: ["my.result.*"]
+          ]
+      end
   """
   defmacro __using__(opts) do
     escaped_schema = Macro.escape(@skill_config_schema)
@@ -94,16 +297,31 @@ defmodule Jido.Skill do
           @validated_opts validated_opts
 
           # Define metadata accessors
+          @doc false
           def name, do: @validated_opts[:name]
+
+          @doc false
           def description, do: @validated_opts[:description]
+
+          @doc false
           def category, do: @validated_opts[:category]
+
+          @doc false
           def tags, do: @validated_opts[:tags]
+
+          @doc false
           def vsn, do: @validated_opts[:vsn]
+
+          @doc false
           def schema_key, do: @validated_opts[:schema_key]
+
+          @doc false
           def signals, do: @validated_opts[:signals]
+
+          @doc false
           def config_schema, do: @validated_opts[:config]
 
-          # Serialize metadata to JSON format
+          @doc false
           def to_json do
             %{
               name: @validated_opts[:name],
@@ -117,15 +335,25 @@ defmodule Jido.Skill do
             }
           end
 
+          @doc false
           def __skill_metadata__ do
             to_json()
           end
 
           # Default implementations
+          @doc false
           def initial_state, do: %{}
+
+          @doc false
           def child_spec(_config), do: []
+
+          @doc false
           def routes, do: []
+
+          @doc false
           def handle_signal(signal), do: {:ok, signal}
+
+          @doc false
           def process_result(signal, result), do: {:ok, result}
 
           defoverridable initial_state: 0,
@@ -154,12 +382,15 @@ defmodule Jido.Skill do
               {:ok, term()} | {:error, any()}
 
   @doc """
-  Skills should be defined at compile time, not runtime.
+  Skills must be defined at compile time, not runtime.
+
+  This function always returns an error to enforce compile-time definition.
   """
   @spec new() :: {:error, Error.t()}
   @spec new(map() | keyword()) :: {:error, Error.t()}
   def new, do: new(%{})
 
+  @doc false
   def new(_map_or_kwlist) do
     "Skills should not be defined at runtime"
     |> Error.config_error()
@@ -168,6 +399,21 @@ defmodule Jido.Skill do
 
   @doc """
   Validates a skill's configuration against its schema.
+
+  ## Parameters
+  - `skill_module`: The skill module to validate
+  - `config`: Configuration map to validate
+
+  ## Returns
+  - `{:ok, validated_config}`: Successfully validated config
+  - `{:error, reason}`: Validation failed
+
+  ## Example
+
+      Skill.validate_config(WeatherSkill, %{
+        api_key: "abc123",
+        interval: 1000
+      })
   """
   @spec validate_config(module(), map()) :: {:ok, map()} | {:error, Error.t()}
   def validate_config(skill_module, config) do
@@ -179,6 +425,17 @@ defmodule Jido.Skill do
 
   @doc """
   Gets a skill's configuration schema.
+
+  ## Parameters
+  - `skill_module`: The skill module to inspect
+
+  ## Returns
+  - `{:ok, schema}`: The skill's config schema
+  - `{:error, reason}`: Schema not found
+
+  ## Example
+
+      Skill.get_config_schema(WeatherSkill)
   """
   @spec get_config_schema(module()) :: {:ok, map()} | {:error, Error.t()}
   def get_config_schema(skill_module) do
@@ -193,6 +450,21 @@ defmodule Jido.Skill do
 
   @doc """
   Validates a signal against a skill's defined patterns.
+
+  ## Parameters
+  - `signal`: The signal to validate
+  - `patterns`: Map of input/output patterns
+
+  ## Returns
+  - `:ok`: Signal matches patterns
+  - `{:error, reason}`: No matching patterns
+
+  ## Example
+
+      Skill.validate_signal(
+        %Signal{type: "weather.data.updated"},
+        %{input: ["weather.data.*"], output: []}
+      )
   """
   @spec validate_signal(Signal.t(), map()) :: :ok | {:error, Error.t()}
   def validate_signal(%Signal{} = signal, patterns) do

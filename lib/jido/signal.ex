@@ -1,9 +1,149 @@
 defmodule Jido.Signal do
   @moduledoc """
-  Defines the structure and behavior of a Signal in the Jido system.
-  Implements CloudEvents specification v1.0.2 with Jido-specific extensions.
-  """
+  Defines the core Signal structure in Jido, implementing the CloudEvents specification (v1.0.2)
+  with Jido-specific extensions for agent-based systems.
 
+  https://cloudevents.io/
+
+  ## Overview
+
+  Signals are the universal message format in Jido, serving as the nervous system of your
+  agent-based application. Every event, command, and state change flows through the system
+  as a Signal, providing:
+
+  - Standardized event structure (CloudEvents v1.0.2 compatible)
+  - Rich metadata and context tracking
+  - Built-in instruction handling
+  - Flexible dispatch configuration
+  - Automatic serialization
+
+  ## CloudEvents Compliance
+
+  Each Signal implements the CloudEvents v1.0.2 specification with these required fields:
+
+  - `specversion`: Always "1.0.2"
+  - `id`: Unique identifier (UUID v4)
+  - `source`: Origin of the event ("/service/component")
+  - `type`: Classification of the event ("domain.entity.action")
+
+  And optional fields:
+
+  - `subject`: Specific subject of the event
+  - `time`: Timestamp in ISO 8601 format
+  - `datacontenttype`: Media type of the data (defaults to "application/json")
+  - `dataschema`: Schema defining the data structure
+  - `data`: The actual event payload
+
+  ## Jido Extensions
+
+  Beyond the CloudEvents spec, Signals include Jido-specific fields:
+
+  - `jido_instructions`: List of instructions to execute (optional)
+  - `jido_opts`: Processing options and flags (optional)
+  - `jido_dispatch`: Routing and delivery configuration (optional)
+  - `jido_metadata`: Additional context and tracking data (optional)
+
+  ## Creating Signals
+
+  Signals can be created in several ways:
+
+  ```elixir
+  # Basic event
+  {:ok, signal} = Signal.new(%{
+    type: "user.created",
+    source: "/auth/registration",
+    data: %{user_id: "123", email: "user@example.com"}
+  })
+
+  # With instructions
+  {:ok, signal} = Signal.new(%{
+    type: "order.process",
+    source: "/orders",
+    data: %{order_id: "456"},
+    jido_instructions: [
+      ProcessOrder,
+      {NotifyUser, %{template: "order_confirmation"}}
+    ]
+  })
+
+  # With dispatch config
+  {:ok, signal} = Signal.new(%{
+    type: "metrics.collected",
+    source: "/monitoring",
+    data: %{cpu: 80, memory: 70},
+    jido_dispatch: {:pubsub, topic: "metrics"}
+  })
+  ```
+
+  ## Signal Types
+
+  Signal types are strings, but typically use a hierarchical dot notation:
+
+  ```
+  <domain>.<entity>.<action>[.<qualifier>]
+  ```
+
+  Examples:
+  - `user.profile.updated`
+  - `order.payment.processed.success`
+  - `system.metrics.collected`
+
+  Guidelines for type naming:
+  - Use lowercase with dots
+  - Keep segments meaningful
+  - Order from general to specific
+  - Include qualifiers when needed
+
+  ## Data Content Types
+
+  The `datacontenttype` field indicates the format of the `data` field:
+
+  - `application/json` (default) - JSON-structured data
+  - `text/plain` - Unstructured text
+  - `application/octet-stream` - Binary data
+  - Custom MIME types for specific formats
+
+  ## Instruction Handling
+
+  Signals can carry instructions for agents to execute:
+
+  ```elixir
+  Signal.new(%{
+    type: "task.assigned",
+    source: "/workflow",
+    jido_instructions: [
+      ValidateTask,
+      {AssignTask, %{worker: "agent_1"}},
+      NotifyAssignment
+    ]
+  })
+  ```
+
+  Instructions are normalized and validated during Signal creation.
+
+  ## Dispatch Configuration
+
+  The `jido_dispatch` field controls how the Signal is delivered:
+
+  ```elixir
+  # Single dispatch config
+  jido_dispatch: {:pubsub, topic: "events"}
+
+  # Multiple dispatch targets
+  jido_dispatch: [
+    {:pubsub, topic: "events"},
+    {:logger, level: :info},
+    {:webhook, url: "https://api.example.com/webhook"}
+  ]
+  ```
+
+  ## See Also
+
+  - `Jido.Instruction` - Instruction specification
+  - `Jido.Signal.Router` - Signal routing
+  - `Jido.Signal.Dispatch` - Dispatch handling
+  - CloudEvents spec: https://cloudevents.io/
+  """
   alias Jido.Instruction
   alias Jido.Signal.Dispatch
   use TypedStruct
@@ -21,7 +161,7 @@ defmodule Jido.Signal do
     # Jido-specific fields
     field(:jido_instructions, Jido.Instruction.instruction_list())
     field(:jido_opts, map())
-    field(:jido_dispatch, Dispatch.t())
+    field(:jido_dispatch, Dispatch.dispatch_configs())
     field(:jido_metadata, map())
   end
 

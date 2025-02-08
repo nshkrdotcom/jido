@@ -140,7 +140,7 @@ defmodule Jido.Signal.DispatchTest do
     test "validates multiple dispatch configurations with default" do
       config = [
         {:bus, [target: :test_bus, stream: "events"]},
-        {:pubsub, [target: {:pubsub, :audit}, topic: "audit.events"]}
+        {:pubsub, [target: :audit, topic: "audit.events"]}
       ]
 
       assert {:ok, validated_config} = Dispatch.validate_opts(config)

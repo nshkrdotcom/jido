@@ -1,9 +1,202 @@
 defmodule Jido.Discovery do
   @moduledoc """
-  Discovery is the mechanism by which agents and sensors are discovered and registered with the system.
+  The Discovery module is Jido's component registry system, providing efficient caching and lookup
+  of system components like Actions, Sensors, Agents, and Skills. Think of it as a "service registry"
+  that helps different parts of your system find and interact with each other.
 
-  This module caches discovered components using :persistent_term for efficient lookups.
-  The cache is initialized at application startup and can be manually refreshed if needed.
+  ## Core Concepts
+
+  ### Component Discovery
+
+  Discovery works by scanning all loaded applications for components that implement Jido's
+  metadata protocols. It automatically finds and indexes:
+
+  - **Actions** - Discrete units of work
+  - **Sensors** - Event monitoring components
+  - **Agents** - Autonomous workers
+  - **Skills** - Reusable capability packs
+  - **Demos** - Example implementations - used in the Jido Workbench (https://github.com/agentjido/jido_workbench)
+
+  The module uses Erlang's `:persistent_term` for optimal lookup performance
+
+  ### Component Metadata
+
+  Each discovered component includes the following metadata:
+
+  ```elixir
+  %{
+    module: MyApp.CoolAction,        # The actual module
+    name: "cool_action",            # Human-readable name
+    description: "Does cool stuff", # What it does
+    slug: "abc123de",              # Unique identifier
+    category: :utility,            # Broad classification
+    tags: [:cool, :stuff]          # Searchable tags
+  }
+  ```
+
+  ## Usage Examples
+
+  ### Basic Component Lookup
+
+  Find components by their unique slugs:
+
+  ```elixir
+  # Find a specific action
+  case Discovery.get_action_by_slug("abc123de") do
+    %{module: module} ->
+      # Use the action module
+      {:ok, result} = module.run()
+    nil ->
+      # Handle missing action
+  end
+
+  # Find a sensor
+  sensor = Discovery.get_sensor_by_slug("def456gh")
+  ```
+
+  ### Filtered Component Lists
+
+  Get filtered lists of components:
+
+  ```elixir
+  # List all monitoring sensors
+  sensors = Discovery.list_sensors(
+    category: :monitoring,
+    tag: :metrics
+  )
+
+  # Get the first 10 utility actions
+  actions = Discovery.list_actions(
+    category: :utility,
+    limit: 10
+  )
+
+  # Search agents by name
+  agents = Discovery.list_agents(
+    name: "processor",
+    offset: 5,
+    limit: 5
+  )
+  ```
+
+  ### Cache Management
+
+  Control the discovery cache lifecycle:
+
+  ```elixir
+  # Initialize cache (usually done at startup)
+  :ok = Discovery.init()
+
+  # Force cache refresh if needed
+  :ok = Discovery.refresh()
+
+  # Check last update time
+  {:ok, last_updated} = Discovery.last_updated()
+  ```
+
+  ## Component Registration
+
+  Components are automatically discovered when they:
+  1. Are loaded in any application in the system
+  2. Implement the appropriate metadata callback
+  3. Include required metadata fields
+
+  Example component:
+  ```elixir
+  defmodule MyApp.CoolAction do
+    use Jido.Action,
+      name: "cool_action",
+      description: "Does cool stuff",
+      category: :utility,
+      tags: [:cool, :stuff]
+
+    # Metadata is automatically generated from use params
+    # def __action_metadata__ do
+    #   %{
+    #     name: "cool_action",
+    #     description: "Does cool stuff",
+    #     category: :utility,
+    #     tags: [:cool, :stuff]
+    #   }
+    # end
+  end
+  ```
+  ```
+
+  ## Cache Structure
+
+  The discovery cache maintains separate collections for each component type:
+
+  ```elixir
+  %{
+    version: "1.0",              # Cache format version
+    last_updated: ~U[...],       # Last refresh timestamp
+    actions: [...],              # List of actions
+    sensors: [...],              # List of sensors
+    agents: [...],               # List of agents
+    skills: [...],              # List of skills
+    demos: [...]                # List of demos
+  }
+  ```
+
+  ## Filtering Options
+
+  All list functions support these filters:
+
+  - `:limit` - Maximum results to return
+  - `:offset` - Results to skip (pagination)
+  - `:name` - Filter by name (partial match)
+  - `:description` - Filter by description (partial match)
+  - `:category` - Filter by category (exact match)
+  - `:tag` - Filter by tag (must have exact tag)
+
+  ## Common Patterns
+
+  ### 1. Component Lookup with Fallback
+  ```elixir
+  def find_action(slug, fallback \\ nil) do
+    case Discovery.get_action_by_slug(slug) do
+      %{module: module} -> {:ok, module}
+      nil -> {:ok, fallback}
+    end
+  end
+  ```
+
+  ### 2. Category-Based Component Loading
+  ```elixir
+  def load_monitoring_sensors do
+    Discovery.list_sensors(
+      category: :monitoring,
+      tag: :active
+    )
+  end
+  ```
+
+  ### 3. Paginated Search
+  ```elixir
+  def search_agents(term, page, per_page) do
+    Discovery.list_agents(
+      name: term,
+      offset: (page - 1) * per_page,
+      limit: per_page
+    )
+  end
+  ```
+
+  ## Important Notes
+
+  - Cache is shared across all processes
+  - Components must be loaded before discovery
+  - Metadata changes require cache refresh
+  - Slug generation is deterministic
+  - Filter options are additive (AND logic)
+
+  ## See Also
+
+  - `Jido.Action` - Action component behavior
+  - `Jido.Sensor` - Sensor component behavior
+  - `Jido.Agent` - Agent component behavior
+  - `Jido.Skill` - Skill component behavior
   """
   require Logger
 

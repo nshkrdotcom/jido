@@ -1,33 +1,5 @@
 defmodule Jido.Agent.Server.Process do
-  @moduledoc """
-  Manages child processes under an Agent Server's DynamicSupervisor.
-
-  This module provides functionality to:
-  - Start and manage the DynamicSupervisor for an Agent's child processes
-  - Start/stop/restart child processes
-  - Monitor process lifecycle events
-  - List active child processes
-
-  The Process manager ensures proper lifecycle management and supervision of all child processes
-  belonging to an Agent.
-
-  ## Examples
-
-      # Start the supervisor
-      {:ok, state} = Process.start_supervisor(state)
-
-      # Start child processes
-      {:ok, pids} = Process.start(state, child_specs)
-
-      # List running processes
-      children = Process.list(state)
-
-      # Terminate a process
-      :ok = Process.terminate(state, child_pid)
-
-      # Restart a process
-      {:ok, new_pid} = Process.restart(state, old_pid, child_spec)
-  """
+  @moduledoc false
 
   use ExDbug, enabled: false
   alias Jido.Agent.Server.State, as: ServerState

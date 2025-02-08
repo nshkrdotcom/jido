@@ -1,64 +1,136 @@
 defmodule Jido.Instruction do
   @moduledoc """
-  Represents a single instruction to be executed by a Runner.  An instruction consists of an action module and optional parameters.
+  Instructions in Jido represent discrete units of work that can be planned, validated, and executed by agents.
+  Think of them as "work orders" that tell agents exactly what needs to be done and how to do it.
 
-  Instructions are the basic unit of execution in the Jido system. They wrap an action module
-  with its parameters and execution context, allowing the Runner to execute them in a
-  standardized way.
+  ## Core Concepts
 
-  ## Fields
+  An Instruction wraps an Action module with everything it needs to execute:
+  - The Action to perform (required)
+  - Parameters for the action
+  - Execution context
+  - Runtime options
 
-  - `:action` - The action module to execute (required)
-  - `:params` - Map of parameters to pass to the action (default: %{})
-  - `:context` - Map of execution context data (default: %{})
-  - `:opts` - Keyword list of options (default: [])
+  ## Structure
 
-  ## Instruction Shorthand Formats
+  Each Instruction contains:
 
-  Instructions can be specified in several formats:
+  ```elixir
+  %Instruction{
+    id: "inst_abc123",           # Unique identifier
+    action: MyApp.Actions.DoTask, # The action module to execute
+    params: %{value: 42},        # Parameters for the action
+    context: %{user_id: "123"},  # Execution context
+    opts: [retry: true],         # Runtime options
+  }
+  ```
 
-  - Action module name:
-      `MyApp.Actions.DoSomething`
+  ## Creating Instructions
 
-  - Tuple of action and params:
-      `{MyApp.Actions.DoSomething, %{value: 42}}`
+  Instructions support multiple creation formats for convenience:
 
-  - Lists of instructions:
-      `[MyApp.Actions.DoSomething, {MyApp.Actions.ProcessData, %{data: "input"}}]`
+  ### 1. Full Struct (Most Explicit)
+  ```elixir
+  %Instruction{
+    action: MyApp.Actions.ProcessOrder,
+    params: %{order_id: "123"},
+    context: %{tenant_id: "456"}
+  }
+  ```
 
-  - Full instruction struct:
-      ```
-      %Instruction{
-        action: MyApp.Actions.DoSomething,
-        params: %{value: 42}
-      }
-      ```
+  ### 2. Action Module Only (Simplest)
+  ```elixir
+  MyApp.Actions.ProcessOrder
+  ```
 
-  Shorthand formats are for conveinence only and will be normalized to the full instruction struct.
+  ### 3. Action With Parameters (Common)
+  ```elixir
+  {MyApp.Actions.ProcessOrder, %{order_id: "123"}}
+  ```
 
-  ## Examples
+  ### 4. Factory Function
+  ```elixir
+  Instruction.new!(%{
+    action: MyApp.Actions.ProcessOrder,
+    params: %{order_id: "123"},
+    context: %{tenant_id: "456"}
+  })
+  ```
 
-      # Create a basic instruction
-      %Instruction{
-        action: MyApp.Actions.DoSomething,
-        params: %{value: 42}
-      }
+  ## Working with Instructions
 
-      # With context
-      %Instruction{
-        action: MyApp.Actions.ProcessData,
-        params: %{data: "input"},
-        context: %{user_id: 123}
-      }
+  ### Normalization
 
-      # Using shorthand action name
-      MyApp.Actions.DoSomething
+  Convert various input formats to standard instruction structs:
 
-      # Using tuple shorthand
-      {MyApp.Actions.ProcessData, %{data: "input"}}
+  ```elixir
+  # Normalize a single instruction
+  {:ok, [instruction]} = Instruction.normalize(MyApp.Actions.ProcessOrder)
 
-  Instructions are typically created by the Agent when processing commands, and then
-  executed by a Runner module like `Jido.Runner.Simple` or `Jido.Runner.Chain`.
+  # Normalize with context
+  {:ok, instructions} = Instruction.normalize(
+    [
+      MyApp.Actions.ValidateOrder,
+      {MyApp.Actions.ProcessOrder, %{priority: "high"}}
+    ],
+    %{tenant_id: "123"}  # Shared context
+  )
+  ```
+
+  ### Validation
+
+  Ensure instructions use allowed actions:
+
+  ```elixir
+  allowed_actions = [
+    MyApp.Actions.ValidateOrder,
+    MyApp.Actions.ProcessOrder
+  ]
+
+  :ok = Instruction.validate_allowed_actions(instructions, allowed_actions)
+  ```
+
+  ## Common Patterns
+
+  ### 1. Workflow Definition
+  ```elixir
+  instructions = [
+    MyApp.Actions.ValidateInput,
+    {MyApp.Actions.ProcessData, %{format: "json"}},
+    MyApp.Actions.SaveResults
+  ]
+  ```
+
+  ### 2. Conditional Execution
+  ```elixir
+  instructions = [
+    MyApp.Actions.ValidateOrder,
+    {MyApp.Actions.CheckInventory, %{strict: true}},
+    # Add fulfillment only if in stock
+    if has_stock? do
+      {MyApp.Actions.FulfillOrder, %{warehouse: "main"}}
+    end
+  ]
+  |> Enum.reject(&is_nil/1)
+  ```
+
+  ### 3. Context Sharing
+  ```elixir
+  # All instructions share common context
+  {:ok, instructions} = Instruction.normalize(
+    [ValidateUser, ProcessOrder, NotifyUser],
+    %{
+      request_id: "req_123",
+      tenant_id: "tenant_456",
+    }
+  )
+  ```
+
+  ## See Also
+
+  - `Jido.Action` - Action behavior and implementation
+  - `Jido.Runner` - Instruction execution
+  - `Jido.Agent` - Agent-based execution
   """
   alias Jido.Error
   alias Jido.Instruction
@@ -76,7 +148,6 @@ defmodule Jido.Instruction do
     field(:params, map(), default: %{})
     field(:context, map(), default: %{})
     field(:opts, keyword(), default: [])
-    field(:correlation_id, String.t(), default: nil)
   end
 
   @doc """
@@ -131,7 +202,6 @@ defmodule Jido.Instruction do
       * `:context` - Context map (optional, default: %{})
       * `:opts` - Keyword list of options (optional, default: [])
       * `:id` - String identifier (optional, defaults to UUID)
-      * `:correlation_id` - String correlation ID (optional)
 
   ## Returns
     * `{:ok, %Instruction{}}` - Successfully created instruction
@@ -161,8 +231,7 @@ defmodule Jido.Instruction do
        action: action,
        params: Map.get(attrs, :params, %{}),
        context: Map.get(attrs, :context, %{}),
-       opts: Map.get(attrs, :opts, []),
-       correlation_id: Map.get(attrs, :correlation_id)
+       opts: Map.get(attrs, :opts, [])
      }}
   end
 
@@ -177,15 +246,33 @@ defmodule Jido.Instruction do
     * `input` - One of:
       * Single instruction struct (%Instruction{})
       * List of instruction structs
-      * Single action module
-      * Action tuple {module, params}
-      * List of actions/tuples/instructions
+      * Single action module (MyApp.Actions.ProcessOrder)
+      * Action tuple with params ({MyApp.Actions.ProcessOrder, %{order_id: "123"}})
+      * Action tuple with empty params ({MyApp.Actions.ProcessOrder, %{}})
+      * Action tuple with context ({MyApp.Actions.ProcessOrder, %{}, %{tenant_id: "123"}})
+      * Action tuple with opts ({MyApp.Actions.ProcessOrder, %{}, %{}, [retry: true]})
+      * List of any combination of the above formats
     * `context` - Optional context map to merge into all instructions (default: %{})
     * `opts` - Optional keyword list of options (default: [])
 
   ## Returns
     * `{:ok, [%Instruction{}]}` - List of normalized instruction structs
     * `{:error, term()}` - If normalization fails
+
+  ## Examples
+
+      iex> Instruction.normalize(MyApp.Actions.ProcessOrder)
+      {:ok, [%Instruction{action: MyApp.Actions.ProcessOrder}]}
+
+      iex> Instruction.normalize({MyApp.Actions.ProcessOrder, %{order_id: "123"}})
+      {:ok, [%Instruction{action: MyApp.Actions.ProcessOrder, params: %{order_id: "123"}}]}
+
+      iex> Instruction.normalize([
+      ...>   MyApp.Actions.ValidateOrder,
+      ...>   {MyApp.Actions.ProcessOrder, %{priority: "high"}},
+      ...>   {MyApp.Actions.NotifyUser, %{}, %{user_id: "123"}}
+      ...> ])
+      {:ok, [%Instruction{...}, %Instruction{...}, %Instruction{...}]}
   """
   @spec normalize(instruction() | instruction_list(), map(), keyword()) ::
           {:ok, [t()]} | {:error, term()}

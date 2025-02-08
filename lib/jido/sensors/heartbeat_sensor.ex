@@ -1,4 +1,4 @@
-defmodule Jido.HeartbeatSensor do
+defmodule Jido.Sensors.Heartbeat do
   @moduledoc """
   A sensor that emits heartbeat signals at configurable intervals.
   """

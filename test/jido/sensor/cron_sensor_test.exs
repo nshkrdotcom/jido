@@ -1,11 +1,11 @@
-defmodule JidoTest.CronSensorTest do
+defmodule JidoTest.CronTest do
   @moduledoc false
   use JidoTest.Case, async: true
   import ExUnit.CaptureLog
 
   import Crontab.CronExpression, only: [sigil_e: 2]
 
-  alias Jido.CronSensor
+  alias Jido.Sensors.Cron
   alias Jido.Signal
 
   @moduletag :capture_log
@@ -14,18 +14,18 @@ defmodule JidoTest.CronSensorTest do
     {:ok, test_pid: self()}
   end
 
-  describe "CronSensor integration with Quantum" do
+  describe "Cron integration with Quantum" do
     test "adds and executes a scheduled job", %{test_pid: test_pid} do
       capture_log(fn ->
         {:ok, sensor_pid} =
-          CronSensor.start_link(
+          Cron.start_link(
             id: "test_cron_sensor",
             target: {:pid, target: test_pid},
             scheduler: Jido.Scheduler
           )
 
         schedule = ~e"* * * * * *"e
-        :ok = CronSensor.add_job(sensor_pid, :test_job, schedule, :dummy_task)
+        :ok = Cron.add_job(sensor_pid, :test_job, schedule, :dummy_task)
 
         assert_eventually(
           fn ->
@@ -40,14 +40,14 @@ defmodule JidoTest.CronSensorTest do
         )
 
         # Cleanup
-        :ok = CronSensor.remove_job(sensor_pid, :test_job)
+        :ok = Cron.remove_job(sensor_pid, :test_job)
       end)
     end
 
     test "can specify multiple jobs at startup", %{test_pid: test_pid} do
       capture_log(fn ->
         {:ok, sensor_pid} =
-          CronSensor.start_link(
+          Cron.start_link(
             id: "multi_cron_sensor",
             target: {:pid, target: test_pid},
             scheduler: Jido.Scheduler,
@@ -83,14 +83,14 @@ defmodule JidoTest.CronSensorTest do
 
         # Cleanup
         :ets.delete(signals_ref)
-        :ok = CronSensor.remove_job(sensor_pid, :named_job)
+        :ok = Cron.remove_job(sensor_pid, :named_job)
       end)
     end
 
     test "runs job immediately on demand", %{test_pid: test_pid} do
       capture_log(fn ->
         {:ok, sensor_pid} =
-          CronSensor.start_link(
+          Cron.start_link(
             id: "test_cron_sensor_immediate",
             target: {:pid, target: test_pid},
             scheduler: Jido.Scheduler
@@ -98,9 +98,9 @@ defmodule JidoTest.CronSensorTest do
 
         # something that won't trigger soon
         schedule = ~e"0 0 * * *"e
-        :ok = CronSensor.add_job(sensor_pid, :immediate_job, schedule, :dummy_task)
+        :ok = Cron.add_job(sensor_pid, :immediate_job, schedule, :dummy_task)
 
-        :ok = CronSensor.run_job(sensor_pid, :immediate_job)
+        :ok = Cron.run_job(sensor_pid, :immediate_job)
 
         assert_eventually(
           fn ->
@@ -115,30 +115,30 @@ defmodule JidoTest.CronSensorTest do
         )
 
         # Cleanup
-        :ok = CronSensor.remove_job(sensor_pid, :immediate_job)
+        :ok = Cron.remove_job(sensor_pid, :immediate_job)
       end)
     end
 
     test "activate/deactivate a job", %{test_pid: test_pid} do
       capture_log(fn ->
         {:ok, sensor_pid} =
-          CronSensor.start_link(
+          Cron.start_link(
             id: "test_cron_sensor_toggle",
             target: {:pid, target: test_pid},
             scheduler: Jido.Scheduler
           )
 
         schedule = ~e"* * * * * *"e
-        :ok = CronSensor.add_job(sensor_pid, :toggle_job, schedule, :dummy_task)
+        :ok = Cron.add_job(sensor_pid, :toggle_job, schedule, :dummy_task)
         # Deactivate it
-        :ok = CronSensor.deactivate_job(sensor_pid, :toggle_job)
+        :ok = Cron.deactivate_job(sensor_pid, :toggle_job)
 
         # Verify no signals received for 750ms
         Process.sleep(750)
         refute_received {:signal, {:ok, _}}
 
         # Activate it
-        :ok = CronSensor.activate_job(sensor_pid, :toggle_job)
+        :ok = Cron.activate_job(sensor_pid, :toggle_job)
 
         assert_eventually(
           fn ->
@@ -152,7 +152,7 @@ defmodule JidoTest.CronSensorTest do
         )
 
         # Cleanup
-        :ok = CronSensor.remove_job(sensor_pid, :toggle_job)
+        :ok = Cron.remove_job(sensor_pid, :toggle_job)
       end)
     end
   end

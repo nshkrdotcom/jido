@@ -1,34 +1,5 @@
 defmodule Jido.Bus.RecordedSignal do
-  @moduledoc """
-  Contains the persisted stream identity, type, data, and jido_metadata for a single signal.
-
-  Signals are immutable once recorded.
-
-  ## Recorded signal fields
-
-    - `signal_id` - a globally unique UUID to identify the signal.
-
-    - `signal_number` - a globally unique, monotonically incrementing and gapless
-      integer used to order the signal amongst all signals.
-
-    - `stream_id` - the stream identity for the signal.
-
-    - `stream_version` - the version of the stream for the signal.
-
-    - `causation_id` - an optional UUID identifier used to identify which
-      message you are responding to.
-
-    - `correlation_id` - an optional UUID identifier used to correlate related
-      messages.
-
-    - `data` - the signal data deserialized into a struct.
-
-    - `jido_metadata` - a string keyed map of metadata associated with the signal.
-
-    - `created_at` - the datetime, in UTC, indicating when the signal was
-      created.
-
-  """
+  @moduledoc false
 
   alias Jido.Bus.RecordedSignal
 

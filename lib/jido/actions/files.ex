@@ -1,19 +1,25 @@
 defmodule Jido.Actions.Files do
   @moduledoc """
-  Comprehensive file manipulation actions for the Jido SDK.
+  A collection of file system actions for common file operations.
 
-  This module provides actions for:
-  - File operations (read, write, copy, move, delete)
-  - Directory operations (create, remove, list)
-  - Path manipulation and verification
-  - File metadata operations
-  - Content manipulation
+  This module provides a set of actions for working with files and directories:
+  - WriteFile: Writes content to a file with optional directory creation
+  - ReadFile: Reads content from a file
+  - CopyFile: Copies a file from source to destination
+  - MoveFile: Moves/renames a file from source to destination
+  - DeleteFile: Deletes a file or directory with optional recursive deletion
+  - MakeDirectory: Creates a new directory with optional recursive creation
+  - ListDirectory: Lists directory contents with optional pattern matching and recursion
+
+  Each action is implemented as a separate submodule and follows the Jido.Action behavior.
+  The actions provide comprehensive file system operations with error handling and options
+  like recursive deletion, force flags, and parent directory creation.
   """
 
   alias Jido.Action
 
   defmodule WriteFile do
-    @moduledoc "Writes content to a file, creating parent directories if needed"
+    @moduledoc false
     use Action,
       name: "write_file",
       description: "Writes content to a file, optionally creating parent directories",
@@ -47,7 +53,7 @@ defmodule Jido.Actions.Files do
   end
 
   defmodule MakeDirectory do
-    @moduledoc "Creates a directory and optionally its parent directories"
+    @moduledoc false
     use Action,
       name: "make_directory",
       description: "Creates a new directory, optionally creating parent directories",
@@ -77,7 +83,7 @@ defmodule Jido.Actions.Files do
   end
 
   defmodule ListDirectory do
-    @moduledoc "Lists contents of a directory with optional filtering"
+    @moduledoc false
     use Action,
       name: "list_directory",
       description: "Lists directory contents with optional pattern matching",
@@ -129,7 +135,7 @@ defmodule Jido.Actions.Files do
   end
 
   defmodule DeleteFile do
-    @moduledoc "Deletes a file or directory"
+    @moduledoc false
     use Action,
       name: "delete_file",
       description: "Deletes a file or directory with optional recursive deletion",

@@ -76,34 +76,42 @@ defmodule Jido.MixProject do
           Jido,
           Jido.Action,
           Jido.Agent,
-          Jido.Discovery,
+          Jido.Agent.Server,
           Jido.Instruction,
           Jido.Sensor,
-          Jido.Signal,
-          Jido.Supervisor,
           Jido.Workflow
         ],
-        "Agent Server": [
-          Jido.Agent.Server,
-          Jido.Agent.Server.Callback,
-          Jido.Agent.Server.Options,
-          Jido.Agent.Server.Output,
-          Jido.Agent.Server.Process,
-          Jido.Agent.Server.Router,
-          Jido.Agent.Server.Runtime,
-          Jido.Agent.Server.Signal,
-          Jido.Agent.Server.Skills,
-          Jido.Agent.Server.Sensors
+        "Actions: Execution": [
+          Jido.Runner,
+          Jido.Runner.Chain,
+          Jido.Runner.Simple,
+          Jido.Workflow,
+          Jido.Workflow.Chain,
+          Jido.Workflow.Closure
         ],
-        Bus: [
+        "Actions: Directives": [
+          Jido.Agent.Directive,
+          Jido.Agent.Directive.Enqueue,
+          Jido.Agent.Directive.RegisterAction,
+          Jido.Agent.Directive.DeregisterAction,
+          Jido.Agent.Directive.Kill,
+          Jido.Agent.Directive.Spawn,
+          Jido.Actions.Directives
+        ],
+        "Actions: Extra": [
+          Jido.Action.Tool
+        ],
+        "Signals: Core": [
+          Jido.Signal,
+          Jido.Signal.Router
+        ],
+        "Signals: Bus": [
           Jido.Bus,
           Jido.Bus.Adapter,
           Jido.Bus.Adapters.InMemory,
-          Jido.Bus.Adapters.PubSub,
-          Jido.Bus.RecordedSignal,
-          Jido.Bus.Snapshot
+          Jido.Bus.Adapters.PubSub
         ],
-        "Signal Dispatch": [
+        "Signals: Dispatch": [
           Jido.Signal.Dispatch,
           Jido.Signal.Dispatch.Adapter,
           Jido.Signal.Dispatch.Bus,
@@ -114,79 +122,37 @@ defmodule Jido.MixProject do
           Jido.Signal.Dispatch.PidAdapter,
           Jido.Signal.Dispatch.PubSub
         ],
-        "Signal Router": [
-          Jido.Signal.Router,
-          Jido.Signal.Router.HandlerInfo,
-          Jido.Signal.Router.NodeHandlers,
-          Jido.Signal.Router.PatternMatch,
-          Jido.Signal.Router.Route,
-          Jido.Signal.Router.Router,
-          Jido.Signal.Router.TrieNode,
-          Jido.Signal.Router.WildcardHandlers
-        ],
         Skills: [
           Jido.Skill,
-          Jido.Skills.Arithmetic,
-          Jido.Skills.Arithmetic.Actions,
-          Jido.Skills.Arithmetic.Actions.Add,
-          Jido.Skills.Arithmetic.Actions.Divide,
-          Jido.Skills.Arithmetic.Actions.Eval,
-          Jido.Skills.Arithmetic.Actions.Multiply,
-          Jido.Skills.Arithmetic.Actions.Square,
-          Jido.Skills.Arithmetic.Actions.Subtract
+          Jido.Skills.Arithmetic
         ],
-        Workflows: [
-          Jido.Workflow.Chain,
-          Jido.Workflow.Closure,
-          Jido.Workflow.Tool
-        ],
-        "Example Actions": [
+        Examples: [
           Jido.Actions.Arithmetic,
           Jido.Actions.Basic,
-          Jido.Actions.Directives,
           Jido.Actions.Files,
-          Jido.Actions.Files.DeleteFile,
-          Jido.Actions.Files.ListDirectory,
-          Jido.Actions.Files.MakeDirectory,
-          Jido.Actions.Files.WriteFile,
-          Jido.Actions.Simplebot
+          Jido.Actions.Simplebot,
+          Jido.Sensors.Cron,
+          Jido.Sensors.Heartbeat
         ],
-        Directives: [
-          Jido.Agent.Directive,
-          Jido.Agent.Directive.DeregisterAction,
-          Jido.Agent.Directive.Enqueue,
-          Jido.Agent.Directive.Kill,
-          Jido.Agent.Directive.RegisterAction,
-          Jido.Agent.Directive.Spawn
-        ],
-        Runner: [
-          Jido.Runner,
-          Jido.Runner.Chain,
-          Jido.Runner.Simple
-        ],
-        Sensors: [
-          Jido.CronSensor,
-          Jido.HeartbeatSensor
-        ],
-        Serialization: [
+        Utilities: [
+          Jido.Discovery,
+          Jido.Error,
+          Jido.Scheduler,
           Jido.Serialization.JsonDecoder,
           Jido.Serialization.JsonSerializer,
           Jido.Serialization.ModuleNameTypeProvider,
-          Jido.Serialization.TypeProvider
-        ],
-        Utilities: [
-          Jido.Error,
-          Jido.Scheduler,
+          Jido.Serialization.TypeProvider,
+          Jido.Supervisor,
           Jido.Util
         ]
       ],
-      skip_undefined_reference_warnings_on: [
-        Jido.Agent.Server.Execute,
-        Jido.Agent.Server.Process,
-        Jido.Agent.Server.PubSub,
-        Jido.Agent.Server.Signal,
-        Jido.Agent.Server.Syscall
-      ],
+      # skip_undefined_reference_warnings_on: [
+      #   Jido.Agent.Server.Execute,
+      #   Jido.Agent.Server.Process,
+      #   Jido.Agent.Server.PubSub,
+      #   Jido.Agent.Server.Signal,
+      #   Jido.Agent.Server.Syscall
+      # ],
       groups_for_extras: [
         Guides: ~r/guides\/.*md/
       ],

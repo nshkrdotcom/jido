@@ -1,4 +1,4 @@
-defmodule Jido.CronSensor do
+defmodule Jido.Sensors.Cron do
   @moduledoc """
   A sensor that emits signals based on cron schedules via Quantum.
 
@@ -14,7 +14,7 @@ defmodule Jido.CronSensor do
   Example Usage:
 
       {:ok, sensor} =
-        Jido.CronSensor.start_link(
+        Jido.Sensors.Cron.start_link(
           id: "my_cron_sensor",
           target: {:bus, [target: :my_bus, stream: "some_stream"]},
           scheduler: Jido.Scheduler,
@@ -27,13 +27,13 @@ defmodule Jido.CronSensor do
         )
 
       # Add a new job later
-      :ok = Jido.CronSensor.add_job(sensor, :manual_job, ~e"* * * * *"e, :another_task)
+      :ok = Jido.Sensors.Cron.add_job(sensor, :manual_job, ~e"* * * * *"e, :another_task)
 
       # Remove the job
-      :ok = Jido.CronSensor.remove_job(sensor, :manual_job)
+      :ok = Jido.Sensors.Cron.remove_job(sensor, :manual_job)
 
       # Run a job immediately
-      :ok = Jido.CronSensor.run_job(sensor, :my_job)
+      :ok = Jido.Sensors.Cron.run_job(sensor, :my_job)
   """
 
   use Jido.Sensor,
@@ -85,7 +85,7 @@ defmodule Jido.CronSensor do
           add_job_now(state, name, schedule, task)
 
         other ->
-          Logger.warning("Unsupported job specification in CronSensor :jobs => #{inspect(other)}")
+          Logger.warning("Unsupported job specification in Cron :jobs => #{inspect(other)}")
       end
     end)
 

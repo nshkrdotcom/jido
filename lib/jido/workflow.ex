@@ -1,11 +1,11 @@
 defmodule Jido.Workflow do
   @moduledoc """
-  Workflows provide a robust framework for executing and managing workflows (Action sequences) in a distributed system.
+  Workflow provides a robust set of methods for executing Actions (`Jido.Action`).
 
   This module offers functionality to:
-  - Run workflows synchronously or asynchronously
+  - Run actions synchronously or asynchronously
   - Manage timeouts and retries
-  - Cancel running workflows
+  - Cancel running actions
   - Normalize and validate input parameters and context
   - Emit telemetry events for monitoring and debugging
 
@@ -36,20 +36,6 @@ defmodule Jido.Workflow do
       # ... do other work ...
       result = Jido.Workflow.await(async_ref)
 
-  ### Integrating with OTP
-
-  For correct supervision of async tasks, ensure you start a `Task.Supervisor` under your
-  application's supervision tree, for example:
-
-      def start(_type, _args) do
-        children = [
-          {Task.Supervisor, name: Jido.Workflow.TaskSupervisor},
-          ...
-        ]
-        Supervisor.start_link(children, strategy: :one_for_one)
-      end
-
-  This way, any async tasks spawned by `run_async/4` will be supervised by the Task Supervisor.
   """
 
   use Private

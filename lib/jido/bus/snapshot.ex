@@ -1,7 +1,5 @@
 defmodule Jido.Bus.Snapshot do
-  @moduledoc """
-  Snapshot data
-  """
+  @moduledoc false
 
   @type t :: %Jido.Bus.Snapshot{
           source_id: String.t(),

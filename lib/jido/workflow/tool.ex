@@ -1,4 +1,4 @@
-defmodule Jido.Workflow.Tool do
+defmodule Jido.Action.Tool do
   @moduledoc """
   Provides functionality to convert Jido Workflows into tool representations.
 
@@ -28,7 +28,7 @@ defmodule Jido.Workflow.Tool do
 
   ## Examples
 
-      iex> tool = Jido.Workflow.Tool.to_tool(MyWorkflow)
+      iex> tool = Jido.Action.Tool.to_tool(MyWorkflow)
       %{
         name: "my_workflow",
         description: "Performs a specific task",

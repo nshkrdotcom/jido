@@ -1,17 +1,17 @@
-defmodule Jido.HeartbeatSensorTest do
+defmodule Jido.Sensors.HeartbeatTest do
   use JidoTest.Case, async: true
-  alias Jido.HeartbeatSensor
+  alias Jido.Sensors.Heartbeat
 
   @moduletag :capture_log
 
-  describe "HeartbeatSensor" do
+  describe "Heartbeat" do
     test "initializes with correct default values" do
       opts = [
         id: "test_heartbeat",
         target: {:pid, target: self()}
       ]
 
-      {:ok, pid} = HeartbeatSensor.start_link(opts)
+      {:ok, pid} = Heartbeat.start_link(opts)
       state = :sys.get_state(pid)
 
       assert state.config.interval == 5000
@@ -27,7 +27,7 @@ defmodule Jido.HeartbeatSensorTest do
         message: "custom heartbeat"
       ]
 
-      {:ok, pid} = HeartbeatSensor.start_link(opts)
+      {:ok, pid} = Heartbeat.start_link(opts)
       state = :sys.get_state(pid)
 
       assert state.config.interval == 1000
@@ -42,7 +42,7 @@ defmodule Jido.HeartbeatSensorTest do
         message: "test heartbeat"
       ]
 
-      {:ok, _pid} = HeartbeatSensor.start_link(opts)
+      {:ok, _pid} = Heartbeat.start_link(opts)
 
       # Wait for and verify two heartbeats
       assert_receive {:signal, {:ok, signal}}, 200
@@ -62,7 +62,7 @@ defmodule Jido.HeartbeatSensorTest do
         message: "test heartbeat"
       ]
 
-      {:ok, _pid} = HeartbeatSensor.start_link(opts)
+      {:ok, _pid} = Heartbeat.start_link(opts)
 
       assert_receive {:signal, {:ok, signal}}, 200
 

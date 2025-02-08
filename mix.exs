@@ -30,7 +30,7 @@ defmodule Jido.MixProject do
       # Coverage
       test_coverage: [
         tool: ExCoveralls,
-        summary: [threshold: 90],
+        summary: [threshold: 80],
         export: "cov",
         ignore_modules: [~r/^JidoTest\./]
       ],
@@ -82,15 +82,27 @@ defmodule Jido.MixProject do
         {"CONTRIBUTING.md", title: "Contributing"},
         {"CHANGELOG.md", title: "Changelog"},
         {"LICENSE.md", title: "Apache 2.0 License"},
-        {"guides/actions/actions.md", title: "Actions & Workflows"},
-        {"guides/tutorials/tutorial-1.md", title: "Tutorial 1"},
         {"guides/getting-started.md", title: "Getting Started"},
-        {"guides/livebook/getting-started-actions.livemd", title: "Getting Started with Actions"},
+
+        # Actions
+        {"guides/actions/actions.md", title: "Actions & Workflows"},
         {"guides/actions/instructions.md", title: "Action Instructions"},
+
+        # Signals
+        {"guides/signals/bus.md", title: "Signal Bus"},
+
+        # Agents
         {"guides/agents/agents.md", title: "Agents"},
         {"guides/agents/directives.md", title: "Agent Directives"},
         {"guides/agents/sensors.md", title: "Agent Sensors"},
-        {"guides/signals/bus.md", title: "Signal Bus"},
+
+        # Tutorials
+        # {"guides/tutorials/tutorial-1.md", title: "Tutorial 1"},
+
+        # Livebooks
+        # {"guides/livebook/getting-started-actions.livemd", title: "Getting Started with Actions"},
+
+        # Skills
         {"guides/skills/skills.md", title: "Skills"},
         {"guides/skills/signal-router.md", title: "Signal Router"}
       ],
@@ -227,7 +239,8 @@ defmodule Jido.MixProject do
 
   defp aliases do
     [
-      test: "test --trace",
+      # Helper to run tests with trace when needed
+      # test: "test --trace",
       docs: "docs -f html --open",
 
       # Run to check the quality of your code

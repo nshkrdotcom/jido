@@ -1,5 +1,5 @@
 defmodule Jido.Memory.RAGKnowledge.DocumentParserTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Memory.RAGKnowledge.DocumentParser
 
   describe "parse_markdown/1" do

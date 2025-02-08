@@ -4,14 +4,14 @@ defmodule JidoTest.Helpers.SignalFactory do
   alias Jido.Signal
 
   def map_to_recorded_signals(signals, initial_signal_number \\ 1, opts \\ []) do
-    stream_id = UUID.uuid4()
-    jido_causation_id = Keyword.get(opts, :jido_causation_id, UUID.uuid4())
-    jido_correlation_id = Keyword.get(opts, :jido_correlation_id, UUID.uuid4())
+    stream_id = Jido.Util.generate_id()
+    causation_id = Keyword.get(opts, :causation_id, Jido.Util.generate_id())
+    correlation_id = Keyword.get(opts, :correlation_id, Jido.Util.generate_id())
     jido_metadata = Keyword.get(opts, :jido_metadata, %{})
 
     fields = [
-      jido_causation_id: jido_causation_id,
-      jido_correlation_id: jido_correlation_id,
+      causation_id: causation_id,
+      correlation_id: correlation_id,
       jido_metadata: jido_metadata
     ]
 
@@ -20,12 +20,12 @@ defmodule JidoTest.Helpers.SignalFactory do
     |> Enum.with_index(initial_signal_number)
     |> Enum.map(fn {signal, index} ->
       %RecordedSignal{
-        signal_id: UUID.uuid4(),
+        signal_id: Jido.Util.generate_id(),
         signal_number: index,
         stream_id: stream_id,
         stream_version: index,
-        jido_causation_id: signal.jido_causation_id,
-        jido_correlation_id: signal.jido_correlation_id,
+        causation_id: signal.source,
+        correlation_id: signal.id,
         type: signal.type,
         data: signal.data,
         jido_metadata: signal.jido_metadata,

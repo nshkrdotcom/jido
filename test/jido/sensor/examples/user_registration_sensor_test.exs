@@ -1,5 +1,5 @@
 # defmodule JidoTest.Sensor.Examples.RegistrationCounterSensorTest do
-#   use ExUnit.Case, async: true
+#   use JidoTest.Case, async: true
 
 #   @moduletag :capture_log
 #   defmodule RegistrationCounterSensor do

@@ -1,5 +1,5 @@
 defmodule Jido.Chat.SupervisorTest do
-  use ExUnit.Case, async: false
+  use JidoTest.Case, async: false
 
   alias Jido.Chat.{Supervisor, Room}
 

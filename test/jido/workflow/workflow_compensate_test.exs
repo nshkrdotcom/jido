@@ -1,5 +1,5 @@
 defmodule JidoTest.WorkflowCompensateTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   import ExUnit.CaptureLog
 
   alias Jido.Error

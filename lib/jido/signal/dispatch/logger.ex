@@ -26,31 +26,25 @@ defmodule Jido.Signal.Dispatch.LoggerAdapter do
     level = Keyword.get(opts, :level, :info)
     structured = Keyword.get(opts, :structured, false)
 
-    metadata = [
-      source: signal.source,
-      correlation_id: signal.jido_correlation_id,
-      causation_id: signal.jido_causation_id
-    ]
-
     if structured do
       Logger.log(
         level,
         fn ->
           %{
             event: "signal_dispatched",
+            id: signal.id,
             type: signal.type,
-            metadata: signal.jido_metadata,
             data: signal.data,
             source: signal.source
           }
         end,
-        metadata
+        []
       )
     else
       Logger.log(
         level,
         "Signal dispatched: #{signal.type} from #{signal.source} with data=#{inspect(signal.data)}",
-        metadata
+        []
       )
     end
 

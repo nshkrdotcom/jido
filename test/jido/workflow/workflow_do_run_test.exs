@@ -1,5 +1,5 @@
 defmodule JidoTest.WorkflowDoRunTest do
-  use ExUnit.Case, async: false
+  use JidoTest.Case, async: false
   use Mimic
 
   import ExUnit.CaptureLog

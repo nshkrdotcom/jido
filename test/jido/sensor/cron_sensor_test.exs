@@ -1,6 +1,6 @@
 defmodule JidoTest.CronSensorTest do
   @moduledoc false
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   import ExUnit.CaptureLog
 
   import Crontab.CronExpression, only: [sigil_e: 2]
@@ -27,10 +27,18 @@ defmodule JidoTest.CronSensorTest do
         schedule = ~e"* * * * * *"e
         :ok = CronSensor.add_job(sensor_pid, :test_job, schedule, :dummy_task)
 
-        # Reduced timeout from 2000 to 1000ms
-        assert_receive {:signal, {:ok, %Signal{} = signal}}, 1_000
-        assert signal.type == "cron_trigger"
-        assert signal.data.name == :test_job
+        assert_eventually(
+          fn ->
+            receive do
+              {:signal, {:ok, %Signal{} = signal}} ->
+                signal.type == "cron_trigger" and signal.data.name == :test_job
+            after
+              0 -> false
+            end
+          end,
+          1000
+        )
+
         # Cleanup
         :ok = CronSensor.remove_job(sensor_pid, :test_job)
       end)
@@ -38,9 +46,6 @@ defmodule JidoTest.CronSensorTest do
 
     test "can specify multiple jobs at startup", %{test_pid: test_pid} do
       capture_log(fn ->
-        # Pass multiple job specs to 'jobs' param
-        # 1) Autonamed (with 1-second schedule)
-        # 2) Named job (with 1-second schedule)
         {:ok, sensor_pid} =
           CronSensor.start_link(
             id: "multi_cron_sensor",
@@ -54,25 +59,30 @@ defmodule JidoTest.CronSensorTest do
             ]
           )
 
-        # Reduced timeout from 2000 to 1000ms
-        signals =
-          for _ <- 1..2 do
+        # Create a reference point for collecting signals
+        signals_ref = :ets.new(:signals, [:set, :public])
+
+        assert_eventually(
+          fn ->
             receive do
-              {:signal, {:ok, %Signal{} = s}} -> s
+              {:signal, {:ok, %Signal{} = signal}} ->
+                :ets.insert(signals_ref, {System.system_time(), signal})
             after
-              1_000 -> flunk("Did not receive signals from multi job in time")
+              0 -> :ok
             end
-          end
 
-        # Just confirm they are from the sensor and have type "cron_trigger"
-        Enum.each(signals, fn s ->
-          assert s.type == "cron_trigger"
-        end)
+            signals = :ets.tab2list(signals_ref) |> Enum.map(fn {_ts, signal} -> signal end)
 
-        # We won't know the name for the auto-named job, but at least one should have data.name == :named_job
-        assert Enum.any?(signals, fn s -> s.data.name == :named_job end)
+            length(signals) >= 2 and
+              Enum.all?(signals, &(&1.type == "cron_trigger")) and
+              Enum.any?(signals, &(&1.data.name == :named_job))
+          end,
+          # Increase timeout to ensure we catch both signals
+          2000
+        )
 
-        # Cleanup the named job (we can't cleanup the auto-named one since we don't know its name)
+        # Cleanup
+        :ets.delete(signals_ref)
         :ok = CronSensor.remove_job(sensor_pid, :named_job)
       end)
     end
@@ -91,10 +101,19 @@ defmodule JidoTest.CronSensorTest do
         :ok = CronSensor.add_job(sensor_pid, :immediate_job, schedule, :dummy_task)
 
         :ok = CronSensor.run_job(sensor_pid, :immediate_job)
-        # Reduced timeout from 1000 to 500ms since this is immediate
-        assert_receive {:signal, {:ok, %Signal{} = signal}}, 500
-        assert signal.type == "cron_trigger"
-        assert signal.data.name == :immediate_job
+
+        assert_eventually(
+          fn ->
+            receive do
+              {:signal, {:ok, %Signal{} = signal}} ->
+                signal.type == "cron_trigger" and signal.data.name == :immediate_job
+            after
+              0 -> false
+            end
+          end,
+          500
+        )
+
         # Cleanup
         :ok = CronSensor.remove_job(sensor_pid, :immediate_job)
       end)
@@ -113,13 +132,24 @@ defmodule JidoTest.CronSensorTest do
         :ok = CronSensor.add_job(sensor_pid, :toggle_job, schedule, :dummy_task)
         # Deactivate it
         :ok = CronSensor.deactivate_job(sensor_pid, :toggle_job)
-        # Reduced timeout from 1500 to 750ms
-        refute_receive {:signal, {:ok, _}}, 750
+
+        # Verify no signals received for 750ms
+        Process.sleep(750)
+        refute_received {:signal, {:ok, _}}
 
         # Activate it
         :ok = CronSensor.activate_job(sensor_pid, :toggle_job)
-        # Reduced timeout from 1500 to 750ms
-        assert_receive {:signal, {:ok, %Signal{} = _signal}}, 750
+
+        assert_eventually(
+          fn ->
+            receive do
+              {:signal, {:ok, %Signal{}}} -> true
+            after
+              0 -> false
+            end
+          end,
+          750
+        )
 
         # Cleanup
         :ok = CronSensor.remove_job(sensor_pid, :toggle_job)

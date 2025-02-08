@@ -30,7 +30,7 @@ defmodule Jido.Bus do
   use TypedStruct
 
   typedstruct do
-    field(:id, String.t(), default: UUID.uuid4())
+    field(:id, String.t(), default: Jido.Util.generate_id())
     field(:name, atom())
     field(:adapter, module())
     field(:adapter_meta, map())

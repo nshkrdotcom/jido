@@ -53,6 +53,7 @@ defmodule Jido.Workflow do
   """
 
   use Private
+  use ExDbug, enabled: false
 
   alias Jido.Error
   alias Jido.Instruction
@@ -100,29 +101,48 @@ defmodule Jido.Workflow do
   def run(action, params \\ %{}, context \\ %{}, opts \\ [])
 
   def run(action, params, context, opts) when is_atom(action) and is_list(opts) do
+    dbug("Starting workflow run", action: action, params: params, context: context, opts: opts)
+
     with {:ok, normalized_params} <- normalize_params(params),
          {:ok, normalized_context} <- normalize_context(context),
          :ok <- validate_action(action),
          OK.success(validated_params) <- validate_params(action, normalized_params) do
+      dbug("Params and context normalized and validated",
+        normalized_params: normalized_params,
+        normalized_context: normalized_context,
+        validated_params: validated_params
+      )
+
       do_run_with_retry(action, validated_params, normalized_context, opts)
     else
-      {:error, reason} -> OK.failure(reason)
-      {:error, reason, other} -> {:error, reason, other}
+      {:error, reason} ->
+        dbug("Error in workflow setup", error: reason)
+        OK.failure(reason)
+
+      {:error, reason, other} ->
+        dbug("Error with additional info in workflow setup", error: reason, other: other)
+        {:error, reason, other}
     end
   rescue
     e in [FunctionClauseError, BadArityError, BadFunctionError] ->
+      dbug("Function error in workflow", error: e)
       OK.failure(Error.invalid_action("Invalid action module: #{Exception.message(e)}"))
 
     e ->
+      dbug("Unexpected error in workflow", error: e)
+
       OK.failure(
         Error.internal_server_error("An unexpected error occurred: #{Exception.message(e)}")
       )
   catch
     kind, reason ->
+      dbug("Caught error in workflow", kind: kind, reason: reason)
       OK.failure(Error.internal_server_error("Caught #{kind}: #{inspect(reason)}"))
   end
 
   def run(%Instruction{} = instruction, _params, _context, _opts) do
+    dbug("Running instruction", instruction: instruction)
+
     run(
       instruction.action,
       instruction.params,
@@ -132,6 +152,7 @@ defmodule Jido.Workflow do
   end
 
   def run(action, _params, _context, _opts) do
+    dbug("Invalid action type", action: action)
     OK.failure(Error.invalid_action("Expected action to be a module, got: #{inspect(action)}"))
   end
 
@@ -167,6 +188,7 @@ defmodule Jido.Workflow do
   """
   @spec run_async(action(), params(), context(), run_opts()) :: async_ref()
   def run_async(action, params \\ %{}, context \\ %{}, opts \\ []) do
+    dbug("Starting async workflow", action: action, params: params, context: context, opts: opts)
     ref = make_ref()
     parent = self()
 
@@ -182,6 +204,7 @@ defmodule Jido.Workflow do
     # We monitor the newly created Task so we can handle :DOWN messages in `await`.
     Process.monitor(pid)
 
+    dbug("Async workflow started", ref: ref, pid: pid)
     %{ref: ref, pid: pid}
   end
 
@@ -210,22 +233,32 @@ defmodule Jido.Workflow do
   """
   @spec await(async_ref(), timeout()) :: {:ok, map()} | {:error, Error.t()}
   def await(%{ref: ref, pid: pid}, timeout \\ 5000) do
+    dbug("Awaiting async workflow result", ref: ref, pid: pid, timeout: timeout)
+
     receive do
       {:action_async_result, ^ref, result} ->
+        dbug("Received async result", result: result)
         result
 
       {:DOWN, _monitor_ref, :process, ^pid, :normal} ->
+        dbug("Process completed normally")
         # Process completed normally, but we might still receive the result
         receive do
-          {:action_async_result, ^ref, result} -> result
+          {:action_async_result, ^ref, result} ->
+            dbug("Received delayed result", result: result)
+            result
         after
-          100 -> {:error, Error.execution_error("Process completed but result was not received")}
+          100 ->
+            dbug("No result received after normal completion")
+            {:error, Error.execution_error("Process completed but result was not received")}
         end
 
       {:DOWN, _monitor_ref, :process, ^pid, reason} ->
+        dbug("Process crashed", reason: reason)
         {:error, Error.execution_error("Server error in async workflow: #{inspect(reason)}")}
     after
       timeout ->
+        dbug("Async workflow timed out", timeout: timeout)
         Process.exit(pid, :kill)
 
         receive do
@@ -264,6 +297,7 @@ defmodule Jido.Workflow do
   def cancel(%{pid: pid}), do: cancel(pid)
 
   def cancel(pid) when is_pid(pid) do
+    dbug("Cancelling workflow", pid: pid)
     Process.exit(pid, :shutdown)
     :ok
   end
@@ -292,6 +326,8 @@ defmodule Jido.Workflow do
 
     @spec validate_action(action()) :: :ok | {:error, Error.t()}
     defp validate_action(action) do
+      dbug("Validating action", action: action)
+
       case Code.ensure_compiled(action) do
         {:module, _} ->
           if function_exported?(action, :run, 2) do
@@ -311,6 +347,8 @@ defmodule Jido.Workflow do
 
     @spec validate_params(action(), map()) :: {:ok, map()} | {:error, Error.t()}
     defp validate_params(action, params) do
+      dbug("Validating params", action: action, params: params)
+
       if function_exported?(action, :validate_params, 1) do
         case action.validate_params(params) do
           {:ok, params} ->
@@ -336,6 +374,7 @@ defmodule Jido.Workflow do
     defp do_run_with_retry(action, params, context, opts) do
       max_retries = Keyword.get(opts, :max_retries, @default_max_retries)
       backoff = Keyword.get(opts, :backoff, @initial_backoff)
+      dbug("Starting run with retry", action: action, max_retries: max_retries, backoff: backoff)
       do_run_with_retry(action, params, context, opts, 0, max_retries, backoff)
     end
 
@@ -349,14 +388,20 @@ defmodule Jido.Workflow do
             non_neg_integer()
           ) :: {:ok, map()} | {:error, Error.t()}
     defp do_run_with_retry(action, params, context, opts, retry_count, max_retries, backoff) do
+      dbug("Attempting run", action: action, retry_count: retry_count)
+
       case do_run(action, params, context, opts) do
         OK.success(result) ->
+          dbug("Run succeeded", result: result)
           OK.success(result)
 
         {:ok, result, other} ->
+          dbug("Run succeeded with additional info", result: result, other: other)
           {:ok, result, other}
 
         {:error, reason, other} ->
+          dbug("Run failed with additional info", error: reason, other: other)
+
           maybe_retry(
             action,
             params,
@@ -369,6 +414,8 @@ defmodule Jido.Workflow do
           )
 
         OK.failure(reason) ->
+          dbug("Run failed", error: reason)
+
           maybe_retry(
             action,
             params,
@@ -385,6 +432,14 @@ defmodule Jido.Workflow do
     defp maybe_retry(action, params, context, opts, retry_count, max_retries, backoff, error) do
       if retry_count < max_retries do
         backoff = calculate_backoff(retry_count, backoff)
+
+        dbug("Retrying after backoff",
+          action: action,
+          retry_count: retry_count,
+          max_retries: max_retries,
+          backoff: backoff
+        )
+
         :timer.sleep(backoff)
 
         do_run_with_retry(
@@ -397,6 +452,7 @@ defmodule Jido.Workflow do
           backoff
         )
       else
+        dbug("Max retries reached", action: action, max_retries: max_retries)
         error
       end
     end
@@ -413,6 +469,7 @@ defmodule Jido.Workflow do
     defp do_run(action, params, context, opts) do
       timeout = Keyword.get(opts, :timeout)
       telemetry = Keyword.get(opts, :telemetry, :full)
+      dbug("Starting action execution", action: action, timeout: timeout, telemetry: telemetry)
 
       result =
         case telemetry do
@@ -434,18 +491,23 @@ defmodule Jido.Workflow do
 
       case result do
         {:ok, _result} = success ->
+          dbug("Action succeeded", result: success)
           success
 
         {:ok, _result, _other} = success ->
+          dbug("Action succeeded with additional info", result: success)
           success
 
         {:error, %Error{type: :timeout}} = timeout_err ->
+          dbug("Action timed out", error: timeout_err)
           timeout_err
 
         {:error, error, other} ->
+          dbug("Action failed with additional info", error: error, other: other)
           handle_action_error(action, params, context, {error, other}, opts)
 
         {:error, error} ->
+          dbug("Action failed", error: error)
           handle_action_error(action, params, context, error, opts)
       end
     end
@@ -529,6 +591,7 @@ defmodule Jido.Workflow do
             {:error, Error.t() | map()} | {:error, Error.t(), any()}
     defp handle_action_error(action, params, context, error_or_tuple, opts) do
       Logger.debug("Handle Action Error in handle_action_error: #{inspect(opts)}")
+      dbug("Handling action error", action: action, error: error_or_tuple)
 
       # Extract error and directive if present
       {error, directive} =
@@ -549,6 +612,8 @@ defmodule Jido.Workflow do
               _ -> 5_000
             end
 
+        dbug("Starting compensation", action: action, timeout: timeout)
+
         task =
           Task.async(fn ->
             action.on_error(params, error, context, [])
@@ -556,9 +621,12 @@ defmodule Jido.Workflow do
 
         case Task.yield(task, timeout) || Task.shutdown(task) do
           {:ok, result} ->
+            dbug("Compensation completed", result: result)
             handle_compensation_result(result, error, directive)
 
           nil ->
+            dbug("Compensation timed out", timeout: timeout)
+
             error_result =
               Error.compensation_error(
                 error,
@@ -571,6 +639,7 @@ defmodule Jido.Workflow do
             if directive, do: {:error, error_result, directive}, else: OK.failure(error_result)
         end
       else
+        dbug("Compensation not enabled", action: action)
         if directive, do: {:error, error, directive}, else: OK.failure(error)
       end
     end
@@ -647,6 +716,8 @@ defmodule Jido.Workflow do
       parent = self()
       ref = make_ref()
 
+      dbug("Starting action with timeout", action: action, timeout: timeout)
+
       # Create a temporary task group for this execution
       {:ok, task_group} =
         Task.Supervisor.start_child(
@@ -663,48 +734,95 @@ defmodule Jido.Workflow do
       # Add task_group to context so Actions can use it
       enhanced_context = Map.put(context, :__task_group__, task_group)
 
+      # Set up IO monitoring
+      original_gl = Process.group_leader()
+      io_monitor_ref = make_ref()
+      io_monitor_pid = spawn_io_monitor(parent, io_monitor_ref)
+
       {pid, monitor_ref} =
         spawn_monitor(fn ->
-          Process.group_leader(self(), task_group)
+          # Set our custom IO monitor as the group leader
+          Process.group_leader(self(), io_monitor_pid)
 
           result =
             try do
-              execute_action(action, params, enhanced_context)
+              dbug("Executing action in task", action: action, pid: self())
+              result = execute_action(action, params, enhanced_context)
+              dbug("Action execution completed", action: action, result: result)
+              result
             catch
               kind, reason ->
+                dbug("Action execution caught error", action: action, kind: kind, reason: reason)
                 {:error, Error.execution_error("Caught #{kind}: #{inspect(reason)}")}
             end
 
           send(parent, {:done, ref, result})
         end)
 
-      receive do
-        {:done, ^ref, result} ->
-          cleanup_task_group(task_group)
-          Process.demonitor(monitor_ref, [:flush])
-          result
+      result =
+        receive do
+          {:io_operation_detected, ^io_monitor_ref, operation} ->
+            dbug("Unsafe IO operation detected", action: action, operation: operation)
+            cleanup_task_group(task_group)
+            Process.exit(pid, :kill)
+            Process.exit(io_monitor_pid, :kill)
 
-        {:DOWN, ^monitor_ref, :process, ^pid, :killed} ->
-          cleanup_task_group(task_group)
-          {:error, Error.execution_error("Task was killed")}
+            {:error,
+             Error.execution_error(
+               "Unsafe IO operation detected in Action #{inspect(action)}. " <>
+                 "IO operations like #{operation} are not allowed in Actions as they can cause timeouts. " <>
+                 "Use Logger.* functions instead for logging, or Jido.Workflow.safe_inspect for debugging."
+             )}
 
-        {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
-          cleanup_task_group(task_group)
-          {:error, Error.execution_error("Task exited: #{inspect(reason)}")}
-      after
-        timeout ->
-          # Kill the entire process group
-          cleanup_task_group(task_group)
-          Process.exit(pid, :kill)
+          {:done, ^ref, result} ->
+            dbug("Received action result", action: action, result: result)
+            cleanup_task_group(task_group)
+            Process.demonitor(monitor_ref, [:flush])
+            Process.exit(io_monitor_pid, :kill)
+            result
 
-          receive do
-            {:DOWN, ^monitor_ref, :process, ^pid, _} -> :ok
-          after
-            0 -> :ok
-          end
+          {:DOWN, ^monitor_ref, :process, ^pid, :killed} ->
+            dbug("Task was killed", action: action)
+            cleanup_task_group(task_group)
+            Process.exit(io_monitor_pid, :kill)
+            {:error, Error.execution_error("Task was killed")}
 
-          {:error, Error.timeout("Workflow timed out after #{timeout}ms")}
-      end
+          {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
+            dbug("Task exited unexpectedly", action: action, reason: reason)
+            cleanup_task_group(task_group)
+            Process.exit(io_monitor_pid, :kill)
+            {:error, Error.execution_error("Task exited: #{inspect(reason)}")}
+        after
+          timeout ->
+            dbug("Action timed out", action: action, timeout: timeout)
+            cleanup_task_group(task_group)
+            Process.exit(pid, :kill)
+            Process.exit(io_monitor_pid, :kill)
+
+            receive do
+              {:DOWN, ^monitor_ref, :process, ^pid, _} -> :ok
+            after
+              0 -> :ok
+            end
+
+            {:error,
+             Error.timeout(
+               "Action #{inspect(action)} timed out after #{timeout}ms. This could be due to:
+1. The action is taking too long to complete (current timeout: #{timeout}ms)
+2. The action is stuck in an infinite loop
+3. The action's return value doesn't match the expected format ({:ok, map()} | {:ok, map(), directive} | {:error, reason})
+4. An unexpected error occurred without proper error handling
+5. The action may be using unsafe IO operations (IO.inspect, etc).
+
+Debug info:
+- Action module: #{inspect(action)}
+- Params: #{inspect(params)}
+- Context: #{inspect(Map.drop(context, [:__task_group__]))}"
+             )}
+        end
+
+      Process.group_leader(self(), original_gl)
+      result
     end
 
     defp execute_action_with_timeout(action, params, context, _timeout) do
@@ -728,33 +846,45 @@ defmodule Jido.Workflow do
 
     @spec execute_action(action(), params(), context()) :: {:ok, map()} | {:error, Error.t()}
     defp execute_action(action, params, context) do
+      dbug("Executing action", action: action, params: params, context: context)
+
       case action.run(params, context) do
         {:ok, result, other} ->
+          dbug("Action succeeded with additional info", result: result, other: other)
           {:ok, result, other}
 
         OK.success(result) ->
+          dbug("Action succeeded", result: result)
           OK.success(result)
 
         {:error, reason, other} ->
+          dbug("Action failed with additional info", error: reason, other: other)
           Logger.debug("Error in execute_action: #{inspect(reason)}")
           {:error, reason, other}
 
         OK.failure(%Error{} = error) ->
+          dbug("Action failed with error struct", error: error)
           OK.failure(error)
 
         OK.failure(reason) ->
+          dbug("Action failed with reason", reason: reason)
           OK.failure(Error.execution_error(reason))
 
         result ->
+          dbug("Action returned unexpected result", result: result)
           OK.success(result)
       end
     rescue
       e in RuntimeError ->
+        dbug("Runtime error in action", error: e)
+
         OK.failure(
           Error.execution_error("Server error in #{inspect(action)}: #{Exception.message(e)}")
         )
 
       e in ArgumentError ->
+        dbug("Argument error in action", error: e)
+
         OK.failure(
           Error.execution_error("Argument error in #{inspect(action)}: #{Exception.message(e)}")
         )
@@ -765,6 +895,35 @@ defmodule Jido.Workflow do
             "An unexpected error occurred during execution of #{inspect(action)}: #{inspect(e)}"
           )
         )
+    end
+
+    # Helper to spawn an IO monitor process
+    defp spawn_io_monitor(parent, ref) do
+      spawn(fn ->
+        Process.flag(:trap_exit, true)
+        io_monitor_loop(parent, ref)
+      end)
+    end
+
+    # IO monitor process loop
+    defp io_monitor_loop(parent, ref) do
+      receive do
+        {:io_request, from, reply_as, {:put_chars, _encoding, chars}} ->
+          # Check if this is an IO.inspect call
+          if to_string(chars) =~ "inspect" do
+            send(parent, {:io_operation_detected, ref, "IO.inspect"})
+          end
+
+          send(from, {:io_reply, reply_as, :ok})
+          io_monitor_loop(parent, ref)
+
+        {:io_request, from, reply_as, _request} ->
+          send(from, {:io_reply, reply_as, :ok})
+          io_monitor_loop(parent, ref)
+
+        {:EXIT, _from, _reason} ->
+          :ok
+      end
     end
   end
 end

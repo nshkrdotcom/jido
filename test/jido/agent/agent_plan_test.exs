@@ -1,5 +1,5 @@
 defmodule JidoTest.AgentPlanTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   alias JidoTest.TestAgents.{BasicAgent, FullFeaturedAgent}
   alias JidoTest.TestActions.{BasicAction, NoSchema}

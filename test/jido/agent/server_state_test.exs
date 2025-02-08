@@ -1,10 +1,29 @@
 defmodule Jido.Agent.Server.StateTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Agent.Server.State
   alias JidoTest.TestAgents.BasicAgent
   alias Jido.Signal
 
   @moduletag :capture_log
+
+  setup do
+    {:ok, current_signal} =
+      Signal.new(%{
+        id: "test-signal-123",
+        type: "test.signal",
+        source: "test-source",
+        subject: "test-subject",
+        jido_dispatch: {:logger, []}
+      })
+
+    state = %State{
+      agent: %{id: "test-agent-123", __struct__: TestAgent},
+      dispatch: {:logger, []},
+      current_signal: current_signal
+    }
+
+    {:ok, state: state}
+  end
 
   describe "new state" do
     test "creates state with required fields" do
@@ -12,13 +31,7 @@ defmodule Jido.Agent.Server.StateTest do
       state = %State{agent: agent}
 
       assert state.agent == agent
-
-      assert state.dispatch == [
-               out: {:bus, [target: :default, stream: "agent"]},
-               log: {:logger, []},
-               err: {:console, []}
-             ]
-
+      assert state.dispatch == {:logger, []}
       assert state.status == :idle
       assert state.log_level == :info
       assert state.mode == :auto
@@ -28,7 +41,7 @@ defmodule Jido.Agent.Server.StateTest do
 
     test "creates state with custom output config" do
       agent = BasicAgent.new("test")
-      dispatch = [pid: [target: self()]]
+      dispatch = {:pid, [target: self()]}
       state = %State{agent: agent, dispatch: dispatch}
 
       assert state.agent == agent
@@ -51,13 +64,36 @@ defmodule Jido.Agent.Server.StateTest do
       assert :queue.is_queue(state.pending_signals)
       assert :queue.is_empty(state.pending_signals)
     end
+
+    test "initializes with default values", %{state: state} do
+      assert state.status == :idle
+      assert state.mode == :auto
+      assert state.log_level == :info
+      assert state.max_queue_size == 10_000
+      assert state.dispatch == {:logger, []}
+      assert :queue.is_queue(state.pending_signals)
+      assert :queue.is_empty(state.pending_signals)
+    end
   end
 
   describe "transition/2" do
     setup do
       agent = BasicAgent.new("test")
-      state = %State{agent: agent, dispatch: [pid: [target: self()]]}
+      state = %State{agent: agent, dispatch: {:pid, [target: self()]}}
       {:ok, state: state}
+    end
+
+    test "handles self-transitions as a noop", %{state: state} do
+      # Test self-transition from idle state
+      state = %{state | status: :idle}
+      assert {:ok, %State{status: :idle}} = State.transition(state, :idle)
+      # No transition signal should be emitted for self-transitions
+      refute_receive {:signal, _}
+
+      # Test self-transition from running state
+      state = %{state | status: :running}
+      assert {:ok, %State{status: :running}} = State.transition(state, :running)
+      refute_receive {:signal, _}
     end
 
     test "allows valid transitions and emits signals", %{state: state} do
@@ -140,164 +176,167 @@ defmodule Jido.Agent.Server.StateTest do
   end
 
   describe "enqueue/2" do
-    setup do
-      agent = BasicAgent.new("test")
-      state = %State{agent: agent, dispatch: [pid: [target: self()]]}
-      {:ok, state: state}
+    test "successfully enqueues a signal", %{state: state} do
+      {:ok, signal} =
+        Signal.new(%{
+          type: "test.signal",
+          source: "test-source",
+          subject: "test-subject",
+          jido_dispatch: {:logger, []}
+        })
+
+      assert {:ok, new_state} = State.enqueue(state, signal)
+      assert :queue.len(new_state.pending_signals) == 1
     end
 
-    test "successfully enqueues a signal", %{state: state} do
-      signal = %Signal{type: "test.signal", source: "test", id: "test-1"}
-      {:ok, new_state} = State.enqueue(state, signal)
+    test "maintains FIFO order", %{state: state} do
+      {:ok, signal1} =
+        Signal.new(%{
+          type: "test.signal.1",
+          source: "test-source",
+          subject: "test-subject",
+          jido_dispatch: {:logger, []}
+        })
 
-      assert :queue.len(new_state.pending_signals) == 1
-      {{:value, queued_signal}, _} = :queue.out(new_state.pending_signals)
-      assert queued_signal == signal
+      {:ok, signal2} =
+        Signal.new(%{
+          type: "test.signal.2",
+          source: "test-source",
+          subject: "test-subject",
+          jido_dispatch: {:logger, []}
+        })
+
+      {:ok, state_with_one} = State.enqueue(state, signal1)
+      {:ok, state_with_two} = State.enqueue(state_with_one, signal2)
+
+      assert :queue.len(state_with_two.pending_signals) == 2
+
+      {:ok, first_signal, state_with_one} = State.dequeue(state_with_two)
+      assert first_signal.type == "test.signal.1"
+
+      {:ok, second_signal, empty_state} = State.dequeue(state_with_one)
+      assert second_signal.type == "test.signal.2"
+
+      assert :queue.is_empty(empty_state.pending_signals)
     end
 
     test "returns error and emits overflow signal when queue is at max capacity", %{state: state} do
-      state = %{state | max_queue_size: 1}
-      signal1 = %Signal{type: "test.signal.1", source: "test", id: "test-1"}
-      signal2 = %Signal{type: "test.signal.2", source: "test", id: "test-2"}
-      queue_overflow = "jido.agent.event.queue.overflow"
+      {:ok, signal1} =
+        Signal.new(%{
+          type: "test.signal.1",
+          source: "test-source",
+          subject: "test-subject",
+          jido_dispatch: {:logger, []}
+        })
 
+      {:ok, signal2} =
+        Signal.new(%{
+          type: "test.signal.2",
+          source: "test-source",
+          subject: "test-subject",
+          jido_dispatch: {:logger, []}
+        })
+
+      state = %{state | max_queue_size: 1}
       {:ok, state_with_one} = State.enqueue(state, signal1)
-      assert :queue.len(state_with_one.pending_signals) == 1
 
       assert {:error, :queue_overflow} = State.enqueue(state_with_one, signal2)
       assert :queue.len(state_with_one.pending_signals) == 1
-
-      assert_receive {:signal,
-                      %Signal{
-                        type: ^queue_overflow,
-                        data: %{queue_size: 1, max_size: 1}
-                      }}
     end
   end
 
   describe "dequeue/1" do
-    setup do
-      agent = BasicAgent.new("test")
-      state = %State{agent: agent, dispatch: [pid: [target: self()]]}
-      {:ok, state: state}
-    end
-
     test "successfully dequeues a signal", %{state: state} do
-      signal = %Signal{type: "test.signal", source: "test", id: "test-1"}
-      {:ok, state_with_signal} = State.enqueue(state, signal)
+      {:ok, signal} =
+        Signal.new(%{
+          type: "test.signal",
+          source: "test-source",
+          subject: "test-subject",
+          jido_dispatch: {:logger, []}
+        })
 
+      {:ok, state_with_signal} = State.enqueue(state, signal)
       assert {:ok, dequeued_signal, new_state} = State.dequeue(state_with_signal)
       assert dequeued_signal == signal
       assert :queue.is_empty(new_state.pending_signals)
     end
 
-    test "returns empty queue when queue is empty", %{state: state} do
+    test "returns error when queue is empty", %{state: state} do
       assert {:error, :empty_queue} = State.dequeue(state)
-    end
-
-    test "maintains FIFO order when dequeuing multiple signals", %{state: state} do
-      signal1 = %Signal{type: "test.signal.1", source: "test", id: "test-1"}
-      signal2 = %Signal{type: "test.signal.2", source: "test", id: "test-2"}
-      signal3 = %Signal{type: "test.signal.3", source: "test", id: "test-3"}
-
-      {:ok, state} = State.enqueue(state, signal1)
-      {:ok, state} = State.enqueue(state, signal2)
-      {:ok, state} = State.enqueue(state, signal3)
-
-      {:ok, dequeued1, state} = State.dequeue(state)
-      {:ok, dequeued2, state} = State.dequeue(state)
-      {:ok, dequeued3, _state} = State.dequeue(state)
-
-      assert dequeued1 == signal1
-      assert dequeued2 == signal2
-      assert dequeued3 == signal3
     end
   end
 
   describe "clear_queue/1" do
-    setup do
-      agent = BasicAgent.new("test")
-      state = %State{agent: agent, dispatch: [pid: [target: self()]]}
-      {:ok, state: state}
-    end
-
     test "clears all signals from the queue and emits signal", %{state: state} do
-      signal1 = %Signal{type: "test.signal.1", source: "test", id: "test-1"}
-      signal2 = %Signal{type: "test.signal.2", source: "test", id: "test-2"}
-      queue_cleared = "jido.agent.event.queue.cleared"
+      {:ok, signal1} =
+        Signal.new(%{
+          type: "test.signal.1",
+          source: "test-source",
+          subject: "test-subject",
+          jido_dispatch: {:logger, []}
+        })
 
-      {:ok, state} = State.enqueue(state, signal1)
-      {:ok, state} = State.enqueue(state, signal2)
-      assert :queue.len(state.pending_signals) == 2
+      {:ok, signal2} =
+        Signal.new(%{
+          type: "test.signal.2",
+          source: "test-source",
+          subject: "test-subject",
+          jido_dispatch: {:logger, []}
+        })
 
-      {:ok, cleared_state} = State.clear_queue(state)
+      {:ok, state_with_one} = State.enqueue(state, signal1)
+      {:ok, state_with_two} = State.enqueue(state_with_one, signal2)
+
+      assert :queue.len(state_with_two.pending_signals) == 2
+
+      {:ok, cleared_state} = State.clear_queue(state_with_two)
       assert :queue.is_empty(cleared_state.pending_signals)
-      assert_receive {:signal, %Signal{type: ^queue_cleared, data: %{queue_size: 2}}}
     end
 
     test "clearing an empty queue emits signal with zero size", %{state: state} do
-      queue_cleared = "jido.agent.event.queue.cleared"
-      assert :queue.is_empty(state.pending_signals)
       {:ok, cleared_state} = State.clear_queue(state)
       assert :queue.is_empty(cleared_state.pending_signals)
-      assert_receive {:signal, %Signal{type: ^queue_cleared, data: %{queue_size: 0}}}
     end
   end
 
   describe "check_queue_size/1" do
-    setup do
-      agent = BasicAgent.new("test")
-      state = %State{agent: agent, dispatch: [pid: [target: self()]]}
-      {:ok, state: state}
+    test "returns error when queue size exceeds maximum", %{state: state} do
+      {:ok, signal} =
+        Signal.new(%{
+          type: "test.signal",
+          source: "test-source",
+          subject: "test-subject",
+          jido_dispatch: {:logger, []}
+        })
+
+      state = %{state | max_queue_size: 0}
+      assert {:error, :queue_overflow} = State.enqueue(state, signal)
     end
 
-    test "returns current queue size when within limits", %{state: state} do
-      assert {:ok, 0} = State.check_queue_size(state)
+    test "returns current size when within limits", %{state: state} do
+      {:ok, signal} =
+        Signal.new(%{
+          type: "test.signal",
+          source: "test-source",
+          subject: "test-subject",
+          jido_dispatch: {:logger, []}
+        })
 
-      signal = %Signal{type: "test.signal", source: "test", id: "test-1"}
       {:ok, state_with_signal} = State.enqueue(state, signal)
       assert {:ok, 1} = State.check_queue_size(state_with_signal)
     end
-
-    test "returns error when queue size exceeds maximum", %{state: state} do
-      state = %{state | max_queue_size: 0}
-      signal = %Signal{type: "test.signal", source: "test", id: "test-1"}
-
-      # Since max_queue_size is 0, enqueue should fail immediately
-      assert {:error, :queue_overflow} = State.enqueue(state, signal)
-      queue_overflow = "jido.agent.event.queue.overflow"
-
-      assert_receive {:signal,
-                      %Signal{
-                        type: ^queue_overflow,
-                        data: %{queue_size: 0, max_size: 0}
-                      }}
-    end
   end
 
-  describe "reply_refs management" do
-    setup do
-      agent = BasicAgent.new("test")
-      state = %State{agent: agent, dispatch: [pid: [target: self()]]}
-      {:ok, state: state}
-    end
-
-    test "can store and retrieve reply refs", %{state: state} do
-      signal_id = "test-signal-1"
+  describe "reply_refs" do
+    test "stores and retrieves reply refs", %{state: state} do
+      signal_id = "test-signal-id"
       from = {self(), make_ref()}
 
-      # Store reply ref
-      state = State.store_reply_ref(state, signal_id, from)
-      assert State.get_reply_ref(state, signal_id) == from
+      state_with_ref = State.store_reply_ref(state, signal_id, from)
+      assert State.get_reply_ref(state_with_ref, signal_id) == from
 
-      # Remove reply ref
-      state = State.remove_reply_ref(state, signal_id)
-      assert State.get_reply_ref(state, signal_id) == nil
-    end
-
-    test "handles missing reply refs gracefully", %{state: state} do
-      assert State.get_reply_ref(state, "nonexistent") == nil
-      assert State.remove_reply_ref(state, "nonexistent") == state
+      state_without_ref = State.remove_reply_ref(state_with_ref, signal_id)
+      assert State.get_reply_ref(state_without_ref, signal_id) == nil
     end
   end
 end

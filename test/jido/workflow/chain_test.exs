@@ -1,5 +1,5 @@
 defmodule JidoTest.Workflow.ChainTest do
-  use ExUnit.Case, async: false
+  use JidoTest.Case, async: false
 
   import ExUnit.CaptureLog
 

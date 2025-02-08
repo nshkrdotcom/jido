@@ -1,5 +1,5 @@
 defmodule Jido.AI.Actions.MultiModalTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   alias Jido.AI.Actions.MultiModal
 

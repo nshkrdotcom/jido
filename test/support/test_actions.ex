@@ -4,6 +4,7 @@ defmodule JidoTest.TestActions do
 
   alias Jido.Error
   alias Jido.Action
+  alias Jido.Instruction
 
   defmodule BasicAction do
     @moduledoc false
@@ -608,6 +609,21 @@ defmodule JidoTest.TestActions do
     end
   end
 
+  defmodule IOAction do
+    @moduledoc false
+    use Action,
+      name: "io_action",
+      description: "Showcases IO operations",
+      schema: [
+        input: [type: :string, required: true]
+      ]
+
+    def run(params, _context) do
+      IO.puts("IO operation detected: #{inspect(params)}")
+      {:ok, params}
+    end
+  end
+
   defmodule EnqueueAction do
     @moduledoc false
     use Action,
@@ -887,6 +903,17 @@ defmodule JidoTest.TestActions do
     end
   end
 
+  defmodule StateCheckAction do
+    @moduledoc false
+    use Action,
+      name: "state_check_action",
+      description: "Verifies state is injected into context"
+
+    def run(_params, context) do
+      {:ok, %{state_in_context: context.state}}
+    end
+  end
+
   defmodule Echo do
     @moduledoc false
 
@@ -895,6 +922,47 @@ defmodule JidoTest.TestActions do
     """
     def run(params, _context, _opts) do
       {:ok, params}
+    end
+  end
+
+  defmodule ReturnInstructionAction do
+    @moduledoc "Test action that returns an instruction as a directive"
+    use Action,
+      name: "return_instruction_action",
+      description: "Returns a single instruction as a directive"
+
+    def run(_params, _context) do
+      next_instruction = %Instruction{
+        action: __MODULE__,
+        params: %{value: 42},
+        context: %{}
+      }
+
+      {:ok, %{}, next_instruction}
+    end
+  end
+
+  defmodule ReturnInstructionListAction do
+    @moduledoc "Test action that returns a list of instructions as directives"
+    use Action,
+      name: "return_instruction_list_action",
+      description: "Returns a list of instructions as directives"
+
+    def run(_params, _context) do
+      instructions = [
+        %Instruction{
+          action: ReturnInstructionAction,
+          params: %{value: 1},
+          context: %{}
+        },
+        %Instruction{
+          action: ReturnInstructionAction,
+          params: %{value: 2},
+          context: %{}
+        }
+      ]
+
+      {:ok, %{}, instructions}
     end
   end
 end

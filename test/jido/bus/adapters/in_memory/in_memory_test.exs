@@ -29,10 +29,8 @@ defmodule Jido.Bus.Adapters.InMemoryTest do
 
   defp build_signal(account_number) do
     %Signal{
-      id: UUID.uuid4(),
+      id: Jido.Util.generate_id(),
       source: "http://example.com/bank",
-      jido_causation_id: UUID.uuid4(),
-      jido_correlation_id: UUID.uuid4(),
       type: "#{__MODULE__}.BankAccountOpened",
       data: %{
         signal: %BankAccountOpened{account_number: account_number, initial_balance: 1_000},

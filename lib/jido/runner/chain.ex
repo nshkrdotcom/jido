@@ -99,6 +99,24 @@ defmodule Jido.Runner.Chain do
 
   defp execute_chain_step([instruction | remaining], agent, accumulated_directives, opts) do
     case execute_instruction(instruction, agent.state, opts) do
+      {:ok, state_map, %Instruction{} = instruction_directive} ->
+        # Convert instruction to Enqueue directive
+        enqueue = Directive.Enqueue.new(instruction_directive)
+        updated_directives = accumulated_directives ++ [enqueue]
+        handle_state_result(state_map, remaining, agent, updated_directives, opts)
+
+      {:ok, state_map, instructions} when is_list(instructions) ->
+        # If all elements are instructions, convert each to Enqueue directive
+        if Enum.all?(instructions, &match?(%Instruction{}, &1)) do
+          enqueues = Enum.map(instructions, &Directive.Enqueue.new/1)
+          updated_directives = accumulated_directives ++ enqueues
+          handle_state_result(state_map, remaining, agent, updated_directives, opts)
+        else
+          # Handle as normal directive list
+          updated_directives = accumulated_directives ++ List.wrap(instructions)
+          handle_state_result(state_map, remaining, agent, updated_directives, opts)
+        end
+
       {:ok, state_map, directive} ->
         # Add directive to accumulated list
         updated_directives = accumulated_directives ++ List.wrap(directive)
@@ -126,21 +144,26 @@ defmodule Jido.Runner.Chain do
 
     case Jido.Workflow.run(action, merged_params, context, opts) do
       {:ok, state_map, directive} ->
-        # Merge state_map with existing state
-        merged_state = Map.merge(state, state_map)
-        {:ok, merged_state, directive}
+        # Don't merge state for directives
+        {:ok, state_map, directive}
 
       {:ok, state_map} ->
         # Merge state_map with existing state
         merged_state = Map.merge(state, state_map)
         {:ok, merged_state}
 
-      {:error, %Jido.Error{} = error} ->
+      {:error, error} ->
         {:error, error}
-
-      {:error, reason} ->
-        {:error, Error.execution_error("Action execution failed", %{reason: reason})}
     end
+  end
+
+  @spec handle_state_result(map(), [Instruction.t()], Jido.Agent.t(), [Directive.t()], keyword()) ::
+          chain_result()
+  defp handle_state_result(new_state, remaining, agent, accumulated_directives, opts) do
+    apply_state = Keyword.get(opts, :apply_state, true)
+    updated_agent = apply_state(agent, new_state, apply_state)
+
+    execute_chain_step(remaining, updated_agent, accumulated_directives, opts)
   end
 
   @doc false
@@ -151,14 +174,5 @@ defmodule Jido.Runner.Chain do
 
   defp apply_state(agent, state_map, false) do
     %{agent | result: state_map}
-  end
-
-  @spec handle_state_result(map(), [Instruction.t()], Jido.Agent.t(), [Directive.t()], keyword()) ::
-          chain_result()
-  defp handle_state_result(new_state, remaining, agent, accumulated_directives, opts) do
-    apply_state = Keyword.get(opts, :apply_state, true)
-    updated_agent = apply_state(agent, new_state, apply_state)
-
-    execute_chain_step(remaining, updated_agent, accumulated_directives, opts)
   end
 end

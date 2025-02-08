@@ -1,5 +1,5 @@
 defmodule Jido.Agent.Server.SkillsTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   use Mimic
 
   alias Jido.Agent.Server.Skills
@@ -63,8 +63,8 @@ defmodule Jido.Agent.Server.SkillsTest do
         mode: :default,
         dispatch: nil,
         child_supervisor: nil,
-        current_causation_id: nil,
-        current_correlation_id: nil,
+        current_signal: nil,
+        current_signal_type: nil,
         log_level: :info,
         registry: nil
       }

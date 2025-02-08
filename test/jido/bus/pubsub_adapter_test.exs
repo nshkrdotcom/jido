@@ -1,5 +1,5 @@
 defmodule Jido.Bus.PubSubAdapterTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   alias Jido.Bus
   alias Jido.Bus.Adapters.PubSub

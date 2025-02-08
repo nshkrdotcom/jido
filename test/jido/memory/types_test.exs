@@ -1,5 +1,5 @@
 defmodule Jido.Memory.TypesTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Memory.Types.{Memory, KnowledgeItem}
 
   describe "Memory struct" do

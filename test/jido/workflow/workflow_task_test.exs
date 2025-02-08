@@ -1,5 +1,5 @@
 defmodule Jido.WorkflowTaskTest do
-  use ExUnit.Case, async: false
+  use JidoTest.Case, async: false
 
   # Import Private to access private functions for testing
   use Private

@@ -1,5 +1,5 @@
 defmodule Jido.SkillDefinitionTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias JidoTest.TestSkills.WeatherMonitorSkill
 
   @moduletag :capture_log

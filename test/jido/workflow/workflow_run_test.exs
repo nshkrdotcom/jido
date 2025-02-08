@@ -1,5 +1,5 @@
 defmodule JidoTest.WorkflowRunTest do
-  use ExUnit.Case, async: false
+  use JidoTest.Case, async: false
   use Mimic
 
   import ExUnit.CaptureLog
@@ -9,6 +9,7 @@ defmodule JidoTest.WorkflowRunTest do
   alias JidoTest.TestActions.BasicAction
   alias JidoTest.TestActions.DelayAction
   alias JidoTest.TestActions.ErrorAction
+  alias JidoTest.TestActions.IOAction
   alias JidoTest.TestActions.RetryAction
 
   @attempts_table :workflow_run_test_attempts
@@ -148,8 +149,16 @@ defmodule JidoTest.WorkflowRunTest do
 
     test "handles timeout" do
       capture_log(fn ->
-        assert {:error, %Error{message: "Workflow timed out after 50ms"}} =
+        assert {:error, %Error{message: message}} =
                  Workflow.run(DelayAction, %{delay: 1000}, %{}, timeout: 50)
+
+        assert message =~ "timed out after 50ms. This could be due"
+      end)
+    end
+
+    test "handles IO operations" do
+      capture_log(fn ->
+        assert {:ok, %{input: "value"}} = Workflow.run(IOAction, %{input: "value"})
       end)
     end
   end

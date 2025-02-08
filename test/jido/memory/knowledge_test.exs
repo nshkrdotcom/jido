@@ -1,5 +1,5 @@
 defmodule Jido.Memory.KnowledgeTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Memory.{Knowledge, Types.KnowledgeItem}
   import Jido.Memory.TestHelpers
 

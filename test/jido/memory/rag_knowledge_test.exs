@@ -1,5 +1,5 @@
 defmodule Jido.Memory.RAGKnowledgeTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Memory.RAGKnowledge
   import Jido.Memory.TestHelpers
 

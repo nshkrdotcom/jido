@@ -1,5 +1,5 @@
 defmodule Jido.Memory.MemoryAdapter.InMemoryTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Memory.MemoryAdapter.InMemory
   alias Jido.Memory.Types.{Memory, KnowledgeItem}
 

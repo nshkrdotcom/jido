@@ -1,5 +1,5 @@
 defmodule Jido.Memory.ManagerTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Memory.{Manager, Types.Memory}
   import Jido.Memory.TestHelpers
 

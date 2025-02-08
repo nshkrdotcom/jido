@@ -1,5 +1,5 @@
 defmodule Jido.Runner.ChainTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Runner.Chain
   alias Jido.Instruction
   alias JidoTest.TestActions.{Add, Multiply, ErrorAction, EnqueueAction, CompensateAction}
@@ -354,6 +354,85 @@ defmodule Jido.Runner.ChainTest do
       {{:value, enqueued}, _} = :queue.out(updated_agent.pending_instructions)
       assert enqueued.action == :first_action
       assert enqueued.params == %{value: 1}
+    end
+  end
+
+  describe "instruction directive handling" do
+    test "handles single instruction returned as directive" do
+      instruction = %Instruction{
+        action: JidoTest.TestActions.ReturnInstructionAction,
+        params: %{},
+        context: %{}
+      }
+
+      agent = FullFeaturedAgent.new("test-agent")
+      agent = %{agent | pending_instructions: :queue.from_list([instruction])}
+
+      assert {:ok, %FullFeaturedAgent{} = updated_agent, []} = Chain.run(agent)
+      assert updated_agent.result == %{}
+      # The returned instruction should be added to the queue
+      assert :queue.len(updated_agent.pending_instructions) == 1
+      {{:value, next_instruction}, _} = :queue.out(updated_agent.pending_instructions)
+      assert next_instruction.action == JidoTest.TestActions.ReturnInstructionAction
+      assert next_instruction.params == %{value: 42}
+    end
+
+    test "handles list of instructions returned as directive" do
+      instruction = %Instruction{
+        action: JidoTest.TestActions.ReturnInstructionListAction,
+        params: %{},
+        context: %{}
+      }
+
+      agent = FullFeaturedAgent.new("test-agent")
+      agent = %{agent | pending_instructions: :queue.from_list([instruction])}
+
+      assert {:ok, %FullFeaturedAgent{} = updated_agent, []} = Chain.run(agent)
+      assert updated_agent.result == %{}
+      # Both returned instructions should be added to the queue
+      assert :queue.len(updated_agent.pending_instructions) == 2
+
+      # Verify first instruction
+      {{:value, first}, queue} = :queue.out(updated_agent.pending_instructions)
+      assert first.action == JidoTest.TestActions.ReturnInstructionAction
+      assert first.params == %{value: 1}
+
+      # Verify second instruction
+      {{:value, second}, _} = :queue.out(queue)
+      assert second.action == JidoTest.TestActions.ReturnInstructionAction
+      assert second.params == %{value: 2}
+    end
+
+    test "handles mixed instructions and state changes in chain" do
+      instructions = [
+        %Instruction{
+          action: Add,
+          params: %{value: 0, amount: 1},
+          context: %{}
+        },
+        %Instruction{
+          action: JidoTest.TestActions.ReturnInstructionAction,
+          params: %{},
+          context: %{}
+        },
+        %Instruction{
+          action: Add,
+          params: %{value: 1, amount: 2},
+          context: %{}
+        }
+      ]
+
+      agent = FullFeaturedAgent.new("test-agent")
+      agent = %{agent | pending_instructions: :queue.from_list(instructions)}
+
+      assert {:ok, %FullFeaturedAgent{} = updated_agent, []} = Chain.run(agent)
+      # State changes from Add actions applied
+      assert updated_agent.state.value == 3
+      # Instruction from ReturnInstructionAction added to queue
+      assert :queue.len(updated_agent.pending_instructions) == 1
+      {{:value, next_instruction}, _} = :queue.out(updated_agent.pending_instructions)
+      assert next_instruction.action == JidoTest.TestActions.ReturnInstructionAction
+      assert next_instruction.params == %{value: 42}
     end
   end
 end

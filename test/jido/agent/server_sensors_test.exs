@@ -1,5 +1,5 @@
 defmodule JidoTest.Agent.ServerSensorsTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Agent.ServerSensors
   alias Jido.Agent.Server.State, as: ServerState
 

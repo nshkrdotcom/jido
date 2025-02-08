@@ -29,8 +29,8 @@ defmodule Jido.Bus.RecordedSignalTest do
         signal_number: signal_number,
         stream_id: stream_id,
         stream_version: stream_version,
-        jido_correlation_id: jido_correlation_id,
-        jido_causation_id: jido_causation_id,
+        correlation_id: correlation_id,
+        causation_id: causation_id,
         created_at: created_at
       } = signal
 
@@ -50,8 +50,8 @@ defmodule Jido.Bus.RecordedSignalTest do
                signal_number: signal_number,
                stream_id: stream_id,
                stream_version: stream_version,
-               jido_correlation_id: jido_correlation_id,
-               jido_causation_id: jido_causation_id,
+               correlation_id: correlation_id,
+               causation_id: causation_id,
                created_at: created_at,
                # Additional field
                application: ExampleApplication

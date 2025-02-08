@@ -107,6 +107,9 @@ defmodule Jido.Runner.Simple do
   @doc false
   @spec execute_instruction(Jido.Agent.t(), Instruction.t(), boolean()) :: run_result()
   defp execute_instruction(agent, instruction, apply_state) do
+    # Inject agent state into instruction context
+    instruction = %{instruction | context: Map.put(instruction.context, :state, agent.state)}
+
     case Jido.Workflow.run(instruction) do
       {:ok, state_map, directives} when is_list(directives) ->
         handle_directive_result(agent, state_map, directives, apply_state)

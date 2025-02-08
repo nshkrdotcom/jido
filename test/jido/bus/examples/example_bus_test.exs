@@ -1,5 +1,5 @@
 defmodule Jido.Bus.Examples.ExampleBusTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   alias Jido.Signal
   alias Phoenix.PubSub
@@ -29,7 +29,7 @@ defmodule Jido.Bus.Examples.ExampleBusTest do
 
       # Create and publish a signal
       signal = %Signal{
-        id: UUID.uuid4(),
+        id: Jido.Util.generate_id(),
         source: "test",
         type: "test.event",
         data: %{value: 123},
@@ -63,7 +63,7 @@ defmodule Jido.Bus.Examples.ExampleBusTest do
       signals =
         for i <- 1..3 do
           %Signal{
-            id: UUID.uuid4(),
+            id: Jido.Util.generate_id(),
             source: "test",
             type: "test.event",
             data: %{value: i},

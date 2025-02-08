@@ -30,7 +30,7 @@ defmodule Jido.Chat.Message do
     with {:ok, content} <- validate_content(attrs.content),
          {:ok, payload} <- validate_payload(type, attrs[:payload]) do
       signal_attrs = %{
-        id: UUID.uuid4(),
+        id: Jido.Util.generate_id(),
         type: message_type(type),
         source: attrs[:source],
         subject: attrs[:sender_id],

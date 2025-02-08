@@ -1,5 +1,5 @@
 defmodule Jido.Chat.Channels.IExChannelTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Chat.Channels.IExChannel
   import ExUnit.CaptureIO
 

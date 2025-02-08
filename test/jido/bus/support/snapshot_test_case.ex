@@ -67,7 +67,7 @@ defmodule Jido.Bus.SnapshotTestCase do
 
     defp build_snapshot_data(account_number) do
       %Snapshot{
-        source_id: UUID.uuid4(),
+        source_id: Jido.Util.generate_id(),
         source_version: account_number,
         source_type: "#{__MODULE__}.BankAccountOpened",
         data: %BankAccountOpened{account_number: account_number, initial_balance: 1_000},

@@ -1,5 +1,5 @@
 defmodule Jido.Agent.Server.ProcessTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   require Logger
   import ExUnit.CaptureLog
 

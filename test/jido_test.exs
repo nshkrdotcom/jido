@@ -1,5 +1,5 @@
 defmodule JidoTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   defmodule TestJido do
     use Jido, otp_app: :jido_test_app

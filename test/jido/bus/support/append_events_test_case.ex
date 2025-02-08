@@ -166,9 +166,9 @@ defmodule Jido.Bus.AppendSignalsTestCase do
         signal_store: signal_store,
         signal_store_meta: signal_store_meta
       } do
-        jido_correlation_id = UUID.uuid4()
-        jido_causation_id = UUID.uuid4()
-        signals = build_signals(4, jido_correlation_id, jido_causation_id)
+        correlation_id = Jido.Util.generate_id()
+        causation_id = Jido.Util.generate_id()
+        signals = build_signals(4, correlation_id, causation_id)
 
         assert :ok == signal_store.publish(signal_store_meta, "stream", 0, signals)
 
@@ -180,8 +180,8 @@ defmodule Jido.Bus.AppendSignalsTestCase do
         Enum.each(read_signals, fn signal ->
           assert_is_uuid(signal.signal_id)
           assert signal.stream_id == "stream"
-          assert signal.jido_correlation_id == jido_correlation_id
-          assert signal.jido_causation_id == jido_causation_id
+          assert signal.correlation_id == correlation_id
+          assert signal.causation_id == causation_id
           assert signal.jido_metadata == %{"metadata" => "value"}
           assert %DateTime{} = signal.created_at
         end)
@@ -230,12 +230,10 @@ defmodule Jido.Bus.AppendSignalsTestCase do
       end
     end
 
-    defp build_signal(account_number, jido_correlation_id, jido_causation_id) do
+    defp build_signal(account_number, correlation_id, causation_id) do
       %Signal{
-        id: UUID.uuid4(),
-        source: "http://example.com/bank",
-        jido_correlation_id: jido_correlation_id,
-        jido_causation_id: jido_causation_id,
+        id: correlation_id,
+        source: causation_id,
         type: "#{__MODULE__}.BankAccountOpened",
         data: %BankAccountOpened{account_number: account_number, initial_balance: 1_000},
         jido_metadata: %{"metadata" => "value"}
@@ -244,13 +242,13 @@ defmodule Jido.Bus.AppendSignalsTestCase do
 
     defp build_signals(
            count,
-           jido_correlation_id \\ UUID.uuid4(),
-           jido_causation_id \\ UUID.uuid4()
+           correlation_id \\ Jido.Util.generate_id(),
+           causation_id \\ Jido.Util.generate_id()
          )
 
-    defp build_signals(count, jido_correlation_id, jido_causation_id) do
+    defp build_signals(count, correlation_id, causation_id) do
       for account_number <- 1..count,
-          do: build_signal(account_number, jido_correlation_id, jido_causation_id)
+          do: build_signal(account_number, correlation_id, causation_id)
     end
 
     defp assert_is_uuid(uuid) do
@@ -265,15 +263,23 @@ defmodule Jido.Bus.AppendSignalsTestCase do
     end
 
     defp coerce(signals) do
-      Enum.map(
-        signals,
-        &%{
-          jido_causation_id: &1.jido_causation_id,
-          jido_correlation_id: &1.jido_correlation_id,
-          data: &1.data,
-          jido_metadata: &1.jido_metadata
-        }
-      )
+      Enum.map(signals, fn
+        %Signal{} = signal ->
+          %{
+            causation_id: signal.source,
+            correlation_id: signal.id,
+            data: signal.data,
+            jido_metadata: signal.jido_metadata
+          }
+
+        recorded_signal ->
+          %{
+            causation_id: recorded_signal.causation_id,
+            correlation_id: recorded_signal.correlation_id,
+            data: recorded_signal.data,
+            jido_metadata: recorded_signal.jido_metadata
+          }
+      end)
     end
   end
 end

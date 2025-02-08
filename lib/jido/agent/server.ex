@@ -59,7 +59,7 @@ defmodule Jido.Agent.Server do
   @spec start_link([start_option()]) :: GenServer.on_start()
   def start_link(opts) do
     dbug("Starting agent server", opts: opts)
-    opts = Keyword.put_new(opts, :id, UUID.uuid4())
+    opts = Keyword.put_new(opts, :id, Jido.Util.generate_id())
 
     with {:ok, agent} <- build_agent(opts),
          opts = Keyword.put(opts, :agent, agent),
@@ -110,10 +110,8 @@ defmodule Jido.Agent.Server do
   """
   @spec call(pid() | atom() | {atom(), node()}, Signal.t()) ::
           {:ok, Signal.t()} | {:error, term()}
-  def call(agent, signal, timeout \\ 5000) do
+  def call(agent, %Signal{} = signal, timeout \\ 5000) do
     dbug("Calling agent", agent: agent, signal: signal)
-    correlation_id = signal.jido_correlation_id || UUID.uuid4()
-    signal = %{signal | jido_correlation_id: correlation_id}
 
     with {:ok, pid} <- Jido.resolve_pid(agent) do
       case GenServer.call(pid, {:signal, signal}, timeout) do
@@ -133,21 +131,19 @@ defmodule Jido.Agent.Server do
   """
   @spec cast(pid() | atom() | {atom(), node()}, Signal.t()) ::
           {:ok, String.t()} | {:error, term()}
-  def cast(agent, signal) do
+  def cast(agent, %Signal{} = signal) do
     dbug("Casting signal to agent", agent: agent, signal: signal)
-    correlation_id = signal.jido_correlation_id || UUID.uuid4()
-    signal = %{signal | jido_correlation_id: correlation_id}
 
     with {:ok, pid} <- Jido.resolve_pid(agent) do
       GenServer.cast(pid, {:signal, signal})
-      {:ok, correlation_id}
+      {:ok, signal.id}
     end
   end
 
   @impl true
   def init(opts) do
     dbug("Initializing agent server", opts: opts)
-    opts = Keyword.put_new(opts, :id, UUID.uuid4())
+    opts = Keyword.put_new(opts, :id, Jido.Util.generate_id())
 
     with {:ok, agent} <- build_agent(opts),
          opts = Keyword.put(opts, :agent, agent),
@@ -198,12 +194,8 @@ defmodule Jido.Agent.Server do
   def handle_call({:signal, %Signal{} = signal}, from, %ServerState{} = state) do
     dbug("Handling signal", type: signal.type, signal: signal)
 
-    # Ensure correlation_id
-    signal_id = signal.jido_correlation_id || UUID.uuid4()
-    signal = %{signal | id: signal_id, jido_correlation_id: signal_id}
-
     # Store the from reference for reply later
-    state = ServerState.store_reply_ref(state, signal_id, from)
+    state = ServerState.store_reply_ref(state, signal.id, from)
 
     # Enqueue the signal
     case ServerState.enqueue(state, signal) do
@@ -226,10 +218,6 @@ defmodule Jido.Agent.Server do
   @impl true
   def handle_cast({:signal, %Signal{} = signal}, %ServerState{} = state) do
     dbug("Handling cast signal", signal: signal)
-
-    # Ensure correlation_id
-    signal_id = signal.jido_correlation_id || UUID.uuid4()
-    signal = %{signal | id: signal_id, jido_correlation_id: signal_id}
 
     # Enqueue the signal
     case ServerState.enqueue(state, signal) do
@@ -267,10 +255,6 @@ defmodule Jido.Agent.Server do
 
   def handle_info({:signal, %Signal{} = signal}, %ServerState{} = state) do
     dbug("Handling info signal", signal: signal)
-
-    # Ensure correlation_id
-    signal_id = signal.jido_correlation_id || UUID.uuid4()
-    signal = %{signal | id: signal_id, jido_correlation_id: signal_id}
 
     # Enqueue the signal
     case ServerState.enqueue(state, signal) do

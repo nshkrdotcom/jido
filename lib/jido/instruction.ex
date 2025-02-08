@@ -71,7 +71,7 @@ defmodule Jido.Instruction do
   @type instruction_list :: [instruction()]
 
   typedstruct do
-    field(:id, String.t(), default: UUID.uuid4())
+    field(:id, String.t(), default: Jido.Util.generate_id())
     field(:action, module(), enforce: true)
     field(:params, map(), default: %{})
     field(:context, map(), default: %{})
@@ -157,7 +157,7 @@ defmodule Jido.Instruction do
   def new(%{action: action} = attrs) when is_atom(action) do
     {:ok,
      %__MODULE__{
-       id: Map.get(attrs, :id, UUID.uuid4()),
+       id: Map.get(attrs, :id, Jido.Util.generate_id()),
        action: action,
        params: Map.get(attrs, :params, %{}),
        context: Map.get(attrs, :context, %{}),
@@ -248,6 +248,35 @@ defmodule Jido.Instruction do
   end
 
   @doc """
+  Same as `normalize/3` but raises on error.
+
+  ## Parameters
+    * `instruction` - Instruction to normalize
+    * `context` - Optional context map to merge
+    * `opts` - Optional options to merge
+
+  ## Returns
+    * `[t()]` - List of normalized instructions
+
+  ## Raises
+    * `Jido.Error` - If instruction cannot be normalized
+
+  ## Examples
+      iex> Instruction.normalize!({MyAction, %{value: 42}})
+      [%Instruction{action: MyAction, params: %{value: 42}}]
+
+      iex> Instruction.normalize!(MyAction)
+      [%Instruction{action: MyAction, params: %{}}]
+  """
+  @spec normalize(instruction() | instruction_list(), map(), keyword()) :: [t()]
+  def normalize!(instruction, context \\ nil, opts \\ []) do
+    case normalize(instruction, context, opts) do
+      {:ok, instructions} -> instructions
+      {:error, error} -> raise error
+    end
+  end
+
+  @doc """
   Validates that all instructions use allowed actions.
 
   ## Parameters
@@ -296,13 +325,28 @@ defmodule Jido.Instruction do
   defp normalize_params(nil), do: {:ok, %{}}
   defp normalize_params(params) when is_map(params), do: {:ok, params}
 
+  defp normalize_params(params) when is_list(params) do
+    if Keyword.keyword?(params) do
+      {:ok, Map.new(params)}
+    else
+      {:error,
+       Error.execution_error(
+         "Invalid params format. Params must be a map or keyword list.",
+         %{
+           params: params,
+           expected_format: "%{key: value} or [key: value]"
+         }
+       )}
+    end
+  end
+
   defp normalize_params(invalid) do
     {:error,
      Error.execution_error(
-       "Invalid params format. Params must be a map.",
+       "Invalid params format. Params must be a map or keyword list.",
        %{
          params: invalid,
-         expected_format: "%{key: value}"
+         expected_format: "%{key: value} or [key: value]"
        }
      )}
   end

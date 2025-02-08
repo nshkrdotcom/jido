@@ -1,5 +1,5 @@
 defmodule JidoTest.ErrorTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   alias Jido.Error
 

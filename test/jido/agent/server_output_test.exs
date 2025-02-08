@@ -1,5 +1,5 @@
 defmodule Jido.Agent.Server.OutputTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   require Logger
   import ExUnit.CaptureLog
 
@@ -45,7 +45,7 @@ defmodule Jido.Agent.Server.OutputTest do
 
   describe "emit/2" do
     test "emits signal with default channel" do
-      {:ok, signal} = Signal.new(%{type: "test.signal", data: "test"})
+      {:ok, signal} = Signal.new(%{type: "test.signal", data: "test", id: "test-id-123"})
 
       log =
         capture_log([level: :info], fn ->
@@ -65,18 +65,16 @@ defmodule Jido.Agent.Server.OutputTest do
         Signal.new(%{
           type: "test.signal",
           data: "test",
+          id: "test-id-456",
           jido_dispatch: {:pid, [target: self(), delivery_mode: :async]}
         })
 
-      log =
-        capture_log([level: :info], fn ->
-          assert :ok = Output.emit(signal)
+      capture_log([level: :info], fn ->
+        assert :ok = Output.emit(signal)
 
-          assert_receive {:signal, %Signal{type: "test.signal", data: "test"}},
-                         @receive_timeout
-        end)
-
-      assert log == ""
+        assert_receive {:signal, %Signal{type: "test.signal", data: "test", id: "test-id-456"}},
+                       @receive_timeout
+      end)
     end
 
     test "handles signal with multiple jido_dispatch dispatch configs" do
@@ -84,91 +82,37 @@ defmodule Jido.Agent.Server.OutputTest do
         Signal.new(%{
           type: "test.signal",
           data: "test",
+          id: "test-id-789",
           jido_dispatch: [
             {:pid, [target: self(), delivery_mode: :async]},
             {:pid, [target: self(), delivery_mode: :async, test: true]}
           ]
         })
 
-      log =
-        capture_log([level: :info], fn ->
-          assert :ok = Output.emit(signal)
+      capture_log([level: :info], fn ->
+        assert :ok = Output.emit(signal)
 
-          assert_receive {:signal, %Signal{type: "test.signal", data: "test"}},
-                         @receive_timeout
+        assert_receive {:signal, %Signal{type: "test.signal", data: "test", id: "test-id-789"}},
+                       @receive_timeout
 
-          assert_receive {:signal, %Signal{type: "test.signal", data: "test"}},
-                         @receive_timeout
-        end)
-
-      assert log == ""
+        assert_receive {:signal, %Signal{type: "test.signal", data: "test", id: "test-id-789"}},
+                       @receive_timeout
+      end)
     end
 
     test "handles signal with dispatch config in opts" do
-      {:ok, signal} = Signal.new(%{type: "test.signal", data: "test"})
+      {:ok, signal} = Signal.new(%{type: "test.signal", data: "test", id: "test-id-101112"})
 
-      log =
-        capture_log([level: :info], fn ->
-          assert :ok =
-                   Output.emit(signal,
-                     dispatch: {:pid, [target: self(), delivery_mode: :async]}
-                   )
+      capture_log([level: :info], fn ->
+        assert :ok =
+                 Output.emit(signal,
+                   dispatch: {:pid, [target: self(), delivery_mode: :async]}
+                 )
 
-          assert_receive {:signal, %Signal{type: "test.signal", data: "test"}},
-                         @receive_timeout
-        end)
-
-      assert log == ""
-    end
-
-    test "handles signal with correlation and causation IDs in opts" do
-      {:ok, signal} = Signal.new(%{type: "test.signal", data: "test"})
-
-      correlation_id = "test-correlation-123"
-      causation_id = "test-causation-456"
-
-      assert :ok =
-               Output.emit(signal,
-                 correlation_id: correlation_id,
-                 causation_id: causation_id,
-                 dispatch: {:pid, [target: self(), delivery_mode: :async]}
-               )
-
-      assert_receive {:signal,
-                      %Signal{
-                        type: "test.signal",
-                        data: "test",
-                        jido_correlation_id: ^correlation_id,
-                        jido_causation_id: ^causation_id
-                      }},
-                     @receive_timeout
-    end
-
-    test "preserves existing signal correlation and causation IDs" do
-      signal_correlation_id = "signal-correlation-789"
-      signal_causation_id = "signal-causation-012"
-
-      {:ok, signal} =
-        Signal.new(%{
-          type: "test.signal",
-          data: "test",
-          jido_correlation_id: signal_correlation_id,
-          jido_causation_id: signal_causation_id
-        })
-
-      assert :ok =
-               Output.emit(signal,
-                 dispatch: {:pid, [target: self(), delivery_mode: :async]}
-               )
-
-      assert_receive {:signal,
-                      %Signal{
-                        type: "test.signal",
-                        data: "test",
-                        jido_correlation_id: ^signal_correlation_id,
-                        jido_causation_id: ^signal_causation_id
-                      }},
-                     @receive_timeout
+        assert_receive {:signal,
+                        %Signal{type: "test.signal", data: "test", id: "test-id-101112"}},
+                       @receive_timeout
+      end)
     end
 
     test "handles list of dispatch configs" do

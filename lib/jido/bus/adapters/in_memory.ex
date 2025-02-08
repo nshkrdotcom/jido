@@ -435,20 +435,20 @@ defmodule Jido.Bus.Adapters.InMemory do
          %Signal{} = signal
        ) do
     %Signal{
-      jido_causation_id: jido_causation_id,
-      jido_correlation_id: jido_correlation_id,
+      id: correlation_id,
+      source: causation_id,
       type: type,
       data: data,
       jido_metadata: jido_metadata
     } = signal
 
     %RecordedSignal{
-      signal_id: UUID.uuid4(),
+      signal_id: Jido.Util.generate_id(),
       signal_number: signal_number,
       stream_id: stream_id,
       stream_version: stream_version,
-      jido_causation_id: jido_causation_id,
-      jido_correlation_id: jido_correlation_id,
+      causation_id: causation_id,
+      correlation_id: correlation_id,
       type: type,
       data: data,
       jido_metadata: jido_metadata,

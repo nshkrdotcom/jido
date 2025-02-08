@@ -1,5 +1,5 @@
 defmodule Jido.Signal.RouterTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   alias Jido.Instruction
   alias Jido.Signal
@@ -47,7 +47,7 @@ defmodule Jido.Signal.RouterTest do
   describe "route/2" do
     test "routes static path signal", %{router: router} do
       signal = %Signal{
-        id: UUID.uuid4(),
+        id: Jido.Util.generate_id(),
         source: "/test",
         type: "user.created",
         data: %{value: 5}
@@ -58,7 +58,7 @@ defmodule Jido.Signal.RouterTest do
 
     test "routes single wildcard signal", %{router: router} do
       signal = %Signal{
-        id: UUID.uuid4(),
+        id: Jido.Util.generate_id(),
         source: "/test",
         type: "user.123.updated",
         data: %{value: 10}
@@ -69,7 +69,7 @@ defmodule Jido.Signal.RouterTest do
 
     test "routes multi-level wildcard signal", %{router: router} do
       signal = %Signal{
-        id: UUID.uuid4(),
+        id: Jido.Util.generate_id(),
         source: "/test",
         type: "order.123.payment.completed",
         data: %{value: 20}
@@ -80,7 +80,7 @@ defmodule Jido.Signal.RouterTest do
 
     test "routes by priority", %{router: router} do
       signal = %Signal{
-        id: UUID.uuid4(),
+        id: Jido.Util.generate_id(),
         source: "/test",
         type: "user.format",
         data: %{
@@ -95,7 +95,7 @@ defmodule Jido.Signal.RouterTest do
 
     test "routes pattern matched signal", %{router: router} do
       signal = %Signal{
-        id: UUID.uuid4(),
+        id: Jido.Util.generate_id(),
         source: "/test",
         type: "user.enrich",
         data: %{
@@ -109,7 +109,7 @@ defmodule Jido.Signal.RouterTest do
 
     test "does not route pattern matched signal when condition fails", %{router: router} do
       signal = %Signal{
-        id: UUID.uuid4(),
+        id: Jido.Util.generate_id(),
         source: "/test",
         type: "user.enrich",
         data: %{
@@ -125,7 +125,7 @@ defmodule Jido.Signal.RouterTest do
 
     test "returns empty list for unmatched path", %{router: router} do
       signal = %Signal{
-        id: UUID.uuid4(),
+        id: Jido.Util.generate_id(),
         source: "/test",
         type: "unknown.path",
         data: %{}
@@ -138,7 +138,7 @@ defmodule Jido.Signal.RouterTest do
 
     test "routes pid signal", %{router: router} do
       signal = %Signal{
-        id: UUID.uuid4(),
+        id: Jido.Util.generate_id(),
         source: "/test",
         type: "user.forward",
         data: %{value: 5}
@@ -159,13 +159,13 @@ defmodule Jido.Signal.RouterTest do
 
       # Test paths ending in wildcard
       {:ok, router} = Router.new({"user.*", %Instruction{action: TestAction}})
-      signal = %Signal{type: "user.anything", source: "/test", id: UUID.uuid4()}
+      signal = %Signal{type: "user.anything", source: "/test", id: Jido.Util.generate_id()}
       {:ok, [instruction]} = Router.route(router, signal)
       assert instruction.action == TestAction
 
       # Test paths starting with wildcard
       {:ok, router} = Router.new({"*.created", %Instruction{action: TestAction}})
-      signal = %Signal{type: "anything.created", source: "/test", id: UUID.uuid4()}
+      signal = %Signal{type: "anything.created", source: "/test", id: Jido.Util.generate_id()}
       {:ok, [instruction]} = Router.route(router, signal)
       assert instruction.action == TestAction
 
@@ -204,7 +204,7 @@ defmodule Jido.Signal.RouterTest do
           {"test", %Instruction{action: Action2}, 0}
         ])
 
-      signal = %Signal{type: "test", source: "/test", id: UUID.uuid4()}
+      signal = %Signal{type: "test", source: "/test", id: Jido.Util.generate_id()}
       {:ok, instructions} = Router.route(router, signal)
       # Should maintain registration order
       assert [%Instruction{action: Action1}, %Instruction{action: Action2}] = instructions
@@ -241,7 +241,7 @@ defmodule Jido.Signal.RouterTest do
           %Instruction{action: TestAction}
         })
 
-      signal = %Signal{type: "test", source: "/test", id: UUID.uuid4(), data: nil}
+      signal = %Signal{type: "test", source: "/test", id: Jido.Util.generate_id(), data: nil}
       {:error, error} = Router.route(router, signal)
       assert error.type == :routing_error
     end
@@ -250,7 +250,7 @@ defmodule Jido.Signal.RouterTest do
       # Test adding duplicate routes
       {:ok, router} = Router.new({"test", %Instruction{action: Action1}})
       {:ok, router} = Router.add(router, {"test", %Instruction{action: Action2}})
-      signal = %Signal{type: "test", source: "/test", id: UUID.uuid4()}
+      signal = %Signal{type: "test", source: "/test", id: Jido.Util.generate_id()}
       {:ok, instructions} = Router.route(router, signal)
       # Should have both instructions
       assert length(instructions) == 2
@@ -261,7 +261,7 @@ defmodule Jido.Signal.RouterTest do
 
       # Test removing last route
       {:ok, router} = Router.remove(router, "test")
-      signal = %Signal{type: "test", source: "/test", id: UUID.uuid4()}
+      signal = %Signal{type: "test", source: "/test", id: Jido.Util.generate_id()}
       {:error, error} = Router.route(router, signal)
       assert error.type == :routing_error
       assert error.message == :no_handler
@@ -269,18 +269,18 @@ defmodule Jido.Signal.RouterTest do
 
     test "handles signal type edge cases", %{router: router} do
       # Test empty signal type
-      signal = %Signal{type: "", source: "/test", id: UUID.uuid4()}
+      signal = %Signal{type: "", source: "/test", id: Jido.Util.generate_id()}
       {:error, error} = Router.route(router, signal)
       assert error.type == :routing_error
 
       # Test very long path
       long_type = String.duplicate("a.", 100) <> "end"
-      signal = %Signal{type: long_type, source: "/test", id: UUID.uuid4()}
+      signal = %Signal{type: long_type, source: "/test", id: Jido.Util.generate_id()}
       {:error, error} = Router.route(router, signal)
       assert error.type == :routing_error
 
       # Test invalid characters in type
-      signal = %Signal{type: "user@123", source: "/test", id: UUID.uuid4()}
+      signal = %Signal{type: "user@123", source: "/test", id: Jido.Util.generate_id()}
       {:error, error} = Router.route(router, signal)
       assert error.type == :routing_error
     end
@@ -296,7 +296,7 @@ defmodule Jido.Signal.RouterTest do
         ])
 
       # Test overlapping wildcards
-      signal = %Signal{type: "user.123.created", source: "/test", id: UUID.uuid4()}
+      signal = %Signal{type: "user.123.created", source: "/test", id: Jido.Util.generate_id()}
       {:ok, instructions} = Router.route(router, signal)
       # Should match all patterns in correct priority order
       assert [
@@ -318,7 +318,7 @@ defmodule Jido.Signal.RouterTest do
           %Instruction{action: TestAction}
         })
 
-      signal = %Signal{type: deep_path, source: "/test", id: UUID.uuid4()}
+      signal = %Signal{type: deep_path, source: "/test", id: Jido.Util.generate_id()}
       {:ok, [instruction]} = Router.route(router, signal)
       assert instruction.action == TestAction
 
@@ -330,7 +330,7 @@ defmodule Jido.Signal.RouterTest do
 
       {:ok, router} = Router.new(wide_routes)
 
-      signal = %Signal{type: "parent.500", source: "/test", id: UUID.uuid4()}
+      signal = %Signal{type: "parent.500", source: "/test", id: Jido.Util.generate_id()}
       {:ok, [instruction]} = Router.route(router, signal)
       assert instruction.action == TestAction
     end

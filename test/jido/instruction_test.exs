@@ -1,5 +1,5 @@
 defmodule Jido.InstructionTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Instruction
   alias Jido.Error
   alias JidoTest.TestActions.BasicAction
@@ -27,21 +27,37 @@ defmodule Jido.InstructionTest do
       assert instruction.context == %{}
     end
 
-    test "normalizes action tuple with params" do
+    test "normalizes action tuple with map params" do
       assert {:ok, [instruction]} = Instruction.normalize({BasicAction, %{value: 42}})
       assert instruction.action == BasicAction
       assert instruction.params == %{value: 42}
       assert instruction.context == %{}
     end
 
-    test "normalizes list of mixed formats" do
+    test "normalizes action tuple with keyword list params" do
+      assert {:ok, [instruction]} =
+               Instruction.normalize({BasicAction, [value: 42, name: "test"]})
+
+      assert instruction.action == BasicAction
+      assert instruction.params == %{value: 42, name: "test"}
+      assert instruction.context == %{}
+    end
+
+    test "returns error for invalid params list format" do
+      assert {:error, %Error{}} =
+               Instruction.normalize({BasicAction, ["not", "a", "keyword", "list"]})
+    end
+
+    test "normalizes list of mixed formats with different param types" do
       input = [
         BasicAction,
         {NoSchema, %{data: "test"}},
+        {BasicAction, [value: 42]},
         %Instruction{action: BasicAction, context: %{local: true}}
       ]
 
-      assert {:ok, [first, second, third]} = Instruction.normalize(input, %{request_id: "123"})
+      assert {:ok, [first, second, third, fourth]} =
+               Instruction.normalize(input, %{request_id: "123"})
 
       assert first.action == BasicAction
       assert first.params == %{}
@@ -52,8 +68,12 @@ defmodule Jido.InstructionTest do
       assert second.context == %{request_id: "123"}
 
       assert third.action == BasicAction
-      assert third.params == %{}
-      assert third.context == %{local: true, request_id: "123"}
+      assert third.params == %{value: 42}
+      assert third.context == %{request_id: "123"}
+
+      assert fourth.action == BasicAction
+      assert fourth.params == %{}
+      assert fourth.context == %{local: true, request_id: "123"}
     end
 
     test "returns error for invalid params format" do
@@ -78,6 +98,27 @@ defmodule Jido.InstructionTest do
     test "uses provided options when instruction has none" do
       assert {:ok, [normalized]} = Instruction.normalize(BasicAction, %{}, retry: true)
       assert normalized.opts == [retry: true]
+    end
+  end
+
+  describe "normalize!/3" do
+    test "returns normalized instructions directly" do
+      instruction = %Instruction{
+        action: BasicAction,
+        params: %{value: 1},
+        context: %{local: true}
+      }
+
+      [normalized] = Instruction.normalize!(instruction, %{request_id: "123"})
+      assert normalized.action == BasicAction
+      assert normalized.params == %{value: 1}
+      assert normalized.context == %{local: true, request_id: "123"}
+    end
+
+    test "raises error for invalid input" do
+      assert_raise ArgumentError, fn ->
+        Instruction.normalize!(123)
+      end
     end
   end
 

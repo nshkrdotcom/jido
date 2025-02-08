@@ -305,7 +305,7 @@ defmodule Jido.Agent do
           def start_link(opts \\ [])
 
           def start_link(opts) when is_list(opts) do
-            id = Keyword.get(opts, :id, UUID.uuid4())
+            id = Keyword.get(opts, :id, Jido.Util.generate_id())
             initial_state = Keyword.get(opts, :initial_state, %{})
             agent = new(id, initial_state)
 

@@ -1,5 +1,5 @@
 defmodule Jido.Chat.ParticipantRefTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   alias Jido.Chat.ParticipantRef
 

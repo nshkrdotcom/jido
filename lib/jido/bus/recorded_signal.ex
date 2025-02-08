@@ -15,10 +15,10 @@ defmodule Jido.Bus.RecordedSignal do
 
     - `stream_version` - the version of the stream for the signal.
 
-    - `jido_causation_id` - an optional UUID identifier used to identify which
+    - `causation_id` - an optional UUID identifier used to identify which
       message you are responding to.
 
-    - `jido_correlation_id` - an optional UUID identifier used to correlate related
+    - `correlation_id` - an optional UUID identifier used to correlate related
       messages.
 
     - `data` - the signal data deserialized into a struct.
@@ -32,8 +32,8 @@ defmodule Jido.Bus.RecordedSignal do
 
   alias Jido.Bus.RecordedSignal
 
-  @type jido_causation_id :: uuid() | nil
-  @type jido_correlation_id :: uuid() | nil
+  @type causation_id :: uuid() | nil
+  @type correlation_id :: uuid() | nil
   @type created_at :: DateTime.t()
   @type data :: domain_signal()
   @type domain_signal :: struct()
@@ -51,8 +51,8 @@ defmodule Jido.Bus.RecordedSignal do
           signal_number: signal_number(),
           stream_id: stream_id(),
           stream_version: stream_version(),
-          jido_causation_id: jido_causation_id(),
-          jido_correlation_id: jido_correlation_id(),
+          causation_id: causation_id(),
+          correlation_id: correlation_id(),
           type: type(),
           data: data(),
           jido_metadata: jido_metadata(),
@@ -64,8 +64,8 @@ defmodule Jido.Bus.RecordedSignal do
           :signal_number => signal_number(),
           :stream_id => stream_id(),
           :stream_version => stream_version(),
-          :jido_correlation_id => jido_correlation_id(),
-          :jido_causation_id => jido_causation_id(),
+          :correlation_id => correlation_id(),
+          :causation_id => causation_id(),
           :created_at => created_at(),
           optional(atom()) => term(),
           optional(String.t()) => term()
@@ -76,8 +76,8 @@ defmodule Jido.Bus.RecordedSignal do
     :signal_number,
     :stream_id,
     :stream_version,
-    :jido_causation_id,
-    :jido_correlation_id,
+    :causation_id,
+    :correlation_id,
     :type,
     :data,
     :created_at,
@@ -95,8 +95,8 @@ defmodule Jido.Bus.RecordedSignal do
       signal_number: signal_number,
       stream_id: stream_id,
       stream_version: stream_version,
-      jido_correlation_id: jido_correlation_id,
-      jido_causation_id: jido_causation_id,
+      correlation_id: correlation_id,
+      causation_id: causation_id,
       created_at: created_at,
       jido_metadata: jido_metadata
     } = signal
@@ -108,8 +108,8 @@ defmodule Jido.Bus.RecordedSignal do
       signal_number: signal_number,
       stream_id: stream_id,
       stream_version: stream_version,
-      jido_correlation_id: jido_correlation_id,
-      jido_causation_id: jido_causation_id,
+      correlation_id: correlation_id,
+      causation_id: causation_id,
       created_at: created_at
     }
     |> Map.merge(jido_metadata || %{})

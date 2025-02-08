@@ -1,5 +1,5 @@
 defmodule JidoTest.AgentDirectiveTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   use Mimic
 
   alias JidoTest.TestAgents.BasicAgent

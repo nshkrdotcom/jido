@@ -1,7 +1,9 @@
 defmodule Jido.Workflow.ToolTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Workflow.Tool
   alias JidoTest.TestActions
+
+  @moduletag :capture_log
 
   describe "to_tool/1" do
     test "converts a Jido Workflow to a tool representation" do

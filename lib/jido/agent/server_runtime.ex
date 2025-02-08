@@ -19,10 +19,8 @@ defmodule Jido.Agent.Server.Runtime do
   @spec process_signal(ServerState.t(), Signal.t()) ::
           {:ok, ServerState.t(), term()} | {:error, term()}
   def process_signal(%ServerState{} = state, %Signal{} = signal) do
-    with {:ok, state} <- set_correlation_id(state, signal),
-         state <- set_current_signal(state, signal),
+    with state <- set_current_signal(state, signal),
          {:ok, state, result} <- execute_signal(state, signal) do
-      # If there was a reply ref, remove it after processing
       state =
         case ServerState.get_reply_ref(state, signal.id) do
           nil -> state
@@ -72,38 +70,11 @@ defmodule Jido.Agent.Server.Runtime do
   end
 
   private do
-    @spec process_signal_queue(ServerState.t()) ::
-            {:ok, ServerState.t()} | {:error, term()}
-    defp process_signal_queue(%ServerState{} = state) do
-      with {:ok, signal, state} <- ServerState.dequeue(state),
-           state <- set_signal_type(state, :async),
-           {:ok, state, _result} <- process_signal(state, signal) do
-        # Continue processing the queue
-        process_signal_queue(state)
-      else
-        {:error, :empty_queue} ->
-          # When queue is empty, return idle state
-          state =
-            state
-            |> clear_runtime_state()
-            |> ensure_state(:idle)
-
-          {:ok, state}
-
-        {:error, reason} ->
-          runtime_error(state, "Error processing signal queue", reason)
-          {:error, reason}
-
-        error ->
-          runtime_error(state, "Error processing signal queue", error)
-          {:error, error}
-      end
-    end
-
     @spec execute_signal(ServerState.t(), Signal.t()) ::
             {:ok, ServerState.t(), term()} | {:error, term()}
     defp execute_signal(%ServerState{} = state, %Signal{} = signal) do
-      with {:ok, signal} <- ServerCallback.handle_signal(state, signal),
+      with state <- set_current_signal(state, signal),
+           {:ok, signal} <- ServerCallback.handle_signal(state, signal),
            {:ok, instructions} <- route_signal(state, signal),
            {:ok, instructions} <- apply_signal_to_first_instruction(signal, instructions),
            {:ok, opts} <- extract_opts_from_first_instruction(instructions),
@@ -112,13 +83,13 @@ defmodule Jido.Agent.Server.Runtime do
         {:ok, state, result}
       else
         {:error, reason} ->
-          runtime_error(state, "Error executing signal", reason)
+          runtime_error(state, "Error executing signal", reason, signal.id)
           {:error, reason}
       end
     end
 
     defp execute_signal(%ServerState{} = state, _invalid_signal) do
-      runtime_error(state, "Invalid signal format", :invalid_signal)
+      runtime_error(state, "Invalid signal format", :invalid_signal, "invalid-signal")
       {:error, :invalid_signal}
     end
 
@@ -206,8 +177,6 @@ defmodule Jido.Agent.Server.Runtime do
 
         # Emit instruction result signal first
         opts = [
-          correlation_id: state.current_correlation_id,
-          causation_id: state.current_causation_id,
           dispatch: dispatch_config
         ]
 
@@ -249,8 +218,6 @@ defmodule Jido.Agent.Server.Runtime do
               end
 
             opts = [
-              correlation_id: state.current_correlation_id,
-              causation_id: state.current_causation_id,
               dispatch: dispatch_config
             ]
 
@@ -316,71 +283,20 @@ defmodule Jido.Agent.Server.Runtime do
       {:error, :invalid_instruction}
     end
 
-    defp runtime_error(state, message, reason) do
+    defp runtime_error(state, message, reason, source \\ nil) do
+      source = source || state.current_signal.id || "unknown"
+
       :execution_error
       |> ServerSignal.err_signal(
         state,
-        Error.execution_error(message, %{reason: reason})
+        Error.execution_error(message, %{reason: reason}),
+        %{source: source}
       )
       |> ServerOutput.emit()
     end
 
-    defp set_correlation_id(%ServerState{} = state, {:ok, %Signal{} = signal}),
-      do: set_correlation_id(state, signal)
-
-    defp set_correlation_id(%ServerState{} = state, %Signal{} = signal) do
-      {:ok,
-       %{
-         state
-         | current_correlation_id: signal.jido_correlation_id,
-           current_causation_id: signal.jido_causation_id
-       }}
-    end
-
-    defp set_correlation_id(%ServerState{} = state, _), do: state
-
-    defp set_causation_id(%ServerState{} = state, instructions) when is_list(instructions) do
-      causation_id =
-        case instructions do
-          [%Instruction{id: id} | _] when not is_nil(id) -> id
-          _ -> nil
-        end
-
-      {:ok, %{state | current_causation_id: causation_id}}
-    end
-
-    defp set_causation_id(%ServerState{} = state, {:ok, %Instruction{} = instruction}),
-      do: set_causation_id(state, instruction)
-
-    defp set_causation_id(%ServerState{} = state, %Instruction{} = instruction) do
-      {:ok, %{state | current_causation_id: instruction.id}}
-    end
-
-    defp set_causation_id(%ServerState{} = state, _), do: {:ok, state}
-
-    defp clear_runtime_state(%ServerState{} = state) do
-      %{
-        state
-        | current_correlation_id: nil,
-          current_causation_id: nil,
-          current_signal_type: nil,
-          current_signal: nil
-      }
-    end
-
     defp set_current_signal(%ServerState{} = state, %Signal{} = signal) do
       %{state | current_signal: signal}
-    end
-
-    defp set_signal_type(%ServerState{} = state, type) do
-      %{state | current_signal_type: type}
-    end
-
-    defp ensure_state(%ServerState{status: _status} = state, target_status) do
-      case ServerState.transition(state, target_status) do
-        {:ok, new_state} -> new_state
-        {:error, _reason} -> state
-      end
     end
   end
 end

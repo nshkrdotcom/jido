@@ -224,7 +224,7 @@ defmodule Jido.Skills.Arithmetic do
 
     {:ok,
      %Signal{
-       id: UUID.uuid4(),
+       id: Jido.Util.generate_id(),
        source: signal.source,
        type: "arithmetic.result",
        data: Map.merge(result, %{operation: operation})
@@ -236,7 +236,7 @@ defmodule Jido.Skills.Arithmetic do
 
     {:ok,
      %Signal{
-       id: UUID.uuid4(),
+       id: Jido.Util.generate_id(),
        source: signal.source,
        type: "arithmetic.error",
        data: %{

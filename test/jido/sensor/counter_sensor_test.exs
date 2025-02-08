@@ -1,5 +1,5 @@
 defmodule JidoTest.SensorCounterTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias JidoTest.TestSensors.CounterSensor
 
   @moduletag :capture_log

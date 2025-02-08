@@ -1,5 +1,5 @@
 defmodule Jido.Agent.ServerTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   doctest Jido.Agent.Server
 
   alias Jido.Agent.Server
@@ -139,15 +139,22 @@ defmodule Jido.Agent.ServerTest do
     end
 
     test "handles asynchronous signals", %{pid: pid} do
-      {:ok, signal} = Signal.new(%{type: "test_signal"})
+      {:ok, signal} = Signal.new(%{type: "test_signal", id: "test-id-123"})
       {:ok, correlation_id} = Server.cast(pid, signal)
+      assert correlation_id == signal.id
       assert is_binary(correlation_id)
     end
 
     test "preserves correlation_id in cast", %{pid: pid} do
-      correlation_id = UUID.uuid4()
-      {:ok, signal} = Signal.new(%{type: "test_signal", jido_correlation_id: correlation_id})
-      {:ok, ^correlation_id} = Server.cast(pid, signal)
+      id = Jido.Util.generate_id()
+
+      {:ok, signal} =
+        Signal.new(%{
+          type: "test_signal",
+          id: id
+        })
+
+      {:ok, ^id} = Server.cast(pid, signal)
     end
   end
 
@@ -208,7 +215,11 @@ defmodule Jido.Agent.ServerTest do
 
     test "handles invalid signal types", %{pid: pid} do
       {:ok, signal} = Signal.new(%{type: "invalid_signal_type"})
-      assert {:error, _reason} = Server.call(pid, signal)
+
+      # Add timeout to prevent test from hanging
+      result = Server.call(pid, signal, 1000)
+      assert {:error, error} = result
+      assert error.type == :routing_error
     end
 
     @tag :capture_log

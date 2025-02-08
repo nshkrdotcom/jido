@@ -1,5 +1,5 @@
 defmodule JidoTest.Workflow.ActionTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   use ExUnitProperties
 
   alias Jido.Error

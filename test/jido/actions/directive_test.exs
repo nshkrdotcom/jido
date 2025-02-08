@@ -1,5 +1,5 @@
 defmodule JidoTest.Actions.DirectivesTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Actions.Directives
 
   describe "EnqueueAction" do

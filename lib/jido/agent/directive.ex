@@ -99,6 +99,25 @@ defmodule Jido.Agent.Directive do
       field(:context, map(), default: %{})
       field(:opts, keyword(), default: [])
     end
+
+    @doc """
+    Creates a new Enqueue directive from an Instruction struct.
+
+    ## Parameters
+      * `instruction` - %Instruction{} struct to convert to directive
+
+    ## Returns
+      * `%Enqueue{}` - New enqueue directive with instruction fields
+    """
+    @spec new(Instruction.t()) :: t()
+    def new(%Instruction{} = instruction) do
+      %__MODULE__{
+        action: instruction.action,
+        params: instruction.params,
+        context: instruction.context,
+        opts: instruction.opts
+      }
+    end
   end
 
   defmodule RegisterAction do
@@ -144,6 +163,8 @@ defmodule Jido.Agent.Directive do
           | DeregisterAction.t()
           | Spawn.t()
           | Kill.t()
+          | Instruction.t()
+          | [Instruction.t()]
 
   @type directive_result ::
           {:ok, Agent.t(), [t()]}
@@ -231,6 +252,30 @@ defmodule Jido.Agent.Directive do
     end)
   end
 
+  @doc false
+  @spec apply_single_directive(Agent.t(), t(), keyword()) :: {:ok, Agent.t()} | {:error, term()}
+  defp apply_single_directive(agent, %Instruction{} = instruction, opts) do
+    # Convert instruction to Enqueue directive and apply
+    enqueue = Enqueue.new(instruction)
+    apply_single_directive(agent, enqueue, opts)
+  end
+
+  defp apply_single_directive(agent, instructions, opts) when is_list(instructions) do
+    # If all elements are instructions, convert each to Enqueue directive
+    if Enum.all?(instructions, &match?(%Instruction{}, &1)) do
+      instructions
+      |> Enum.map(&Enqueue.new/1)
+      |> Enum.reduce_while({:ok, agent}, fn directive, {:ok, current_agent} ->
+        case apply_single_directive(current_agent, directive, opts) do
+          {:ok, updated_agent} -> {:cont, {:ok, updated_agent}}
+          error -> {:halt, error}
+        end
+      end)
+    else
+      {:error, :invalid_directive}
+    end
+  end
+
   defp apply_single_directive(agent, %Enqueue{} = directive, _opts) do
     with :ok <- validate_directive(directive) do
       instruction = %Instruction{
@@ -294,6 +339,22 @@ defmodule Jido.Agent.Directive do
   defp validate_directive(%Kill{pid: pid}) when is_pid(pid), do: :ok
   defp validate_directive(%Kill{}), do: {:error, :invalid_pid}
 
+  defp validate_directive(%Instruction{action: nil}), do: {:error, :invalid_action}
+  defp validate_directive(%Instruction{action: action}) when is_atom(action), do: :ok
+
+  defp validate_directive(instructions) when is_list(instructions) do
+    if Enum.all?(instructions, &match?(%Instruction{}, &1)) do
+      Enum.reduce_while(instructions, :ok, fn instruction, :ok ->
+        case validate_directive(instruction) do
+          :ok -> {:cont, :ok}
+          error -> {:halt, error}
+        end
+      end)
+    else
+      {:error, :invalid_directive}
+    end
+  end
+
   defp validate_directive(_), do: {:error, :invalid_directive}
 
   def split_directives(directives) when is_list(directives) do
@@ -301,7 +362,11 @@ defmodule Jido.Agent.Directive do
   end
 
   def agent_directive?(directive) when is_struct(directive) do
-    directive.__struct__ in @agent_directives
+    directive.__struct__ in @agent_directives or match?(%Instruction{}, directive)
+  end
+
+  def agent_directive?(directives) when is_list(directives) do
+    Enum.all?(directives, &match?(%Instruction{}, &1))
   end
 
   def agent_directive?(_), do: false

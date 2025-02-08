@@ -16,7 +16,7 @@ defmodule Jido.Bus.SubscriptionTestCase do
         signal_store: signal_store,
         signal_store_meta: signal_store_meta
       } do
-        stream_id = UUID.uuid4()
+        stream_id = Jido.Util.generate_id()
 
         assert :ok = signal_store.subscribe(signal_store_meta, stream_id)
 
@@ -63,8 +63,8 @@ defmodule Jido.Bus.SubscriptionTestCase do
         signal_store: signal_store,
         signal_store_meta: signal_store_meta
       } do
-        stream_id = UUID.uuid4()
-        another_stream_id = UUID.uuid4()
+        stream_id = Jido.Util.generate_id()
+        another_stream_id = Jido.Util.generate_id()
 
         assert :ok = signal_store.subscribe(signal_store_meta, stream_id)
 
@@ -963,10 +963,8 @@ defmodule Jido.Bus.SubscriptionTestCase do
 
     defp build_signal(account_number) do
       %Signal{
-        id: UUID.uuid4(),
-        source: "http://example.com/bank",
-        jido_causation_id: UUID.uuid4(),
-        jido_correlation_id: UUID.uuid4(),
+        id: Jido.Util.generate_id(),
+        source: Jido.Util.generate_id(),
         type: "#{__MODULE__}.BankAccountOpened",
         data: %BankAccountOpened{account_number: account_number, initial_balance: 1_000},
         jido_metadata: %{"user_id" => "test"}

@@ -1,5 +1,5 @@
 defmodule Jido.Runner.SimpleTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Runner.Simple
   alias Jido.Instruction
   alias JidoTest.TestActions.{Add, ErrorAction, CompensateAction}
@@ -276,6 +276,28 @@ defmodule Jido.Runner.SimpleTest do
 
       assert {:error, error} = Simple.run(agent)
       assert error.message == "Server error in JidoTest.TestActions.ErrorAction: Custom error"
+    end
+
+    test "injects agent state into instruction context" do
+      instruction = %Instruction{
+        action: JidoTest.TestActions.StateCheckAction,
+        params: %{},
+        context: %{}
+      }
+
+      agent = FullFeaturedAgent.new("test-agent")
+
+      agent = %{
+        agent
+        | state: %{value: 42, status: :ready},
+          pending_instructions: :queue.from_list([instruction])
+      }
+
+      assert {:ok, updated_agent, []} = Simple.run(agent)
+      # StateCheckAction verifies state is in context and returns it
+      assert updated_agent.result == %{
+               state_in_context: %{value: 42, status: :ready}
+             }
     end
   end
 end

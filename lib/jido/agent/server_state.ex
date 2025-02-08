@@ -86,13 +86,7 @@ defmodule Jido.Agent.Server.State do
     field(:max_queue_size, non_neg_integer(), default: 10_000)
     field(:registry, atom(), default: Jido.AgentRegistry)
 
-    field(:dispatch, dispatch_config(),
-      default: [
-        out: {:bus, [target: :default, stream: "agent"]},
-        log: {:logger, []},
-        err: {:console, []}
-      ]
-    )
+    field(:dispatch, dispatch_config(), default: {:logger, []})
 
     field(:router, Jido.Signal.Router.t(), default: Jido.Signal.Router.new!())
     field(:skills, [Jido.Skill.t()], default: [])
@@ -101,8 +95,6 @@ defmodule Jido.Agent.Server.State do
     field(:status, status(), default: :idle)
     field(:pending_signals, :queue.queue(), default: :queue.new())
 
-    field(:current_correlation_id, String.t(), default: nil)
-    field(:current_causation_id, String.t(), default: nil)
     field(:current_signal_type, atom(), default: nil)
     field(:current_signal, Jido.Signal.t(), default: nil)
 
@@ -162,6 +154,11 @@ defmodule Jido.Agent.Server.State do
   """
   @spec transition(%__MODULE__{status: status()}, status()) ::
           {:ok, %__MODULE__{}} | {:error, {:invalid_transition, status(), status()}}
+  def transition(%__MODULE__{status: current} = state, current) do
+    dbug("State already in desired state - no transition needed", current: current)
+    {:ok, state}
+  end
+
   def transition(%__MODULE__{status: current} = state, desired) do
     dbug("Attempting state transition", current: current, desired: desired)
 
@@ -272,8 +269,7 @@ defmodule Jido.Agent.Server.State do
          %{
            state
            | pending_signals: new_queue,
-             current_correlation_id: signal.jido_correlation_id,
-             current_causation_id: nil
+             current_signal: signal
          }}
 
       {:empty, _} ->

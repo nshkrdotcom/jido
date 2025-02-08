@@ -72,56 +72,90 @@ defmodule Jido.Agent.Server.Signal do
 
   def cmd_signal(_, _, _, _), do: nil
 
-  def event_signal(type, state, params \\ %{})
+  def event_signal(type, state, params \\ %{}, extra_attrs \\ %{})
 
-  def event_signal(:started, %ServerState{} = state, params),
-    do: build(state, %{type: type({:event, :started}), data: params})
+  def event_signal(:started, %ServerState{} = state, params, extra_attrs),
+    do: build(state, Map.merge(%{type: type({:event, :started}), data: params}, extra_attrs))
 
-  def event_signal(:transition_succeeded, %ServerState{} = state, params),
-    do: build(state, %{type: type({:event, :transition_succeeded}), data: params})
+  def event_signal(:transition_succeeded, %ServerState{} = state, params, extra_attrs),
+    do:
+      build(
+        state,
+        Map.merge(%{type: type({:event, :transition_succeeded}), data: params}, extra_attrs)
+      )
 
-  def event_signal(:transition_failed, %ServerState{} = state, params),
-    do: build(state, %{type: type({:event, :transition_failed}), data: params})
+  def event_signal(:transition_failed, %ServerState{} = state, params, extra_attrs),
+    do:
+      build(
+        state,
+        Map.merge(%{type: type({:event, :transition_failed}), data: params}, extra_attrs)
+      )
 
-  def event_signal(:queue_overflow, %ServerState{} = state, params),
-    do: build(state, %{type: type({:event, :queue_overflow}), data: params})
+  def event_signal(:queue_overflow, %ServerState{} = state, params, extra_attrs),
+    do:
+      build(state, Map.merge(%{type: type({:event, :queue_overflow}), data: params}, extra_attrs))
 
-  def event_signal(:queue_cleared, %ServerState{} = state, params),
-    do: build(state, %{type: type({:event, :queue_cleared}), data: params})
+  def event_signal(:queue_cleared, %ServerState{} = state, params, extra_attrs),
+    do:
+      build(state, Map.merge(%{type: type({:event, :queue_cleared}), data: params}, extra_attrs))
 
-  def event_signal(:stopped, %ServerState{} = state, params),
-    do: build(state, %{type: type({:event, :stopped}), data: params})
+  def event_signal(:stopped, %ServerState{} = state, params, extra_attrs),
+    do: build(state, Map.merge(%{type: type({:event, :stopped}), data: params}, extra_attrs))
 
-  def event_signal(:process_terminated, %ServerState{} = state, params),
-    do: build(state, %{type: type({:event, :process_terminated}), data: params})
+  def event_signal(:process_terminated, %ServerState{} = state, params, extra_attrs),
+    do:
+      build(
+        state,
+        Map.merge(%{type: type({:event, :process_terminated}), data: params}, extra_attrs)
+      )
 
-  def event_signal(:process_failed, %ServerState{} = state, params),
-    do: build(state, %{type: type({:event, :process_failed}), data: params})
+  def event_signal(:process_failed, %ServerState{} = state, params, extra_attrs),
+    do:
+      build(state, Map.merge(%{type: type({:event, :process_failed}), data: params}, extra_attrs))
 
-  def event_signal(:process_restarted, %ServerState{} = state, params),
-    do: build(state, %{type: type({:event, :process_restarted}), data: params})
+  def event_signal(:process_restarted, %ServerState{} = state, params, extra_attrs),
+    do:
+      build(
+        state,
+        Map.merge(%{type: type({:event, :process_restarted}), data: params}, extra_attrs)
+      )
 
-  def event_signal(:process_started, %ServerState{} = state, params),
-    do: build(state, %{type: type({:event, :process_started}), data: params})
+  def event_signal(:process_started, %ServerState{} = state, params, extra_attrs),
+    do:
+      build(
+        state,
+        Map.merge(%{type: type({:event, :process_started}), data: params}, extra_attrs)
+      )
 
-  def event_signal(_, _, _), do: nil
+  def event_signal(_, _, _, _), do: nil
 
-  def err_signal(type, state, error, _params \\ %{})
+  def err_signal(type, state, error, params \\ %{}, extra_attrs \\ %{})
 
-  def err_signal(:execution_error, %ServerState{} = state, %Error{} = error, _params),
-    do: build(state, %{type: type({:err, :execution_error}), data: error})
+  def err_signal(
+        :execution_error,
+        %ServerState{} = state,
+        %Error{} = error,
+        _params,
+        extra_attrs
+      ),
+      do:
+        build(state, Map.merge(%{type: type({:err, :execution_error}), data: error}, extra_attrs))
 
-  def err_signal(_, _, _, _), do: nil
+  def err_signal(_, _, _, _, _), do: nil
 
-  def out_signal(type, state, result, _params \\ %{})
+  def out_signal(type, state, result, params \\ %{}, extra_attrs \\ %{})
 
-  def out_signal(:instruction_result, %ServerState{} = state, result, _params),
-    do: build(state, %{type: type({:out, :instruction_result}), data: result})
+  def out_signal(:instruction_result, %ServerState{} = state, result, _params, extra_attrs),
+    do:
+      build(
+        state,
+        Map.merge(%{type: type({:out, :instruction_result}), data: result}, extra_attrs)
+      )
 
-  def out_signal(:signal_result, %ServerState{} = state, result, _params),
-    do: build(state, %{type: type({:out, :signal_result}), data: result})
+  def out_signal(:signal_result, %ServerState{} = state, result, _params, extra_attrs),
+    do: build(state, Map.merge(%{type: type({:out, :signal_result}), data: result}, extra_attrs))
 
-  def out_signal(_, _, _, _), do: nil
+  def out_signal(_, _, _, _, _), do: nil
 
   def join_type(type) when is_list(type) do
     Enum.join(type, @config.separator)
@@ -130,12 +164,12 @@ defmodule Jido.Agent.Server.Signal do
   def join_type(type) when is_binary(type), do: type
 
   defp build(%ServerState{} = state, attrs) do
-    # Use the original signal's ID if this is a result signal
-    signal_id = if state.current_signal, do: state.current_signal.id, else: UUID.uuid4()
+    agent_name = get_agent_name(state.agent)
 
     base = %{
-      id: signal_id,
-      source: "jido://agent/#{state.agent.id}",
+      id: Jido.Util.generate_id(),
+      subject: build_subject(agent_name, state.agent.id),
+      source: build_source(state),
       jido_dispatch: state.dispatch
     }
 
@@ -151,6 +185,27 @@ defmodule Jido.Agent.Server.Signal do
     type = join_type(attrs.type)
     attrs = Map.put(attrs, :type, type)
     Signal.new!(attrs)
+  end
+
+  defp build_source(%ServerState{current_signal: %Signal{id: id}}) when not is_nil(id),
+    do: id
+
+  defp build_source(%ServerState{agent: %{id: id}}) when not is_nil(id),
+    do: "agent:#{id}"
+
+  defp build_source(_), do: nil
+
+  defp build_subject(nil, agent_id), do: "jido://agent/#{agent_id}"
+  defp build_subject(agent_name, agent_id), do: "jido://agent/#{agent_name}/#{agent_id}"
+
+  defp get_agent_name(nil), do: nil
+
+  defp get_agent_name(agent) do
+    try do
+      String.downcase(agent.__struct__.name())
+    rescue
+      _ -> nil
+    end
   end
 
   # Helper functions for event types

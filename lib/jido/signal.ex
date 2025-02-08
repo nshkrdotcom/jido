@@ -10,7 +10,7 @@ defmodule Jido.Signal do
 
   typedstruct do
     field(:specversion, String.t(), default: "1.0.2")
-    field(:id, String.t(), enforce: true, default: UUID.uuid4())
+    field(:id, String.t(), enforce: true, default: Jido.Util.generate_id())
     field(:source, String.t(), enforce: true)
     field(:type, String.t(), enforce: true)
     field(:subject, String.t())
@@ -19,10 +19,8 @@ defmodule Jido.Signal do
     field(:dataschema, String.t())
     field(:data, term())
     # Jido-specific fields
-    field(:jido_instructions, Jido.Runner.Instruction.instruction_list())
+    field(:jido_instructions, Jido.Instruction.instruction_list())
     field(:jido_opts, map())
-    field(:jido_causation_id, String.t())
-    field(:jido_correlation_id, String.t())
     field(:jido_dispatch, Dispatch.t())
     field(:jido_metadata, map())
   end
@@ -97,7 +95,7 @@ defmodule Jido.Signal do
 
     defaults = %{
       "specversion" => "1.0.2",
-      "id" => UUID.uuid4(),
+      "id" => Jido.Util.generate_id(),
       "time" => DateTime.utc_now() |> DateTime.to_iso8601(),
       "source" => caller
     }
@@ -138,8 +136,7 @@ defmodule Jido.Signal do
          {:ok, data} <- parse_data(map["data"]),
          {:ok, jido_instructions} <- parse_jido_instructions(map["jido_instructions"]),
          {:ok, jido_opts} <- parse_jido_opts(map["jido_opts"]),
-         {:ok, jido_correlation_id} <- parse_correlation_id(map["jido_correlation_id"]),
-         {:ok, jido_causation_id} <- parse_causation_id(map["jido_causation_id"]),
+         {:ok, jido_metadata} <- parse_jido_metadata(map["jido_metadata"]),
          {:ok, jido_dispatch} <- parse_jido_dispatch(map["jido_dispatch"]) do
       event = %__MODULE__{
         specversion: "1.0.2",
@@ -153,8 +150,7 @@ defmodule Jido.Signal do
         data: data,
         jido_instructions: jido_instructions,
         jido_opts: jido_opts,
-        jido_correlation_id: jido_correlation_id,
-        jido_causation_id: jido_causation_id,
+        jido_metadata: jido_metadata,
         jido_dispatch: jido_dispatch
       }
 
@@ -176,10 +172,8 @@ defmodule Jido.Signal do
   @spec map_to_signal_data(struct, Keyword.t()) :: t()
   def map_to_signal_data(signal, fields) do
     %__MODULE__{
-      id: UUID.uuid4(),
+      id: Jido.Util.generate_id(),
       source: "http://example.com/bank",
-      jido_causation_id: Keyword.get(fields, :jido_causation_id),
-      jido_correlation_id: Keyword.get(fields, :jido_correlation_id),
       type: TypeProvider.to_string(signal),
       data: signal,
       jido_metadata: Keyword.get(fields, :jido_metadata, %{})
@@ -235,16 +229,6 @@ defmodule Jido.Signal do
   defp parse_jido_opts(opts) when is_map(opts), do: {:ok, opts}
   defp parse_jido_opts(_), do: {:error, "jido_opts must be a map"}
 
-  defp parse_correlation_id(nil), do: {:ok, UUID.uuid4()}
-  defp parse_correlation_id(id) when is_binary(id) and byte_size(id) > 0, do: {:ok, id}
-  defp parse_correlation_id(""), do: {:error, "correlation_id given but empty"}
-  defp parse_correlation_id(_), do: {:error, "correlation_id must be a string"}
-
-  defp parse_causation_id(nil), do: {:ok, UUID.uuid4()}
-  defp parse_causation_id(id) when is_binary(id) and byte_size(id) > 0, do: {:ok, id}
-  defp parse_causation_id(""), do: {:error, "causation_id given but empty"}
-  defp parse_causation_id(_), do: {:error, "causation_id must be a string"}
-
   defp parse_jido_dispatch(nil), do: {:ok, nil}
 
   defp parse_jido_dispatch({adapter, opts} = config) when is_atom(adapter) and is_list(opts) do
@@ -256,4 +240,8 @@ defmodule Jido.Signal do
   end
 
   defp parse_jido_dispatch(_), do: {:error, "invalid dispatch config"}
+
+  defp parse_jido_metadata(nil), do: {:ok, nil}
+  defp parse_jido_metadata(metadata) when is_map(metadata), do: {:ok, metadata}
+  defp parse_jido_metadata(_), do: {:error, "jido_metadata must be a map"}
 end

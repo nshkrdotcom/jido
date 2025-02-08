@@ -1,5 +1,5 @@
 defmodule Jido.Agent.Server.DirectiveTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Agent.Server.{Directive, State, Signal}
   alias JidoTest.TestAgents.BasicAgent
   alias Jido.Error

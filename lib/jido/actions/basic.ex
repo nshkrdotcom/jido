@@ -74,7 +74,7 @@ defmodule Jido.Actions.Basic do
 
     @spec run(map(), map()) :: {:ok, map()}
     def run(%{todo: todo} = params, _ctx) do
-      Logger.info("TODO Action: #{todo}")
+      Logger.debug("TODO Action: #{todo}")
       {:ok, params}
     end
   end

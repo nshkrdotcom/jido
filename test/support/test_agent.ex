@@ -318,7 +318,7 @@ defmodule JidoTest.TestAgents do
 
     @impl true
     def start_link(opts) do
-      agent_id = Keyword.get(opts, :id) || UUID.uuid4()
+      agent_id = Keyword.get(opts, :id) || Jido.Util.generate_id()
       initial_state = Keyword.get(opts, :initial_state, %{})
       agent = CustomServerAgent.new(agent_id, initial_state)
 

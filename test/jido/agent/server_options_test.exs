@@ -1,5 +1,5 @@
 defmodule Jido.Agent.Server.OptionsTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Agent.Server.Options
   alias JidoTest.TestAgents.{MinimalAgent, BasicAgent}
 

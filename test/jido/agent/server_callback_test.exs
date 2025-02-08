@@ -1,5 +1,5 @@
 defmodule Jido.Agent.Server.CallbackTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Agent.Server.Callback
   alias Jido.Signal
@@ -8,7 +8,7 @@ defmodule Jido.Agent.Server.CallbackTest do
 
   setup do
     agent = %CallbackTrackingAgent{
-      id: UUID.uuid4(),
+      id: Jido.Util.generate_id(),
       state: %{
         callback_log: [],
         callback_count: %{}

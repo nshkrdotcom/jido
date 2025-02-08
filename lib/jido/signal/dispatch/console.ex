@@ -19,10 +19,9 @@ defmodule Jido.Signal.Dispatch.ConsoleAdapter do
 
     IO.puts("""
     [#{timestamp}] SIGNAL DISPATCHED
+    id=#{signal.id}
     type=#{signal.type}
     source=#{signal.source}
-    correlation_id=#{signal.jido_correlation_id || "-"}
-    causation_id=#{signal.jido_causation_id || "-"}
     metadata=#{inspect(signal.jido_metadata, pretty: true)}
     data=#{inspect(signal.data, pretty: true)}
     """)

@@ -1,5 +1,5 @@
 defmodule JidoTest.Examples.UserAgentTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   alias JidoTest.TestActions.{FormatUser, EnrichUserData, NotifyUser}
 

@@ -1,5 +1,5 @@
 defmodule Jido.AI.Actions.AnthropicTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   use Mimic
 
   alias Jido.AI.Actions.Anthropic.ChatCompletion

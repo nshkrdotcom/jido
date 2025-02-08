@@ -1,5 +1,5 @@
 defmodule JidoTest.DirectiveTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   use Mimic
 
   @moduletag :capture_log

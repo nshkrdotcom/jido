@@ -1,5 +1,5 @@
 defmodule Jido.Agent.Server.RouterTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   alias Jido.Agent.Server.Router
   alias Jido.Agent.Server.State, as: ServerState

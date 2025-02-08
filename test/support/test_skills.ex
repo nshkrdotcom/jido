@@ -245,7 +245,7 @@ defmodule JidoTest.TestSkills do
         ) do
       [
         %Signal{
-          id: UUID.uuid4(),
+          id: Jido.Util.generate_id(),
           source: "replace_agent_id",
           type: "weather_monitor.data.processed",
           data: data
@@ -259,7 +259,7 @@ defmodule JidoTest.TestSkills do
         ) do
       [
         %Signal{
-          id: UUID.uuid4(),
+          id: Jido.Util.generate_id(),
           source: "replace_agent_id",
           type: "weather_monitor.alert.generated",
           data: Map.take(alert_data, [:conditions, :severity, :generated_at])

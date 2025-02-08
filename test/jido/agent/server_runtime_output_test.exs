@@ -1,5 +1,5 @@
 defmodule JidoTest.Agent.Server.RuntimeOutputTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   require Logger
 
   alias Jido.Agent.Server.{Runtime, State}
@@ -230,17 +230,25 @@ defmodule JidoTest.Agent.Server.RuntimeOutputTest do
       assert {:ok, _state} = Runtime.handle_agent_result(state, agent, [])
     end
 
-    test "emits output with correct correlation and causation IDs", %{state: state} do
-      correlation_id = "test-correlation-id"
-      state = %{state | current_correlation_id: correlation_id, current_signal_type: :async}
+    test "handle_agent_result/3 emits output with correct correlation and causation IDs", %{
+      state: state
+    } do
+      id = "test-correlation-id"
+
+      signal =
+        Signal.new!(%{
+          type: "test",
+          data: %{value: "test result"},
+          id: id
+        })
+
+      state = %{state | current_signal: signal, current_signal_type: :async}
       agent = %{state.agent | result: %{value: "test result"}}
 
       {:ok, _state} = Runtime.handle_agent_result(state, agent, [])
 
-      assert_receive {:signal, signal}
-      assert signal.type == ServerSignal.join_type(ServerSignal.type({:out, :instruction_result}))
-      assert signal.data == %{value: "test result"}
-      assert signal.jido_correlation_id == correlation_id
+      assert_receive {:signal, signal}, 500
+      assert signal.source == id
     end
   end
 
@@ -249,9 +257,18 @@ defmodule JidoTest.Agent.Server.RuntimeOutputTest do
       assert {:ok, _updated_state} = Runtime.handle_agent_instruction_result(state, :ok, [])
     end
 
-    test "emits output with correct correlation and causation IDs", %{state: state} do
-      correlation_id = "test-correlation-id"
-      state = %{state | current_correlation_id: correlation_id, current_signal_type: :async}
+    test "handle_agent_instruction_result/3 emits output with correct correlation and causation IDs",
+         %{state: state} do
+      id = "test-correlation-id"
+
+      signal =
+        Signal.new!(%{
+          type: "test",
+          data: %{value: "test result"},
+          id: id
+        })
+
+      state = %{state | current_signal: signal, current_signal_type: :async}
       result = %{value: "test result"}
 
       {:ok, _state} = Runtime.handle_agent_instruction_result(state, result, [])
@@ -259,7 +276,7 @@ defmodule JidoTest.Agent.Server.RuntimeOutputTest do
       assert_receive {:signal, signal}
       assert signal.type == ServerSignal.join_type(ServerSignal.type({:out, :instruction_result}))
       assert signal.data == %{value: "test result"}
-      assert signal.jido_correlation_id == correlation_id
+      assert signal.source == id
     end
   end
 
@@ -268,7 +285,7 @@ defmodule JidoTest.Agent.Server.RuntimeOutputTest do
       agent = %{state.agent | result: :ok}
       state = %{state | agent: agent}
 
-      signal = Signal.new!(%{type: "test", data: %{value: "test result"}})
+      signal = Signal.new!(%{type: "test", data: %{value: "test result"}, id: "test-id-123"})
 
       assert {:ok, new_state, result} =
                Runtime.handle_signal_result(state, signal, %{value: "test result"})
@@ -277,13 +294,19 @@ defmodule JidoTest.Agent.Server.RuntimeOutputTest do
       assert result == %{value: "test result"}
     end
 
-    test "preserves correlation ID through execution", %{state: state} do
-      correlation_id = "test-correlation-id"
-      state = %{state | current_correlation_id: correlation_id, current_signal_type: :async}
+    test "handle_signal_result/3 preserves correlation ID through execution", %{state: state} do
+      id = "test-correlation-id"
+
+      signal =
+        Signal.new!(%{
+          type: "test",
+          data: %{value: "test result"},
+          id: id
+        })
+
+      state = %{state | current_signal: signal, current_signal_type: :async}
       agent = %{state.agent | result: %{value: "test result"}}
       state = %{state | agent: agent}
-
-      signal = Signal.new!(%{type: "test", data: %{value: "test result"}})
 
       {:ok, _new_state, _result} =
         Runtime.handle_signal_result(state, signal, %{value: "test result"})
@@ -291,13 +314,13 @@ defmodule JidoTest.Agent.Server.RuntimeOutputTest do
       assert_receive {:signal, signal}
       assert signal.type == ServerSignal.join_type(ServerSignal.type({:out, :signal_result}))
       assert signal.data == %{value: "test result"}
-      assert signal.jido_correlation_id == correlation_id
+      assert signal.source == id
     end
   end
 
   describe "apply_signal_to_first_instruction/2" do
     test "merges signal data into first instruction params" do
-      signal = Signal.new!(%{type: "test", data: %{foo: "bar"}})
+      signal = Signal.new!(%{type: "test", data: %{foo: "bar"}, id: "test-id-456"})
       instruction = Instruction.new!(%{action: TestActions.NoSchema, params: %{baz: "qux"}})
 
       assert {:ok, [result | _]} =

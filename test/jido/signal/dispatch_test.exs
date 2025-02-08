@@ -1,5 +1,5 @@
 defmodule Jido.Signal.DispatchTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   alias Jido.Signal.Dispatch
   @moduletag :capture_log

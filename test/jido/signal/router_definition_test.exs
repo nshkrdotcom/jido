@@ -1,5 +1,5 @@
 defmodule Jido.Signal.RouterDefinitionTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   alias Jido.Instruction
   alias Jido.Signal.Router

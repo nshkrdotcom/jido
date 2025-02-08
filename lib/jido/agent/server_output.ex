@@ -13,14 +13,6 @@ defmodule Jido.Agent.Server.Output do
   end
 
   def emit(%Signal{} = signal, opts) do
-    # First update correlation and causation IDs only if provided
-    signal = %{
-      signal
-      | jido_correlation_id: Keyword.get(opts, :correlation_id) || signal.jido_correlation_id,
-        jido_causation_id: Keyword.get(opts, :causation_id) || signal.jido_causation_id
-    }
-
-    # Then handle dispatch config and dispatch
     dispatch_config =
       Keyword.get(opts, :dispatch) || signal.jido_dispatch || @default_dispatch
 

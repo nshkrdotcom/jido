@@ -1,5 +1,5 @@
 defmodule Jido.Memory.AdapterBehaviourTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
   alias Jido.Memory.Types.{Memory, KnowledgeItem}
 
   # Define a mock adapter that implements the behaviour

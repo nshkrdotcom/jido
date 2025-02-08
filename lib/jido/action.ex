@@ -156,6 +156,8 @@ defmodule Jido.Action do
       @behaviour Jido.Action
 
       alias Jido.Action
+      alias Jido.Instruction
+      alias Jido.Signal
 
       require OK
 

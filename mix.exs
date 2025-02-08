@@ -67,44 +67,94 @@ defmodule Jido.MixProject do
       source_url: "https://github.com/agentjido/jido",
       authors: ["Mike Hostetler <mike.hostetler@gmail.com>"],
       groups_for_extras: [
-        Introduction: ["guides/getting-started.md"],
+        "Getting Started": [
+          "guides/getting-started.md",
+          "guides/introduction/architecture.md",
+          "guides/introduction/system-overview.md"
+        ],
+        "Core Concepts": [
+          "guides/core/agents.md",
+          "guides/core/actions.md",
+          "guides/core/signals.md",
+          "guides/core/skills.md"
+        ],
+        Agents: ~r/guides\/agents\/.*\.md$/,
         Actions: ~r/guides\/actions\/.*\.md$/,
         Signals: ~r/guides\/signals\/.*\.md$/,
-        Agents: ~r/guides\/agents\/.*\.md$/,
         Skills: ~r/guides\/skills\/.*\.md$/,
-        Examples: ~r/guides\/examples\/.*\.md$/,
-        Livebooks: ~r/guides\/livebook\/.*\.livemd$/,
+        "Examples & Patterns": ~r/guides\/examples\/.*\.md$/,
         Tutorials: ~r/guides\/tutorials\/.*\.md$/,
-        Project: ["CONTRIBUTING.md", "CHANGELOG.md", "LICENSE.md"]
+        "Best Practices": ~r/guides\/practices\/.*\.md$/,
+        Project: [
+          "CONTRIBUTING.md",
+          "CHANGELOG.md",
+          "LICENSE.md"
+        ]
       ],
       extras: [
+        # Home & Project
         {"README.md", title: "Home"},
         {"CONTRIBUTING.md", title: "Contributing"},
         {"CHANGELOG.md", title: "Changelog"},
         {"LICENSE.md", title: "Apache 2.0 License"},
-        {"guides/getting-started.md", title: "Getting Started"},
 
-        # Actions
-        {"guides/actions/actions.md", title: "Actions & Workflows"},
-        {"guides/actions/instructions.md", title: "Action Instructions"},
+        # Getting Started Section
+        {"guides/getting-started.md", title: "Quick Start Guide"}
+        # {"guides/introduction/architecture.md", title: "System Architecture"},
+        # {"guides/introduction/system-overview.md", title: "System Overview"},
 
-        # Signals
-        {"guides/signals/bus.md", title: "Signal Bus"},
+        # Core Concepts
+        # {"guides/core/agents.md", title: "Agent System Overview"},
+        # {"guides/core/actions.md", title: "Action System Overview"},
+        # {"guides/core/signals.md", title: "Signal System Overview"},
+        # {"guides/core/skills.md", title: "Skill System Overview"},
 
         # Agents
-        {"guides/agents/agents.md", title: "Agents"},
-        {"guides/agents/directives.md", title: "Agent Directives"},
-        {"guides/agents/sensors.md", title: "Agent Sensors"},
+        # {"guides/agents/agents.md", title: "Agent Fundamentals"},
+        # {"guides/agents/state.md", title: "Agent State Management"},
+        # {"guides/agents/server.md", title: "Agent Server Implementation"},
+        # {"guides/agents/directives.md", title: "Agent Directives"},
+        # {"guides/agents/sensors.md", title: "Agent Sensors"},
+        # {"guides/agents/advanced.md", title: "Advanced Agent Patterns"},
+        # {"guides/agents/testing.md", title: "Testing Agents"},
 
-        # Tutorials
-        # {"guides/tutorials/tutorial-1.md", title: "Tutorial 1"},
+        # Actions
+        # {"guides/actions/actions.md", title: "Action Fundamentals"},
+        # {"guides/actions/instructions.md", title: "Action Instructions"},
+        # {"guides/actions/workflows.md", title: "Workflow Composition"},
+        # {"guides/actions/advanced.md", title: "Advanced Action Patterns"},
+        # {"guides/actions/testing.md", title: "Testing Actions"},
 
-        # Livebooks
-        # {"guides/livebook/getting-started-actions.livemd", title: "Getting Started with Actions"},
+        # Signals
+        # {"guides/signals/bus.md", title: "Signal Bus Architecture"},
+        # {"guides/signals/processing.md", title: "Signal Processing"},
+        # {"guides/signals/patterns.md", title: "Signal Patterns"},
+        # {"guides/signals/testing.md", title: "Testing Signals"},
 
         # Skills
-        {"guides/skills/skills.md", title: "Skills"},
-        {"guides/skills/signal-router.md", title: "Signal Router"}
+        # {"guides/skills/skills.md", title: "Skill Fundamentals"},
+        # {"guides/skills/signal-router.md", title: "Signal Router"},
+        # {"guides/skills/advanced.md", title: "Advanced Skill Patterns"},
+        # {"guides/skills/testing.md", title: "Testing Skills"},
+
+        # Examples & Patterns
+        # {"guides/examples/hello-world.md", title: "Hello World Agent"},
+        # {"guides/examples/file-processor.md", title: "File Processing System"},
+        # {"guides/examples/chat-bot.md", title: "Chat Bot Implementation"},
+        # {"guides/examples/multi-agent.md", title: "Multi-Agent Workflow"},
+        # {"guides/examples/state-machine.md", title: "Complex State Machine"},
+        # {"guides/examples/custom-runner.md", title: "Custom Runner Implementation"},
+
+        # Tutorials
+        # {"guides/tutorials/task-processor.md", title: "Building a Task Processor"},
+        # {"guides/tutorials/monitor-agent.md", title: "Creating a Monitor Agent"},
+        # {"guides/tutorials/calculator.md", title: "Distributed Calculator"},
+
+        # Best Practices
+        # {"guides/practices/testing.md", title: "Testing Strategies"},
+        # {"guides/practices/error-handling.md", title: "Error Handling"},
+        # {"guides/practices/performance.md", title: "Performance Optimization"},
+        # {"guides/practices/patterns.md", title: "Design Patterns"}
       ],
       extra_section: "Guides",
       formatters: ["html"],

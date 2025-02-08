@@ -196,6 +196,7 @@ defmodule Jido.Agent.Server do
 
     # Store the from reference for reply later
     state = ServerState.store_reply_ref(state, signal.id, from)
+    dbug("Stored reply ref", ref: signal.id, signal: signal, from: from)
 
     # Enqueue the signal
     case ServerState.enqueue(state, signal) do

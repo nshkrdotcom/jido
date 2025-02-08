@@ -19,17 +19,24 @@ defmodule Jido.Agent.Server.Runtime do
   @spec process_signal(ServerState.t(), Signal.t()) ::
           {:ok, ServerState.t(), term()} | {:error, term()}
   def process_signal(%ServerState{} = state, %Signal{} = signal) do
+    dbug("Processing signal", signal_id: signal.id)
+
     with state <- set_current_signal(state, signal),
          {:ok, state, result} <- execute_signal(state, signal) do
-      state =
-        case ServerState.get_reply_ref(state, signal.id) do
-          nil -> state
-          _from -> ServerState.remove_reply_ref(state, signal.id)
-        end
+      case ServerState.get_reply_ref(state, signal.id) do
+        nil ->
+          dbug("No reply ref found for signal", signal_id: signal.id)
+          {:ok, state, result}
 
-      {:ok, state, result}
+        from ->
+          dbug("Found reply ref for signal", signal_id: signal.id, from: from)
+          state = ServerState.remove_reply_ref(state, signal.id)
+          GenServer.reply(from, {:ok, result})
+          {:ok, state, result}
+      end
     else
       {:error, reason} ->
+        dbug("Error processing signal", signal_id: signal.id, error: reason)
         {:error, reason}
     end
   end
@@ -42,29 +49,42 @@ defmodule Jido.Agent.Server.Runtime do
   def process_signals_in_queue(%ServerState{} = state) do
     case ServerState.dequeue(state) do
       {:ok, signal, new_state} ->
+        dbug("Processing queued signal", signal_id: signal.id)
         # Process one signal
         case process_signal(new_state, signal) do
           {:ok, final_state, result} ->
             # If there was a reply ref, send the reply
             case ServerState.get_reply_ref(final_state, signal.id) do
-              nil -> :ok
-              from -> GenServer.reply(from, {:ok, result})
+              nil ->
+                dbug("No reply ref for queued signal", signal_id: signal.id)
+                :ok
+
+              from ->
+                dbug("Sending reply for queued signal", signal_id: signal.id, from: from)
+                GenServer.reply(from, {:ok, result})
             end
 
             # Loop to process next signal
             process_signals_in_queue(final_state)
 
           {:error, reason} ->
+            dbug("Error processing queued signal", signal_id: signal.id, error: reason)
             # If there was a reply ref, send the error
             case ServerState.get_reply_ref(state, signal.id) do
-              nil -> :ok
-              from -> GenServer.reply(from, {:error, reason})
+              nil ->
+                dbug("No reply ref for failed signal", signal_id: signal.id)
+                :ok
+
+              from ->
+                dbug("Sending error reply for failed signal", signal_id: signal.id, from: from)
+                GenServer.reply(from, {:error, reason})
             end
 
             {:error, reason}
         end
 
       {:error, :empty_queue} ->
+        dbug("Signal queue is empty")
         {:ok, state}
     end
   end
@@ -73,6 +93,8 @@ defmodule Jido.Agent.Server.Runtime do
     @spec execute_signal(ServerState.t(), Signal.t()) ::
             {:ok, ServerState.t(), term()} | {:error, term()}
     defp execute_signal(%ServerState{} = state, %Signal{} = signal) do
+      dbug("Executing signal", signal_id: signal.id)
+
       with state <- set_current_signal(state, signal),
            {:ok, signal} <- ServerCallback.handle_signal(state, signal),
            {:ok, instructions} <- route_signal(state, signal),
@@ -80,6 +102,7 @@ defmodule Jido.Agent.Server.Runtime do
            {:ok, opts} <- extract_opts_from_first_instruction(instructions),
            {:ok, state, result} <- do_agent_cmd(state, instructions, opts),
            {:ok, state, result} <- handle_signal_result(state, signal, result) do
+        dbug("Signal executed successfully", signal_id: signal.id)
         {:ok, state, result}
       else
         {:error, reason} ->

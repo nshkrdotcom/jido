@@ -1,6 +1,6 @@
 defmodule Jido.Agent.Server.Runtime do
   use Private
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
   require Logger
 
   alias Jido.Error

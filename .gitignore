@@ -30,4 +30,7 @@ jido-*.tar
 
 # expublish
 RELEASE.md
+
+# Local Nodes
 NOTES.md
+PLAN.md

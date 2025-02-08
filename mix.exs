@@ -62,18 +62,43 @@ defmodule Jido.MixProject do
   defp docs do
     [
       main: "readme",
+      api_reference: false,
       source_ref: "v#{@version}",
       source_url: "https://github.com/agentjido/jido",
-      extra_section: "Guides",
+      authors: ["Mike Hostetler <mike.hostetler@gmail.com>"],
+      groups_for_extras: [
+        Introduction: ["guides/getting-started.md"],
+        Actions: ~r/guides\/actions\/.*\.md$/,
+        Signals: ~r/guides\/signals\/.*\.md$/,
+        Agents: ~r/guides\/agents\/.*\.md$/,
+        Skills: ~r/guides\/skills\/.*\.md$/,
+        Examples: ~r/guides\/examples\/.*\.md$/,
+        Livebooks: ~r/guides\/livebook\/.*\.livemd$/,
+        Tutorials: ~r/guides\/tutorials\/.*\.md$/,
+        Project: ["CONTRIBUTING.md", "CHANGELOG.md", "LICENSE.md"]
+      ],
       extras: [
         {"README.md", title: "Home"},
+        {"CONTRIBUTING.md", title: "Contributing"},
+        {"CHANGELOG.md", title: "Changelog"},
+        {"LICENSE.md", title: "Apache 2.0 License"},
+        {"guides/actions/actions.md", title: "Actions & Workflows"},
+        {"guides/tutorials/tutorial-1.md", title: "Tutorial 1"},
         {"guides/getting-started.md", title: "Getting Started"},
-        {"guides/actions.md", title: "Actions & Workflows"},
-        {"guides/agents.md", title: "Agents"},
-        {"guides/sensors.md", title: "Sensors"},
-        {"guides/bus.md", title: "Signals & Bus"},
-        {"guides/instructions.md", title: "Instructions"},
-        {"guides/directives.md", title: "Agent Directives"}
+        {"guides/livebook/getting-started-actions.livemd", title: "Getting Started with Actions"},
+        {"guides/actions/instructions.md", title: "Action Instructions"},
+        {"guides/agents/agents.md", title: "Agents"},
+        {"guides/agents/directives.md", title: "Agent Directives"},
+        {"guides/agents/sensors.md", title: "Agent Sensors"},
+        {"guides/signals/bus.md", title: "Signal Bus"},
+        {"guides/skills/skills.md", title: "Skills"},
+        {"guides/skills/signal-router.md", title: "Signal Router"}
+      ],
+      extra_section: "Guides",
+      formatters: ["html"],
+      skip_undefined_reference_warnings_on: [
+        "CHANGELOG.md",
+        "LICENSE.md"
       ],
       groups_for_modules: [
         Core: [
@@ -149,36 +174,6 @@ defmodule Jido.MixProject do
           Jido.Supervisor,
           Jido.Util
         ]
-      ],
-      groups_for_extras: [
-        Guides: ~r/guides\/.*md/
-      ],
-      sidebar_items: [
-        Home: "README.md",
-        "Start Here": [
-          "Getting Started": "guides/getting-started.md",
-          Actions: "guides/actions.md",
-          Instructions: "guides/instructions.md",
-          Agents: "guides/agents.md",
-          "Sensors & Signals": "guides/sensors.md",
-          Directives: "guides/directives.md",
-          "Signal Router": "guides/signal-router.md",
-          Skills: "guides/skills.md",
-          Glossary: "guides/glossary.md"
-        ],
-        "About Jido": [
-          "Why Jido?": "guides/why-jido.md",
-          "Design Principles": "guides/design-principles.md",
-          Alternatives: "guides/alternatives.md"
-        ],
-        Memory: [
-          Memory: "guides/memory.md",
-          "Memory Stores": "guides/memory-stores.md"
-        ],
-        Chat: [
-          Chat: "guides/chat.md",
-          "Chat History": "guides/chat-history.md"
-        ]
       ]
     ]
   end
@@ -233,6 +228,7 @@ defmodule Jido.MixProject do
   defp aliases do
     [
       test: "test --trace",
+      docs: "docs -f html --open",
 
       # Run to check the quality of your code
       q: ["quality"],

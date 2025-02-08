@@ -1,4 +1,3 @@
-- Implement Jido Bus
-- Implement Jido Bus Adapters
+# CHANGELOG
 
 <!-- %% CHANGELOG_ENTRIES %% -->

@@ -2,9 +2,7 @@
 Enum.each(
   [
     :telemetry,
-    System,
-    Instructor,
-    Instructor.Adapters.Anthropic
+    System
   ],
   &Mimic.copy/1
 )

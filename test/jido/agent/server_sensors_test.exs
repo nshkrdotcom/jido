@@ -1,6 +1,6 @@
-defmodule JidoTest.Agent.ServerSensorsTest do
+defmodule JidoTest.Agent.Server.SensorsTest do
   use JidoTest.Case, async: true
-  alias Jido.Agent.ServerSensors
+  alias Jido.Agent.Server.Sensors, as: ServerSensors
   alias Jido.Agent.Server.State, as: ServerState
 
   setup do

@@ -76,7 +76,6 @@ defmodule Jido.MixProject do
           Jido,
           Jido.Action,
           Jido.Agent,
-          Jido.Agent.Server,
           Jido.Discovery,
           Jido.Instruction,
           Jido.Sensor,
@@ -85,6 +84,7 @@ defmodule Jido.MixProject do
           Jido.Workflow
         ],
         "Agent Server": [
+          Jido.Agent.Server,
           Jido.Agent.Server.Callback,
           Jido.Agent.Server.Options,
           Jido.Agent.Server.Output,
@@ -93,7 +93,7 @@ defmodule Jido.MixProject do
           Jido.Agent.Server.Runtime,
           Jido.Agent.Server.Signal,
           Jido.Agent.Server.Skills,
-          Jido.Agent.ServerSensors
+          Jido.Agent.Server.Sensors
         ],
         Bus: [
           Jido.Bus,

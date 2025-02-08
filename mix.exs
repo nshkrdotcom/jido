@@ -1,7 +1,11 @@
 defmodule Jido.MixProject do
   use Mix.Project
 
-  @version "1.0.0"
+  @version "1.1.0-rc.1"
+
+  def vsn do
+    @version
+  end
 
   def project do
     [
@@ -146,13 +150,6 @@ defmodule Jido.MixProject do
           Jido.Util
         ]
       ],
-      # skip_undefined_reference_warnings_on: [
-      #   Jido.Agent.Server.Execute,
-      #   Jido.Agent.Server.Process,
-      #   Jido.Agent.Server.PubSub,
-      #   Jido.Agent.Server.Signal,
-      #   Jido.Agent.Server.Syscall
-      # ],
       groups_for_extras: [
         Guides: ~r/guides\/.*md/
       ],
@@ -214,21 +211,12 @@ defmodule Jido.MixProject do
       {:typed_struct, "~> 0.3.0"},
       {:typed_struct_nimble_options, "~> 0.1.1"},
       {:quantum, "~> 3.5"},
-      # {:ex_dbug, "~> 2.0"},
       {:ex_dbug, "~> 1.2"},
+
       # Skill & Action Dependencies for examples
       {:abacus, "~> 2.1"},
 
-      # Ai
-      {:ecto, "~> 3.12"},
-      # Hex does not yet have a release of `instructor` that supports the `Instructor.Adapters.Anthropic` adapter.
-      {:instructor, github: "thmsmlr/instructor_ex", branch: "main"},
-      {:langchain, "~> 0.3.0-rc.1"},
-      {:ex_json_schema, "~> 0.10.0"},
-
       # Development & Test Dependencies
-      {:benchee, "~> 1.0", only: [:dev, :test]},
-      {:benchee_html, "~> 1.0", only: [:dev, :test]},
       {:credo, "~> 1.7"},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
@@ -244,7 +232,7 @@ defmodule Jido.MixProject do
 
   defp aliases do
     [
-      # test: "test --trace",
+      test: "test --trace",
 
       # Run to check the quality of your code
       q: ["quality"],

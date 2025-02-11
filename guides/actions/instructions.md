@@ -1,4 +1,8 @@
-# Instructions Guide
+# Action Instructions
+
+_Part of the "Actions" section in the documentation._
+
+This guide covers the instruction system used to define action behavior. It explains how to write clear, maintainable instructions that can be interpreted by both AI and classical planning systems.
 
 ## Overview
 
@@ -22,6 +26,7 @@ A full instruction struct contains:
 Jido supports several shorthand formats for convenience, all of which are normalized to the full instruction struct during processing. Here are the supported formats:
 
 ### 1. Action Module Only
+
 ```elixir
 # Shorthand
 MyApp.Actions.ProcessFile
@@ -35,6 +40,7 @@ MyApp.Actions.ProcessFile
 ```
 
 ### 2. Action With Parameters (Tuple Form)
+
 ```elixir
 # Shorthand
 {MyApp.Actions.ProcessFile, %{path: "/tmp/data.csv"}}
@@ -48,6 +54,7 @@ MyApp.Actions.ProcessFile
 ```
 
 ### 3. Full Instruction Struct
+
 ```elixir
 # Explicit struct
 %Instruction{
@@ -58,6 +65,7 @@ MyApp.Actions.ProcessFile
 ```
 
 ### 4. Lists of Mixed Formats
+
 ```elixir
 # Mixed shorthand list
 [
@@ -72,11 +80,13 @@ MyApp.Actions.ProcessFile
 ## Normalization Process
 
 All instruction formats are normalized when:
+
 1. Planning actions on an Agent
 2. Directly executing through a Runner
 3. Creating instruction queues
 
 The normalization ensures:
+
 - Consistent structure for execution
 - Parameter validation
 - Context preservation
@@ -88,6 +98,7 @@ The normalization ensures:
 ### When to Use Shorthand
 
 Use shorthand formats when:
+
 - Planning simple action sequences
 - Writing tests
 - Demonstrating examples
@@ -105,6 +116,7 @@ Use shorthand formats when:
 ### When to Use Full Structs
 
 Use full instruction structs when:
+
 - Implementing custom runners
 - Building complex workflows
 - Needing explicit context control
@@ -126,6 +138,7 @@ instruction = %Instruction{
 ### Context Management
 
 The context map is preserved during normalization and is available to:
+
 - Action implementations
 - Runners
 - Error handlers
@@ -156,11 +169,11 @@ end
 # Transform instructions
 def add_context(instructions, context) do
   Enum.map(instructions, fn
-    %Instruction{} = inst -> 
+    %Instruction{} = inst ->
       %{inst | context: Map.merge(inst.context, context)}
-    {action, params} -> 
+    {action, params} ->
       %Instruction{action: action, params: params, context: context}
-    action when is_atom(action) -> 
+    action when is_atom(action) ->
       %Instruction{action: action, context: context}
   end)
 end
@@ -172,7 +185,7 @@ Instructions provide rich error context:
 
 ```elixir
 case MyAgent.plan(agent, invalid_instruction) do
-  {:ok, agent} -> 
+  {:ok, agent} ->
     # Success case
   {:error, %Error{type: :validation_error, context: context}} ->
     # Handle validation failure with full context
@@ -186,14 +199,14 @@ Test both shorthand and normalized forms:
 ```elixir
 test "supports shorthand planning" do
   {:ok, agent} = MyAgent.plan(agent, SimpleAction)
-  assert [%Instruction{action: SimpleAction}] = 
+  assert [%Instruction{action: SimpleAction}] =
     :queue.to_list(agent.pending_instructions)
 end
 
 test "preserves context in normalization" do
   context = %{request_id: "123"}
   {:ok, agent} = MyAgent.plan(agent, SimpleAction, context)
-  
+
   [instruction] = :queue.to_list(agent.pending_instructions)
   assert instruction.context.request_id == "123"
 end

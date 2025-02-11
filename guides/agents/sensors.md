@@ -1,3 +1,9 @@
+# Agent Sensors
+
+_Part of the "Agents" section in the documentation._
+
+This guide explains how agents interact with sensors to receive external input and events. It covers sensor integration patterns, event handling strategies, and best practices for implementing sensor-driven agent behaviors.
+
 # Signals and Sensors
 
 In our previous guides, we explored how Actions serve as composable building blocks and how Agents provide stateful wrappers around them. Now, let's discover how Signals and Sensors enable real-time event monitoring and metrics collection in your Jido system.
@@ -17,6 +23,7 @@ At their core, Signals are standardized event messages that flow through your Ji
 - Command execution results
 
 Every Signal includes standard CloudEvents fields like:
+
 - `id`: A unique identifier
 - `source`: Where the signal originated
 - `type`: What kind of event it represents
@@ -24,6 +31,7 @@ Every Signal includes standard CloudEvents fields like:
 - `data`: The actual event payload
 
 Plus Jido-specific fields for:
+
 - `jido_instructions`: Instructions for the Agent to execute
 - `jido_opts`: Options for signal processing
 
@@ -32,6 +40,7 @@ Plus Jido-specific fields for:
 Sensors are independent GenServer processes that gather external information and update agent state independently. This architectural choice is crucial for distributed systems where a single agent might have dozens of sensors feeding it information simultaneously - from API monitoring and metrics tracking to event stream processing.
 
 Running sensors as standalone processes under OTP supervision provides key benefits:
+
 - **Fault Isolation**: A failing sensor won't crash the agent or other sensors
 - **Independent Scaling**: Sensors can be distributed across nodes based on load
 - **Resource Management**: Each sensor manages its own memory and process queue
@@ -40,12 +49,14 @@ Running sensors as standalone processes under OTP supervision provides key benef
 While this guide covers defining and starting individual sensors, later guides will explain how agents dynamically manage multiple sensors through registration, lifecycle management, and event routing.
 
 Sensors serve several purposes:
+
 - Track metrics and state changes in real-time
 - Process and aggregate event streams
 - Generate alerts for important conditions
 - Maintain recent event history
 
 A key role of Sensors is translating external events into standardized Signals that agents can understand and consume. For example, a sensor might:
+
 - Listen for HTTP webhook events and emit corresponding agent-ready signals
 - Watch a message queue and transform messages into signals
 - Monitor file changes and generate file-event signals
@@ -81,7 +92,7 @@ defmodule MyApp.Sensors.RegistrationCounter do
       successful: 0,
       failed: 0
     })
-    
+
     schedule_emit(state)
     {:ok, state}
   end
@@ -118,7 +129,7 @@ defmodule MyApp.Sensors.RegistrationCounter do
 
   def handle_info({:registration, :success}, state) do
     new_state = %{state | successful: state.successful + 1}
-    
+
     with {:ok, signal} <- generate_signal(new_state),
          :ok <- Phoenix.PubSub.broadcast(state.pubsub, state.topic, {:sensor_signal, signal}) do
       {:noreply, new_state}
@@ -131,7 +142,7 @@ defmodule MyApp.Sensors.RegistrationCounter do
 
   def handle_info({:registration, :failure}, state) do
     new_state = %{state | failed: state.failed + 1}
-    
+
     with {:ok, signal} <- generate_signal(new_state),
          :ok <- Phoenix.PubSub.broadcast(state.pubsub, state.topic, {:sensor_signal, signal}) do
       {:noreply, new_state}
@@ -151,6 +162,7 @@ end
 Let's break down what's happening in this Sensor:
 
 1. We use `use Jido.Sensor` to define our Sensor, providing metadata like:
+
    - `name`: Unique identifier
    - `description`: What the Sensor monitors
    - `category`: Classification for grouping
@@ -158,11 +170,13 @@ Let's break down what's happening in this Sensor:
    - `schema`: Configuration options
 
 2. The `mount/1` callback initializes our Sensor's state with:
+
    - Counters for successes and failures
    - Configuration from schema
    - Scheduled metric emissions
 
 3. `generate_signal/1` creates standardized Signal structs containing:
+
    - Current metric values
    - Calculated success rate
    - Source identification
@@ -236,18 +250,21 @@ The test patterns shown there can be adapted for testing your own Sensors.
 When working with Signals and Sensors, keep these principles in mind:
 
 1. **Signal Design**
+
    - Use clear, consistent signal types
    - Include enough context in payloads
    - Follow the CloudEvents spec
    - Keep payloads focused and minimal
 
 2. **Sensor Implementation**
+
    - One responsibility per Sensor
    - Clear configuration through schema
    - Efficient state management
    - Graceful error handling
 
 3. **Testing**
+
    - Test both success and failure paths
    - Verify metric calculations
    - Check signal formats
@@ -273,6 +290,19 @@ In the next guide, we'll explore how Server Agents use these signals for coordin
 ## Next Steps
 
 Now that you understand Signals and Sensors, you can explore:
+
+- Custom signal types
+- Complex metric calculations
+- Event stream processing
+- Multi-sensor coordination
+- Integration with monitoring systems
+- Historical analysis
+
+The test suite provides many examples of these patterns in action.
+
+Remember: Signals and Sensors are your eyes and ears in the system. Design them thoughtfully to give your agents the information they need to make smart decisions.
+Now that you understand Signals and Sensors, you can explore:
+
 - Custom signal types
 - Complex metric calculations
 - Event stream processing

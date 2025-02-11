@@ -67,94 +67,131 @@ defmodule Jido.MixProject do
       source_url: "https://github.com/agentjido/jido",
       authors: ["Mike Hostetler <mike.hostetler@gmail.com>"],
       groups_for_extras: [
-        "Getting Started": [
-          "guides/getting-started.md",
-          "guides/introduction/architecture.md",
-          "guides/introduction/system-overview.md"
+        "Start Here": [
+          "guides/getting-started.livemd"
         ],
-        "Core Concepts": [
-          "guides/core/agents.md",
-          "guides/core/actions.md",
-          "guides/core/signals.md",
-          "guides/core/skills.md"
-        ],
-        Agents: ~r/guides\/agents\/.*\.md$/,
-        Actions: ~r/guides\/actions\/.*\.md$/,
-        Signals: ~r/guides\/signals\/.*\.md$/,
-        Skills: ~r/guides\/skills\/.*\.md$/,
-        "Examples & Patterns": ~r/guides\/examples\/.*\.md$/,
-        Tutorials: ~r/guides\/tutorials\/.*\.md$/,
-        "Best Practices": ~r/guides\/practices\/.*\.md$/,
-        Project: [
+        "About Jido": [
+          "guides/about/what-is-jido.md",
+          "guides/about/design-principles.md",
+          "guides/about/do-you-need-an-agent.md",
+          "guides/about/where-is-the-AI.md",
+          "guides/about/alternatives.md",
           "CONTRIBUTING.md",
           "CHANGELOG.md",
           "LICENSE.md"
+        ],
+        Examples: [
+          "guides/examples/your-first-agent.livemd",
+          "guides/examples/tool-use.livemd",
+          "guides/examples/chain-of-thought.livemd",
+          "guides/examples/think-plan-act.livemd",
+          "guides/examples/multi-agent.livemd"
+        ],
+        Signals: [
+          "guides/signals/overview.livemd",
+          "guides/signals/routing.md",
+          "guides/signals/dispatching.md",
+          "guides/signals/bus.md",
+          "guides/signals/serialization.md"
+        ],
+        Actions: [
+          "guides/actions/overview.md",
+          "guides/actions/workflows.md",
+          "guides/actions/instructions.md",
+          "guides/actions/directives.md",
+          "guides/actions/chaining.md",
+          "guides/actions/runners.md",
+          "guides/actions/actions-as-tools.md",
+          "guides/actions/testing.md"
+        ],
+        Sensors: [
+          "guides/sensors/overview.md",
+          "guides/sensors/cron.md",
+          "guides/sensors/heartbeat.md",
+          "guides/sensors/testing.md"
+        ],
+        Agents: [
+          "guides/agents/overview.md",
+          "guides/agents/stateless.md",
+          "guides/agents/stateful.md",
+          "guides/agents/directives.md",
+          "guides/agents/runtime.md",
+          "guides/agents/output.md",
+          "guides/agents/routing.md",
+          "guides/agents/sensors.md",
+          "guides/agents/callbacks.md",
+          "guides/agents/child-processes.md",
+          "guides/agents/testing.md"
+        ],
+        Skills: [
+          "guides/skills/overview.md",
+          "guides/skills/testing.md"
         ]
       ],
       extras: [
         # Home & Project
         {"README.md", title: "Home"},
+
+        # Getting Started Section
+        {"guides/getting-started.livemd", title: "Quick Start"},
+
+        # About Jido
+        {"guides/about/what-is-jido.md", title: "What is Jido?"},
+        {"guides/about/design-principles.md", title: "Design Principles"},
+        {"guides/about/do-you-need-an-agent.md", title: "Do You Need an Agent?"},
+        {"guides/about/where-is-the-AI.md", title: "Where is the AI?"},
+        {"guides/about/alternatives.md", title: "Alternatives"},
         {"CONTRIBUTING.md", title: "Contributing"},
         {"CHANGELOG.md", title: "Changelog"},
         {"LICENSE.md", title: "Apache 2.0 License"},
 
-        # Getting Started Section
-        {"guides/getting-started.md", title: "Quick Start Guide"}
-        # {"guides/introduction/architecture.md", title: "System Architecture"},
-        # {"guides/introduction/system-overview.md", title: "System Overview"},
-
-        # Core Concepts
-        # {"guides/core/agents.md", title: "Agent System Overview"},
-        # {"guides/core/actions.md", title: "Action System Overview"},
-        # {"guides/core/signals.md", title: "Signal System Overview"},
-        # {"guides/core/skills.md", title: "Skill System Overview"},
-
-        # Agents
-        # {"guides/agents/agents.md", title: "Agent Fundamentals"},
-        # {"guides/agents/state.md", title: "Agent State Management"},
-        # {"guides/agents/server.md", title: "Agent Server Implementation"},
-        # {"guides/agents/directives.md", title: "Agent Directives"},
-        # {"guides/agents/sensors.md", title: "Agent Sensors"},
-        # {"guides/agents/advanced.md", title: "Advanced Agent Patterns"},
-        # {"guides/agents/testing.md", title: "Testing Agents"},
-
-        # Actions
-        # {"guides/actions/actions.md", title: "Action Fundamentals"},
-        # {"guides/actions/instructions.md", title: "Action Instructions"},
-        # {"guides/actions/workflows.md", title: "Workflow Composition"},
-        # {"guides/actions/advanced.md", title: "Advanced Action Patterns"},
-        # {"guides/actions/testing.md", title: "Testing Actions"},
+        # Examples
+        {"guides/examples/your-first-agent.livemd", title: "Your First Agent"},
+        {"guides/examples/tool-use.livemd", title: "Agents with Tools"},
+        {"guides/examples/chain-of-thought.livemd", title: "Chain of Thought Agents"},
+        {"guides/examples/think-plan-act.livemd", title: "Think-Plan-Act"},
+        {"guides/examples/multi-agent.livemd", title: "Multi-Agent Systems"},
 
         # Signals
-        # {"guides/signals/bus.md", title: "Signal Bus Architecture"},
-        # {"guides/signals/processing.md", title: "Signal Processing"},
-        # {"guides/signals/patterns.md", title: "Signal Patterns"},
-        # {"guides/signals/testing.md", title: "Testing Signals"},
+        {"guides/signals/overview.livemd", title: "Overview"},
+        {"guides/signals/routing.md", title: "Routing"},
+        {"guides/signals/dispatching.md", title: "Dispatching"},
+        {"guides/signals/bus.md", title: "Signal Bus"},
+        {"guides/signals/serialization.md", title: "Serialization"},
+        {"guides/signals/testing.md", title: "Testing"},
+
+        # Actions
+        {"guides/actions/overview.md", title: "Overview"},
+        {"guides/actions/workflows.md", title: "Executing Actions"},
+        {"guides/actions/instructions.md", title: "Instructions"},
+        {"guides/actions/directives.md", title: "Directives"},
+        {"guides/actions/chaining.md", title: "Chaining Actions"},
+        {"guides/actions/runners.md", title: "Runners"},
+        {"guides/actions/actions-as-tools.md", title: "Actions as LLM Tools"},
+        {"guides/actions/testing.md", title: "Testing"},
+
+        # Sensors
+        {"guides/sensors/overview.md", title: "Overview"},
+        {"guides/sensors/cron.md", title: "Cron Sensors"},
+        {"guides/sensors/heartbeat.md", title: "Heartbeat Sensors"},
+        {"guides/sensors/testing.md", title: "Testing"},
+
+        # Agents
+        {"guides/agents/overview.md", title: "Overview"},
+        {"guides/agents/stateless.md", title: "Stateless Agents"},
+        {"guides/agents/stateful.md", title: "Stateful Agents"},
+        {"guides/agents/directives.md", title: "Directives"},
+        {"guides/agents/runtime.md", title: "Runtime"},
+        {"guides/agents/output.md", title: "Output"},
+        {"guides/agents/routing.md", title: "Routing"},
+        {"guides/agents/sensors.md", title: "Sensors"},
+        {"guides/agents/callbacks.md", title: "Callbacks"},
+        {"guides/agents/child-processes.md", title: "Child Processes"},
+        {"guides/agents/testing.md", title: "Testing"},
 
         # Skills
-        # {"guides/skills/skills.md", title: "Skill Fundamentals"},
-        # {"guides/skills/signal-router.md", title: "Signal Router"},
-        # {"guides/skills/advanced.md", title: "Advanced Skill Patterns"},
-        # {"guides/skills/testing.md", title: "Testing Skills"},
-
-        # Examples & Patterns
-        # {"guides/examples/hello-world.md", title: "Hello World Agent"},
-        # {"guides/examples/file-processor.md", title: "File Processing System"},
-        # {"guides/examples/chat-bot.md", title: "Chat Bot Implementation"},
-        # {"guides/examples/multi-agent.md", title: "Multi-Agent Workflow"},
-        # {"guides/examples/state-machine.md", title: "Complex State Machine"},
-        # {"guides/examples/custom-runner.md", title: "Custom Runner Implementation"},
-
-        # Tutorials
-        # {"guides/tutorials/task-processor.md", title: "Building a Task Processor"},
-        # {"guides/tutorials/monitor-agent.md", title: "Creating a Monitor Agent"},
-        # {"guides/tutorials/calculator.md", title: "Distributed Calculator"},
-
-        # Best Practices
-        # {"guides/practices/testing.md", title: "Testing Strategies"},
-        # {"guides/practices/error-handling.md", title: "Error Handling"},
-        # {"guides/practices/performance.md", title: "Performance Optimization"},
-        # {"guides/practices/patterns.md", title: "Design Patterns"}
+        {"guides/skills/overview.md", title: "Overview"},
+        {"guides/skills/testing.md", title: "Testing Skills"}
       ],
       extra_section: "Guides",
       formatters: ["html"],
@@ -246,7 +283,8 @@ defmodule Jido.MixProject do
       maintainers: ["Mike Hostetler"],
       licenses: ["Apache-2.0"],
       links: %{
-        "GitHub" => "https://github.com/agentjido/jido"
+        "GitHub" => "https://github.com/agentjido/jido",
+        "Jido Workbench" => "https://github.com/agentjido/jido_workbench"
       }
     ]
   end

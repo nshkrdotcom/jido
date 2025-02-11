@@ -1,419 +1,281 @@
-# Sensors and Skills
+# Skills Overview
 
-## Overview
+## Introduction
 
-Sensors and Skills are Jido's mechanisms for extending agent capabilities and integrating with external systems. Sensors provide event-based triggers and monitoring, while Skills package reusable functionality that can be dynamically loaded into agents.
+Skills are the fundamental building blocks of agent capabilities in Jido. Think of Skills as composable "feature packs" that give agents new abilities. Just as a human might learn new skills like "cooking" or "programming", Jido agents gain new capabilities through Skills.
 
-### Core Principles
+A Skill encapsulates:
 
-1. **Extensibility**
+- Signal routing and handling patterns
+- State management and isolation
+- Process supervision
+- Configuration management
+- Runtime adaptation
 
-   - Modular skill packages
-   - Pluggable sensor system
-   - Dynamic loading
+## Core Concepts
 
-2. **Integration**
+### 1. Skill Structure
 
-   - External system monitoring
-   - Event-based triggers
-   - Custom routing logic
-
-3. **Reusability**
-   - Composable skills
-   - Shared behaviors
-   - Configurable components
-
-## Implementation
-
-### Basic Sensor Structure
+A Skill is defined by several key components:
 
 ```elixir
-defmodule MyApp.Sensors.SystemMonitor do
-  use Jido.Sensor
+defmodule MyApp.WeatherMonitorSkill do
+  use Jido.Skill,
+    name: "weather_monitor",
+    description: "Monitors weather conditions and generates alerts",
+    category: "monitoring",
+    tags: ["weather", "alerts"],
+    vsn: "1.0.0",
+    schema_key: :weather,
+    signals: [
+      input: ["weather.data.received", "weather.alert.*"],
+      output: ["weather.alert.generated"]
+    ],
+    config: [
+      weather_api: [
+        type: :map,
+        required: true,
+        doc: "Weather API configuration"
+      ]
+    ]
+end
+```
 
-  @type config :: %{
-    interval: pos_integer(),
-    threshold: float()
+Let's break down each component:
+
+- `name`: Unique identifier for the skill (required)
+- `description`: Human-readable explanation of the skill's purpose
+- `category`: Broad classification for organization
+- `tags`: List of searchable tags
+- `vsn`: Version string for compatibility checking
+- `schema_key`: Atom key for state namespace isolation
+- `signals`: Input/output signal patterns the skill handles
+- `config`: Configuration schema for validation
+
+### 2. State Management
+
+Skills use `schema_key` for state namespace isolation. This prevents different skills from accidentally interfering with each other's state:
+
+```elixir
+def initial_state do
+  %{
+    current_conditions: nil,
+    alert_history: [],
+    last_update: nil
   }
-
-  @impl true
-  def init(opts) do
-    state = %{
-      interval: opts[:interval] || 5000,
-      threshold: opts[:threshold] || 0.8,
-      last_check: nil
-    }
-
-    schedule_next_check(state.interval)
-    {:ok, state}
-  end
-
-  @impl true
-  def handle_info(:check, state) do
-    {cpu, memory} = get_system_metrics()
-
-    if cpu > state.threshold or memory > state.threshold do
-      signal = build_alert_signal(cpu, memory)
-      {:signal, signal, state}
-    else
-      {:ok, state}
-    end
-  end
-
-  # Private Helpers
-
-  defp schedule_next_check(interval) do
-    Process.send_after(self(), :check, interval)
-  end
-
-  defp get_system_metrics do
-    cpu = :cpu_sup.util()
-    memory = :erlang.memory(:total) / :erlang.memory(:system)
-    {cpu, memory}
-  end
-
-  defp build_alert_signal(cpu, memory) do
-    Jido.Signal.new("system.resources.critical", %{
-      cpu_usage: cpu,
-      memory_usage: memory,
-      timestamp: DateTime.utc_now()
-    })
-  end
 end
 ```
 
-### Cron-based Sensor
+This state will be stored under the skill's `schema_key` in the agent's state map:
 
 ```elixir
-defmodule MyApp.Sensors.ScheduledTask do
-  use Jido.Sensor
-  use Quantum, otp_app: :my_app
-
-  @impl true
-  def init(opts) do
-    schedule = opts[:schedule] || "0 * * * *" # Every hour
-    task = opts[:task] || &default_task/0
-
-    Quantum.new_job()
-    |> Quantum.schedule(schedule)
-    |> Quantum.run(task)
-
-    {:ok, %{schedule: schedule, task: task}}
-  end
-
-  @impl true
-  def handle_job_complete(result, state) do
-    signal = Jido.Signal.new("task.completed", %{
-      result: result,
-      timestamp: DateTime.utc_now()
-    })
-
-    {:signal, signal, state}
-  end
-
-  defp default_task do
-    # Default implementation
-    {:ok, :completed}
-  end
-end
+%{
+  weather: %{  # Matches schema_key
+    current_conditions: nil,
+    alert_history: [],
+    last_update: nil
+  }
+}
 ```
 
-### Skill Definition
+### 3. Signal Routing
+
+Skills define signal routing patterns using a combination of exact matches, wildcards, and pattern matching functions:
 
 ```elixir
-defmodule MyApp.Skills.Arithmetic do
-  use Jido.Skill
+def router do
+  [
+    # High priority alerts
+    %{
+      path: "weather.alert.**",
+      instruction: %{
+        action: Actions.GenerateWeatherAlert
+      },
+      priority: 100
+    },
 
-  @type operation :: :add | :subtract | :multiply | :divide
-  @type number_pair :: {number(), number()}
-
-  @impl true
-  def routes do
-    [
-      %{
-        path: "math.operation",
-        instruction: {__MODULE__, :handle_operation}
+    # Process incoming data
+    %{
+      path: "weather.data.received",
+      instruction: %{
+        action: Actions.ProcessWeatherData
       }
-    ]
-  end
+    },
 
-  @impl true
-  def handle_signal(%{type: "math.operation"} = signal) do
-    with {:ok, operation} <- extract_operation(signal.data),
-         {:ok, numbers} <- extract_numbers(signal.data),
-         {:ok, result} <- apply_operation(operation, numbers) do
-      {:ok, build_result_signal(result)}
-    end
-  end
-
-  # Operation Handlers
-
-  def handle_operation(%{operation: :add, numbers: {a, b}}) do
-    {:ok, a + b}
-  end
-
-  def handle_operation(%{operation: :subtract, numbers: {a, b}}) do
-    {:ok, a - b}
-  end
-
-  def handle_operation(%{operation: :multiply, numbers: {a, b}}) do
-    {:ok, a * b}
-  end
-
-  def handle_operation(%{operation: :divide, numbers: {_, 0}}) do
-    {:error, :division_by_zero}
-  end
-
-  def handle_operation(%{operation: :divide, numbers: {a, b}}) do
-    {:ok, a / b}
-  end
-
-  # Private Helpers
-
-  defp extract_operation(%{operation: op}) when op in [:add, :subtract, :multiply, :divide] do
-    {:ok, op}
-  end
-  defp extract_operation(_), do: {:error, :invalid_operation}
-
-  defp extract_numbers(%{a: a, b: b}) when is_number(a) and is_number(b) do
-    {:ok, {a, b}}
-  end
-  defp extract_numbers(_), do: {:error, :invalid_numbers}
-
-  defp apply_operation(operation, numbers) do
-    handle_operation(%{operation: operation, numbers: numbers})
-  end
-
-  defp build_result_signal(result) do
-    Jido.Signal.new("math.result", %{
-      result: result,
-      timestamp: DateTime.utc_now()
-    })
-  end
-end
-```
-
-### Dynamic Skill Loading
-
-```elixir
-defmodule MyApp.Agents.Calculator do
-  use Jido.Agent
-
-  @impl true
-  def init(opts) do
-    skills = [MyApp.Skills.Arithmetic]
-    {:ok, %{}, skills: skills}
-  end
-
-  @impl true
-  def handle_signal(%{type: "math." <> _} = signal, state) do
-    # Signal will be routed to the Arithmetic skill
-    {:ok, state}
-  end
-end
-```
-
-## Advanced Features
-
-### Sensor Groups
-
-```elixir
-defmodule MyApp.Sensors.Group do
-  use Jido.Sensor.Group
-
-  @impl true
-  def init(opts) do
-    children = [
-      {MyApp.Sensors.SystemMonitor, interval: 5000},
-      {MyApp.Sensors.ScheduledTask, schedule: "*/15 * * * *"}
-    ]
-
-    {:ok, children}
-  end
-
-  @impl true
-  def handle_child_signal(sensor, signal, state) do
-    enriched_signal = enrich_signal(signal, sensor)
-    {:signal, enriched_signal, state}
-  end
-
-  defp enrich_signal(signal, sensor) do
-    Map.update!(signal, :metadata, fn metadata ->
-      Map.put(metadata, :source_sensor, sensor)
-    end)
-  end
-end
-```
-
-### Skill Composition
-
-```elixir
-defmodule MyApp.Skills.Advanced do
-  use Jido.Skill
-
-  @impl true
-  def compose do
-    [
-      MyApp.Skills.Arithmetic,
-      MyApp.Skills.Logging,
-      MyApp.Skills.Metrics
-    ]
-  end
-
-  @impl true
-  def handle_signal(signal, composed_results) do
-    # Process results from composed skills
-    {:ok, merge_results(composed_results)}
-  end
-end
-```
-
-## Testing & Verification
-
-### Sensor Tests
-
-```elixir
-defmodule MyApp.Sensors.SystemMonitorTest do
-  use ExUnit.Case
-  use Jido.Test.SensorCase
-
-  alias MyApp.Sensors.SystemMonitor
-
-  describe "system monitoring" do
-    test "emits alert when threshold exceeded" do
-      {:ok, pid} = start_supervised_sensor(SystemMonitor, threshold: 0.5)
-
-      # Simulate high system load
-      :sys.replace_state(pid, fn state ->
-        %{state | threshold: 0.1}
-      end)
-
-      send(pid, :check)
-
-      assert_receive {:signal, signal}
-      assert signal.type == "system.resources.critical"
-    end
-  end
-end
-```
-
-### Skill Tests
-
-```elixir
-defmodule MyApp.Skills.ArithmeticTest do
-  use ExUnit.Case
-  use Jido.Test.SkillCase
-
-  alias MyApp.Skills.Arithmetic
-
-  describe "handle_operation/1" do
-    test "performs basic arithmetic" do
-      assert {:ok, 5} = Arithmetic.handle_operation(%{
-        operation: :add,
-        numbers: {2, 3}
-      })
-
-      assert {:ok, 6} = Arithmetic.handle_operation(%{
-        operation: :multiply,
-        numbers: {2, 3}
-      })
-    end
-
-    test "handles division by zero" do
-      assert {:error, :division_by_zero} = Arithmetic.handle_operation(%{
-        operation: :divide,
-        numbers: {1, 0}
-      })
-    end
-  end
-end
-```
-
-## Production Readiness
-
-### Configuration
-
-```elixir
-# config/runtime.exs
-config :my_app, MyApp.Sensors,
-  system_monitor: [
-    interval: :timer.seconds(5),
-    threshold: 0.8
-  ],
-  scheduled_task: [
-    schedule: "*/15 * * * *",
-    timeout: :timer.seconds(30)
+    # Match severe conditions
+    %{
+      path: "weather.condition.*",
+      match: fn signal ->
+        get_in(signal.data, [:severity]) >= 3
+      end,
+      instruction: %{
+        action: Actions.GenerateWeatherAlert
+      },
+      priority: 75
+    }
   ]
+end
 ```
 
-### Monitoring
+## Building Skills
 
-1. **Telemetry Events**
+### Step 1: Define the Skill Module
 
-   ```elixir
-   :telemetry.attach(
-     "sensor-metrics",
-     [:jido, :sensor, :emit],
-     &MyApp.Metrics.handle_sensor_event/4,
-     nil
-   )
-   ```
+```elixir
+defmodule MyApp.DataProcessingSkill do
+  use Jido.Skill,
+    name: "data_processor",
+    description: "Processes and transforms data streams",
+    schema_key: :processor,
+    signals: [
+      input: ["data.received.*", "data.transform.*"],
+      output: ["data.processed.*"]
+    ],
+    config: [
+      batch_size: [
+        type: :pos_integer,
+        default: 100,
+        doc: "Number of items to process in each batch"
+      ]
+    ]
+end
+```
 
-2. **Health Checks**
-   ```elixir
-   def health_check do
-     sensors = MyApp.Sensors.Group.list_active()
-     if length(sensors) > 0, do: :ok, else: {:error, :no_sensors}
-   end
-   ```
+### Step 2: Implement Required Callbacks
 
-### Common Issues
+```elixir
+# Initial state for the skill's namespace
+def initial_state do
+  %{
+    processed_count: 0,
+    last_batch: nil,
+    error_count: 0
+  }
+end
 
-1. **Resource Usage**
+# Child processes to supervise
+def child_spec(config) do
+  [
+    {DataProcessor.BatchWorker,
+     [
+       name: "batch_worker",
+       batch_size: config.batch_size
+     ]}
+  ]
+end
 
-   - Monitor sensor CPU/memory usage
-   - Adjust check intervals
-   - Implement rate limiting
+# Signal routing rules
+def router do
+  [
+    %{
+      path: "data.received.*",
+      instruction: %{
+        action: Actions.ProcessData
+      }
+    }
+  ]
+end
+```
 
-2. **Skill Loading**
+### Step 3: Define Actions
 
-   - Handle missing dependencies
-   - Version compatibility
-   - Memory leaks
+```elixir
+defmodule MyApp.DataProcessingSkill.Actions do
+  defmodule ProcessData do
+    use Jido.Action,
+      name: "process_data",
+      description: "Processes incoming data batch",
+      schema: [
+        data: [type: {:list, :map}, required: true]
+      ]
 
-3. **Integration**
-   - External system availability
-   - Network timeouts
-   - Data format changes
+    def run(%{data: data}, context) do
+      # Access skill config from context
+      batch_size = get_in(context, [:config, :batch_size])
+
+      # Process data...
+      {:ok, %{
+        processed: transformed_data,
+        count: length(transformed_data)
+      }}
+    end
+  end
+end
+```
 
 ## Best Practices
 
-1. **Sensor Design**
+1. **State Isolation**
 
-   - Keep checks lightweight
-   - Implement proper cleanup
-   - Use appropriate intervals
+   - Use meaningful `schema_key` names
+   - Keep state focused and minimal
+   - Document state structure
+   - Consider persistence needs
 
-2. **Skill Implementation**
+2. **Signal Design**
 
-   - Clear responsibility boundaries
-   - Proper error handling
-   - Efficient signal routing
+   - Use consistent naming patterns
+   - Document signal formats
+   - Include necessary context
+   - Consider routing efficiency
 
-3. **Testing**
+3. **Configuration**
 
-   - Mock external systems
-   - Test edge cases
-   - Verify cleanup
+   - Validate thoroughly
+   - Provide good defaults
+   - Document all options
+   - Consider runtime changes
 
-4. **Production**
+4. **Process Management**
+   - Supervise child processes
+   - Handle crashes gracefully
    - Monitor resource usage
-   - Set appropriate timeouts
-   - Implement circuit breakers
+   - Consider distribution
 
-## Further Reading
+## Sharing and Distribution
 
-- [Agent Documentation](../agents/overview.md)
-- [Signal Routing](../signals/overview.md)
-- [Advanced Patterns](../practices/advanced-patterns.md)
-- [Error Handling](../practices/error-handling.md)
+Skills are designed to be shared and reused across different Jido applications. They act as plugins that can extend agent capabilities:
+
+1. **Package as Library**
+
+   - Create dedicated package
+   - Document dependencies
+   - Version appropriately
+   - Include examples
+
+2. **Distribution**
+   - Publish to Hex.pm
+   - Document installation
+   - Provide configuration guide
+   - Include integration examples
+
+## Example Shared Skills
+
+Some common types of shared skills:
+
+1. **Integration Skills**
+
+   - Database connectors
+   - API clients
+   - Message queue adapters
+   - File system monitors
+
+2. **Processing Skills**
+
+   - Data transformation
+   - Content analysis
+   - Format conversion
+   - Batch processing
+
+3. **Monitoring Skills**
+   - System metrics
+   - Performance tracking
+   - Error detection
+   - Health checks
+
+## See Also
+
+- [Testing Skills](testing.md) - Comprehensive testing guide
+- [Signal Router](../signals/routing.md) - Signal routing details
+- [State Management](../agents/state.md) - Agent state management
+- [Process Supervision](../agents/processes.md) - Process management

@@ -106,9 +106,7 @@ defmodule Jido.MixProject do
         ],
         Sensors: [
           "guides/sensors/overview.md",
-          "guides/sensors/cron.md",
-          "guides/sensors/heartbeat.md",
-          "guides/sensors/testing.md"
+          "guides/sensors/cron-heartbeat.md"
         ],
         Agents: [
           "guides/agents/overview.md",
@@ -171,9 +169,7 @@ defmodule Jido.MixProject do
 
         # Sensors
         {"guides/sensors/overview.md", title: "Overview"},
-        {"guides/sensors/cron.md", title: "Cron Sensors"},
-        {"guides/sensors/heartbeat.md", title: "Heartbeat Sensors"},
-        {"guides/sensors/testing.md", title: "Testing"},
+        {"guides/sensors/cron-heartbeat.md", title: "Cron & Heartbeat"},
 
         # Agents
         {"guides/agents/overview.md", title: "Overview"},

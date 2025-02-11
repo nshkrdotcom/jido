@@ -1,224 +1,271 @@
-# Action Instructions
+# Instructions in Jido
 
-_Part of the "Actions" section in the documentation._
+Instructions represent discrete units of work that can be planned, validated, and executed by agents. Think of them as "work orders" that specify exactly what needs to be done and how to do it.
 
-This guide covers the instruction system used to define action behavior. It explains how to write clear, maintainable instructions that can be interpreted by both AI and classical planning systems.
+## Core Concepts
 
-## Overview
+An Instruction wraps an Action module with everything it needs to execute:
 
-Instructions are the fundamental unit of execution in the Jido system. An Instruction wraps an action module with its parameters and execution context, allowing Runners to execute them in a standardized way. This guide covers instruction formats, normalization, and best practices.
+- The Action to perform (required)
+- Parameters for the action
+- Execution context
+- Runtime options
 
-## Instruction Structure
+### Instruction Structure
 
-A full instruction struct contains:
-
-```elixir
-%Jido.Instruction{
-  action: module(),      # The action module to execute (required)
-  params: map(),        # Parameters to pass to the action (default: %{})
-  context: map(),       # Execution context data (default: %{})
-  result: term()        # Execution result (default: nil)
-}
-```
-
-## Instruction Formats
-
-Jido supports several shorthand formats for convenience, all of which are normalized to the full instruction struct during processing. Here are the supported formats:
-
-### 1. Action Module Only
+Each Instruction contains:
 
 ```elixir
-# Shorthand
-MyApp.Actions.ProcessFile
-
-# Normalizes to
 %Instruction{
-  action: MyApp.Actions.ProcessFile,
-  params: %{},
-  context: %{}
+  id: "inst_abc123",           # Unique identifier
+  action: MyApp.Actions.DoTask, # The action module to execute
+  params: %{value: 42},        # Parameters for the action, always a map
+  context: %{user_id: "123"},  # Execution context
+  opts: [retry: true],         # Runtime options
 }
 ```
 
-### 2. Action With Parameters (Tuple Form)
+## Creating Instructions
+
+Jido supports multiple formats for creating instructions, offering flexibility while maintaining type safety:
+
+### 1. Full Struct (Most Explicit)
 
 ```elixir
-# Shorthand
-{MyApp.Actions.ProcessFile, %{path: "/tmp/data.csv"}}
-
-# Normalizes to
 %Instruction{
-  action: MyApp.Actions.ProcessFile,
-  params: %{path: "/tmp/data.csv"},
-  context: %{}
+  action: MyApp.Actions.ProcessOrder,
+  params: %{order_id: "123"},
+  context: %{tenant_id: "456"}
 }
 ```
 
-### 3. Full Instruction Struct
+### 2. Action Module Only (Simplest)
 
 ```elixir
-# Explicit struct
-%Instruction{
-  action: MyApp.Actions.ProcessFile,
-  params: %{path: "/tmp/data.csv"},
-  context: %{user_id: "123"}
-}
+MyApp.Actions.ProcessOrder
 ```
 
-### 4. Lists of Mixed Formats
+### 3. Action With Parameters (Common)
 
 ```elixir
-# Mixed shorthand list
-[
-  ValidateAction,
-  {ProcessAction, %{file: "data.csv"}},
-  %Instruction{action: StoreAction, context: %{store_id: "456"}}
+{MyApp.Actions.ProcessOrder, %{order_id: "123"}}
+```
+
+### 4. Factory Function
+
+```elixir
+Instruction.new!(%{
+  action: MyApp.Actions.ProcessOrder,
+  params: %{order_id: "123"},
+  context: %{tenant_id: "456"}
+})
+```
+
+## Working with Instructions
+
+### Normalization
+
+Convert various input formats to standard instruction structs:
+
+```elixir
+# Normalize a single instruction
+{:ok, [instruction]} = Instruction.normalize(MyApp.Actions.ProcessOrder)
+
+# Normalize with context
+{:ok, instructions} = Instruction.normalize(
+  [
+    MyApp.Actions.ValidateOrder,
+    {MyApp.Actions.ProcessOrder, %{priority: "high"}}
+  ],
+  %{tenant_id: "123"}  # Shared context
+)
+```
+
+### Validation
+
+Ensure instructions use allowed actions:
+
+```elixir
+allowed_actions = [
+  MyApp.Actions.ValidateOrder,
+  MyApp.Actions.ProcessOrder
 ]
 
-# Each element normalizes to a full instruction struct
+:ok = Instruction.validate_allowed_actions(instructions, allowed_actions)
 ```
 
-## Normalization Process
+## Common Patterns
 
-All instruction formats are normalized when:
-
-1. Planning actions on an Agent
-2. Directly executing through a Runner
-3. Creating instruction queues
-
-The normalization ensures:
-
-- Consistent structure for execution
-- Parameter validation
-- Context preservation
-- Type safety
-- Serialization support
-
-## Best Practices
-
-### When to Use Shorthand
-
-Use shorthand formats when:
-
-- Planning simple action sequences
-- Writing tests
-- Demonstrating examples
-- Working with basic workflows
+### 1. Workflow Definition
 
 ```elixir
-# Good use of shorthand
-{:ok, agent} = MyAgent.plan(agent, [
-  ValidateInput,
-  {ProcessData, %{format: "csv"}},
-  StoreResults
-])
+instructions = [
+  MyApp.Actions.ValidateInput,
+  {MyApp.Actions.ProcessData, %{format: "json"}},
+  MyApp.Actions.SaveResults
+]
 ```
 
-### When to Use Full Structs
-
-Use full instruction structs when:
-
-- Implementing custom runners
-- Building complex workflows
-- Needing explicit context control
-- Working with instruction queues directly
+### 2. Conditional Execution
 
 ```elixir
-# Good use of full struct
-instruction = %Instruction{
-  action: ProcessData,
-  params: %{format: "csv"},
-  context: %{
-    request_id: "abc123",
-    user_id: "456",
-    tenant: "acme"
-  }
-}
+instructions = [
+  MyApp.Actions.ValidateOrder,
+  {MyApp.Actions.CheckInventory, %{strict: true}},
+  # Add fulfillment only if in stock
+  if has_stock? do
+    {MyApp.Actions.FulfillOrder, %{warehouse: "main"}}
+  end
+]
+|> Enum.reject(&is_nil/1)
 ```
 
-### Context Management
-
-The context map is preserved during normalization and is available to:
-
-- Action implementations
-- Runners
-- Error handlers
-- Telemetry events
+### 3. Context Sharing
 
 ```elixir
-# Setting context during planning
-{:ok, agent} = MyAgent.plan(
-  agent,
-  ProcessAction,
-  %{                        # Context map
-    request_id: "abc123",
-    user_id: "456"
+# All instructions share common context
+{:ok, instructions} = Instruction.normalize(
+  [ValidateUser, ProcessOrder, NotifyUser],
+  %{
+    request_id: "req_123",
+    tenant_id: "tenant_456",
   }
 )
 ```
 
-### Working with Instructions Programmatically
+## Instruction Execution
 
-When manipulating instructions in code:
+Instructions are executed by Runners, which handle state management and error handling:
 
 ```elixir
-# Pattern match on full struct
-def process_instruction(%Instruction{action: action, params: params}) do
-  # Work with normalized form
-end
+# Simple execution of a single instruction
+{:ok, result} = Jido.Runner.Simple.run(agent)
 
-# Transform instructions
-def add_context(instructions, context) do
-  Enum.map(instructions, fn
-    %Instruction{} = inst ->
-      %{inst | context: Map.merge(inst.context, context)}
-    {action, params} ->
-      %Instruction{action: action, params: params, context: context}
-    action when is_atom(action) ->
-      %Instruction{action: action, context: context}
-  end)
-end
+# Chain multiple instructions together
+{:ok, result} = Jido.Runner.Chain.run(agent)
 ```
 
-## Error Handling
+See the [Runners](actions/runners.md) guide for more details on how to execute instructions.
 
-Instructions provide rich error context:
+### Error Handling
+
+Instructions use the `OK` monad for consistent error handling:
 
 ```elixir
-case MyAgent.plan(agent, invalid_instruction) do
-  {:ok, agent} ->
-    # Success case
-  {:error, %Error{type: :validation_error, context: context}} ->
-    # Handle validation failure with full context
+def process_instruction(instruction) do
+  with {:ok, validated} <- validate_instruction(instruction),
+       {:ok, processed} <- execute_instruction(validated) do
+    {:ok, processed}
+  else
+    {:error, reason} -> handle_error(reason)
+  end
 end
 ```
 
 ## Testing Instructions
 
-Test both shorthand and normalized forms:
+Instructions can be tested both in isolation and as part of workflows:
 
 ```elixir
-test "supports shorthand planning" do
-  {:ok, agent} = MyAgent.plan(agent, SimpleAction)
-  assert [%Instruction{action: SimpleAction}] =
-    :queue.to_list(agent.pending_instructions)
-end
+defmodule InstructionTest do
+  use ExUnit.Case
 
-test "preserves context in normalization" do
-  context = %{request_id: "123"}
-  {:ok, agent} = MyAgent.plan(agent, SimpleAction, context)
+  test "creates valid instruction" do
+    assert {:ok, instruction} = Instruction.new(%{
+      action: MyApp.Actions.ProcessOrder,
+      params: %{order_id: "123"}
+    })
+    assert instruction.action == MyApp.Actions.ProcessOrder
+  end
 
-  [instruction] = :queue.to_list(agent.pending_instructions)
-  assert instruction.context.request_id == "123"
+  test "normalizes action tuple" do
+    assert {:ok, [instruction]} = Instruction.normalize(
+      {MyApp.Actions.ProcessOrder, %{order_id: "123"}}
+    )
+    assert instruction.params.order_id == "123"
+  end
 end
 ```
 
-## Summary
+## Best Practices
 
-- Use shorthand formats for convenience in simple cases
-- Work with full instruction structs in implementation code
-- Trust the normalization process to handle all formats consistently
-- Leverage the context map for cross-cutting concerns
-- Test both shorthand and normalized forms
-- Handle errors with full context
+1. **Explicit Intent**: Use the most explicit instruction format that fits your use case
 
-Remember: Instructions are always normalized before execution, so choose the format that makes your code most readable and maintainable in each specific situation.
+   ```elixir
+   # Good - Clear intent with full struct
+   %Instruction{action: ProcessOrder, params: %{id: order_id}}
+
+   # Less Clear - Relies on normalization
+   {ProcessOrder, [id: order_id]}
+   ```
+
+2. **Context Management**: Keep context focused and relevant
+
+   ```elixir
+   # Good - Relevant context
+   context = %{user_id: user.id, tenant_id: tenant.id}
+
+   # Bad - Excessive context
+   context = %{entire_user: user, database_connection: conn}
+   ```
+
+3. **Error Handling**: Implement comprehensive error handling
+
+   ```elixir
+   def handle_instruction(instruction) do
+     case execute(instruction) do
+       {:ok, result} -> {:ok, result}
+       {:error, :invalid_params} -> {:error, "Invalid parameters"}
+       {:error, reason} -> {:error, "Execution failed: #{reason}"}
+     end
+   end
+   ```
+
+4. **Validation**: Always validate instructions before execution
+   ```elixir
+   def safe_execute(instruction) do
+     with :ok <- validate_allowed_actions([instruction], allowed_actions()),
+          {:ok, normalized} <- normalize(instruction),
+          {:ok, result} <- execute(normalized) do
+       {:ok, result}
+     end
+   end
+   ```
+
+## Common Questions
+
+### When should I use full structs vs. tuples?
+
+Use full structs when:
+
+- You need explicit control over all instruction fields
+- The code benefits from clarity over brevity
+- You're defining complex workflows
+
+Use tuples when:
+
+- You only need action and params
+- You're defining simple, linear workflows
+- The brevity improves readability
+
+### How do I share context between instructions?
+
+Pass context during normalization:
+
+```elixir
+shared_context = %{tenant_id: "123"}
+{:ok, instructions} = Instruction.normalize(workflow, shared_context)
+```
+
+### Can I modify instructions during execution?
+
+No, instructions are immutable by design. Instead:
+
+1. Create new instructions with modified parameters
+2. Use the agent's directive system to enqueue modified instructions
+
+## See Also
+
+- [Actions Overview](actions/overview.md) - Learn about implementing actions
+- [Runners](actions/runners.md) - Understanding instruction execution
+- [Testing](actions/testing.md) - Comprehensive testing guide

@@ -1,397 +1,234 @@
 # Actions Overview
 
-_Part of the "Actions" section in the documentation._
+Actions are the fundamental building blocks of agent behavior in Jido. Each Action represents a discrete, composable unit of functionality that can be executed as part of a workflow. This guide explores how to create, use, and compose Actions effectively.
 
-This guide introduces the Actions system, which is the core mechanism for defining agent capabilities. It explains what actions are, how they work, and their role in enabling agent behavior and decision-making.
+## Core Concepts
 
-## Overview
+Actions in Jido follow several key design principles:
 
-Actions in Jido are pure, stateless functions that encapsulate business logic and can be composed into complex workflows. They provide a clean, functional approach to defining operations while supporting validation, error handling, and compensation.
+1. **Self-Contained**: Each Action encapsulates a specific piece of functionality with clear inputs and outputs
+2. **Composable**: Actions can be chained together to create complex workflows
+3. **Validated**: Input parameters are validated using schemas
+4. **Context-Aware**: Actions receive execution context for enhanced flexibility
+5. **Error-Resilient**: Built-in error handling and compensation mechanisms
 
-### Core Principles
+## Defining Actions
 
-1. **Pure Functions**
+Here's a simple Action that adds two numbers:
 
-   - Stateless execution
-   - Predictable outcomes
-   - Easy to test and reason about
+```elixir
+defmodule MyApp.Actions.Add do
+  use Jido.Action,
+    name: "add",
+    description: "Adds two numbers together",
+    schema: [
+      value: [type: :number, required: true, doc: "First number"],
+      amount: [type: :number, required: true, doc: "Second number"]
+    ]
 
-2. **Composability**
+  @impl true
+  def run(%{value: value, amount: amount}, _context) do
+    {:ok, %{result: value + amount}}
+  end
+end
+```
 
-   - Chain multiple actions
-   - Parallel execution
-   - Error propagation
+### Key Components
 
-3. **Safety**
-   - Parameter validation
-   - Error compensation
-   - Timeout handling
+1. **Module Definition**: Actions are Elixir modules that use the `Jido.Action` behavior
+2. **Configuration**:
+   - `name`: Unique identifier for the Action
+   - `description`: Human-readable description
+   - `schema`: Parameter validation rules using NimbleOptions
+3. **Run Implementation**: The `run/2` callback defines the Action's core logic
 
-## Implementation
+## Action Lifecycle
 
-### Basic Action Structure
+When an Action is executed, it goes through several phases:
+
+1. **Parameter Validation**: Input is checked against the schema
+2. **Execution**: The `run/2` callback is invoked
+3. **Result Processing**: Output is normalized and returned
+4. **Error Handling**: Failures are caught and processed
+
+### Example Workflow
 
 ```elixir
 defmodule MyApp.Actions.ProcessOrder do
-  use Jido.Action
-
-  @type order :: %{
-    id: String.t(),
-    items: [String.t()],
-    total: Decimal.t()
-  }
-
-  @type result :: %{
-    order_id: String.t(),
-    status: :processed | :failed,
-    processed_at: DateTime.t()
-  }
-
-  @doc """
-  Process an order with the given parameters.
-  """
-  @spec run(order(), map()) :: {:ok, result()} | {:error, term()}
-  def run(order, _context) do
-    with {:ok, validated} <- validate_order(order),
-         {:ok, processed} <- process_items(validated) do
-      {:ok, %{
-        order_id: validated.id,
-        status: :processed,
-        processed_at: DateTime.utc_now()
-      }}
-    end
-  end
+  use Jido.Action,
+    name: "process_order",
+    description: "Processes a customer order",
+    schema: [
+      order_id: [type: :string, required: true],
+      customer_id: [type: :string, required: true]
+    ]
 
   @impl true
-  def on_error(error, order, _context, _opts) do
-    Logger.error("Failed to process order: #{inspect(error)}")
-    rollback_order(order)
-  end
-
-  # Private Helpers
-
-  defp validate_order(order) do
-    NimbleOptions.validate(order, [
-      id: [type: :string, required: true],
-      items: [type: {:list, :string}, required: true],
-      total: [type: :decimal, required: true]
-    ])
-  end
-
-  defp process_items(%{items: items} = order) do
-    # Process each item in the order
-    results = Enum.map(items, &process_item/1)
-
-    if Enum.all?(results, &match?({:ok, _}, &1)) do
-      {:ok, order}
-    else
-      {:error, :item_processing_failed}
-    end
-  end
-
-  defp process_item(item) do
-    # Simulate item processing
-    if valid_item?(item) do
-      {:ok, item}
-    else
-      {:error, :invalid_item}
-    end
-  end
-
-  defp rollback_order(order) do
-    # Implement compensation logic
-    Logger.info("Rolling back order: #{order.id}")
-    :ok
-  end
-end
-```
-
-### Workflow Composition
-
-```elixir
-defmodule MyApp.Workflows.OrderProcessing do
-  use Jido.Workflow
-
-  alias MyApp.Actions.{
-    ValidateOrder,
-    ProcessPayment,
-    UpdateInventory,
-    NotifyCustomer
-  }
-
-  @doc """
-  Process an order through multiple steps.
-  """
-  def execute(order) do
-    Jido.Workflow.Chain.new()
-    |> Chain.add(ValidateOrder, order)
-    |> Chain.add(ProcessPayment, %{amount: order.total})
-    |> Chain.add_concurrent([
-      {UpdateInventory, %{items: order.items}},
-      {NotifyCustomer, %{order_id: order.id}}
-    ])
-    |> Chain.run()
-  end
-
-  @doc """
-  Process orders in parallel with a worker pool.
-  """
-  def process_batch(orders) do
-    orders
-    |> Task.async_stream(&execute/1, max_concurrency: 5)
-    |> Enum.reduce(%{success: [], failure: []}, fn
-      {:ok, {:ok, result}}, acc ->
-        %{acc | success: [result | acc.success]}
-      {:ok, {:error, _} = error}, acc ->
-        %{acc | failure: [error | acc.failure]}
-    end)
-  end
-end
-```
-
-## Advanced Features
-
-### Parameter Validation
-
-```elixir
-defmodule MyApp.Actions.CreateUser do
-  use Jido.Action
-
-  @schema [
-    email: [
-      type: :string,
-      required: true,
-      format: ~r/^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    ],
-    name: [
-      type: :string,
-      required: true,
-      length: [min: 2, max: 100]
-    ],
-    role: [
-      type: :atom,
-      values: [:admin, :user],
-      default: :user
-    ]
-  ]
-
-  def run(params, _context) do
-    with {:ok, validated} <- NimbleOptions.validate(params, @schema),
-         {:ok, user} <- create_user(validated) do
-      {:ok, user}
-    end
-  end
-end
-```
-
-### Error Compensation
-
-```elixir
-defmodule MyApp.Actions.TransferFunds do
-  use Jido.Action
-
-  def run(%{from: from, to: to, amount: amount}, context) do
-    with {:ok, _} <- debit_account(from, amount),
-         {:ok, _} <- credit_account(to, amount) do
-      {:ok, %{status: :completed}}
-    end
-  end
-
-  def on_error(:credit_failed, %{from: from, amount: amount}, _context, _opts) do
-    # Compensate for failed credit by reversing the debit
-    case refund_account(from, amount) do
-      {:ok, _} -> :ok
-      {:error, reason} -> {:error, {:compensation_failed, reason}}
-    end
-  end
-end
-```
-
-### Timeout Handling
-
-```elixir
-defmodule MyApp.Actions.ProcessLongRunning do
-  use Jido.Action
-
   def run(params, context) do
-    Task.async(fn ->
-      # Long-running operation
-      Process.sleep(5000)
-      {:ok, :completed}
-    end)
-    |> Task.await(context[:timeout] || 10_000)
-  end
-
-  def on_timeout(_params, _context) do
-    Logger.warn("Action timed out")
-    {:error, :timeout}
+    with {:ok, order} <- fetch_order(params.order_id),
+         {:ok, processed} <- apply_processing(order, context) do
+      {:ok, %{
+        order_id: params.order_id,
+        status: "processed",
+        result: processed
+      }}
+    else
+      {:error, reason} -> {:error, "Failed to process order: #{reason}"}
+    end
   end
 end
 ```
 
-## Testing & Verification
+## Error Handling
 
-### Unit Tests
+Actions support multiple error handling patterns:
+
+### 1. Basic Error Return
 
 ```elixir
-defmodule MyApp.Actions.ProcessOrderTest do
+def run(%{value: 0}, _context) do
+  {:error, "Cannot process zero value"}
+end
+```
+
+### 2. Compensation Logic
+
+```elixir
+defmodule MyApp.Actions.RiskyOperation do
+  use Jido.Action,
+    name: "risky_operation",
+    compensation: [enabled: true]
+
+  def on_error(failed_params, error, _context, _opts) do
+    # Compensation logic here
+    {:ok, %{compensated: true, original_error: error}}
+  end
+end
+```
+
+### 3. Error Context
+
+```elixir
+{:error, %Jido.Error{
+  type: :validation_error,
+  message: "Invalid input",
+  details: %{field: :value, reason: "must be positive"}
+}}
+```
+
+## Composing Actions
+
+Actions can be composed in several ways:
+
+### 1. Sequential Chaining
+
+```elixir
+alias MyApp.Actions.{ValidateOrder, ProcessOrder, NotifyCustomer}
+
+instructions = [
+  ValidateOrder,
+  {ProcessOrder, %{priority: "high"}},
+  NotifyCustomer
+]
+
+Jido.Workflow.run_chain(instructions, %{order_id: "123"})
+```
+
+### 2. Conditional Execution
+
+```elixir
+def process_with_notification(params) do
+  base_instructions = [ValidateOrder, ProcessOrder]
+
+  instructions =
+    if params.notify do
+      base_instructions ++ [NotifyCustomer]
+    else
+      base_instructions
+    end
+
+  Jido.Workflow.run_chain(instructions, params)
+end
+```
+
+## Built-in Actions
+
+Jido provides several built-in Action modules:
+
+### Basic Operations
+
+```elixir
+alias Jido.Actions.Basic
+
+# Sleep for a duration
+Basic.Sleep.run(%{duration_ms: 1000}, %{})
+
+# Log a message
+Basic.Log.run(%{level: :info, message: "Processing"}, %{})
+```
+
+### File Operations
+
+```elixir
+alias Jido.Actions.Files
+
+# Write to a file
+Files.WriteFile.run(%{
+  path: "output.txt",
+  content: "Hello",
+  create_dirs: true
+}, %{})
+```
+
+### Arithmetic Operations
+
+```elixir
+alias Jido.Actions.Arithmetic
+
+# Add numbers
+Arithmetic.Add.run(%{value: 5, amount: 3}, %{})
+
+# Multiply numbers
+Arithmetic.Multiply.run(%{value: 4, amount: 2}, %{})
+```
+
+## Testing Actions
+
+Actions can be tested using standard ExUnit tests:
+
+```elixir
+defmodule MyApp.Actions.AddTest do
   use ExUnit.Case
 
-  alias MyApp.Actions.ProcessOrder
+  test "adds two numbers" do
+    params = %{value: 5, amount: 3}
+    assert {:ok, %{result: 8}} = MyApp.Actions.Add.run(params, %{})
+  end
 
-  describe "run/2" do
-    test "processes valid order" do
-      order = %{
-        id: "order-123",
-        items: ["item-1", "item-2"],
-        total: Decimal.new("100.00")
-      }
-
-      assert {:ok, result} = ProcessOrder.run(order, %{})
-      assert result.status == :processed
-      assert result.order_id == order.id
-    end
-
-    test "handles invalid order" do
-      order = %{id: "order-123"} # Missing required fields
-
-      assert {:error, _} = ProcessOrder.run(order, %{})
-    end
+  test "validates required parameters" do
+    params = %{value: 5}
+    assert {:error, _} = MyApp.Actions.Add.run(params, %{})
   end
 end
 ```
-
-### Property-Based Tests
-
-```elixir
-defmodule MyApp.Actions.ProcessOrderPropertyTest do
-  use ExUnit.Case
-  use PropCheck
-
-  property "processes valid orders of any size" do
-    forall order <- valid_order() do
-      case ProcessOrder.run(order, %{}) do
-        {:ok, result} ->
-          result.order_id == order.id and
-          result.status == :processed
-        _ ->
-          false
-      end
-    end
-  end
-
-  # Generators
-
-  def valid_order do
-    let {id, items, total} <- {
-      string(:alphanumeric),
-      list(string(:alphanumeric)),
-      decimal(2)
-    } do
-      %{
-        id: id,
-        items: items,
-        total: Decimal.new(total)
-      }
-    end
-  end
-end
-```
-
-## Production Readiness
-
-### Configuration
-
-```elixir
-# config/runtime.exs
-config :my_app, MyApp.Workflows,
-  max_concurrency: 10,
-  timeout: :timer.seconds(30),
-  retry: [
-    max_attempts: 3,
-    base_backoff: :timer.seconds(1),
-    max_backoff: :timer.seconds(30)
-  ]
-```
-
-### Monitoring
-
-1. **Telemetry Events**
-
-   ```elixir
-   :telemetry.attach(
-     "workflow-metrics",
-     [:jido, :workflow, :execute],
-     &MyApp.Metrics.handle_workflow_event/4,
-     nil
-   )
-   ```
-
-2. **Performance Tracking**
-
-   ```elixir
-   def track_execution_time(action, params) do
-     {time, result} = :timer.tc(fn ->
-       action.run(params, %{})
-     end)
-
-     :telemetry.execute(
-       [:jido, :action, :execute],
-       %{duration: time},
-       %{action: action, params: params}
-     )
-
-     result
-   end
-   ```
-
-### Common Issues
-
-1. **Timeouts**
-
-   - Set appropriate timeouts for actions
-   - Implement proper cleanup
-   - Use async operations for long-running tasks
-
-2. **Resource Management**
-
-   - Monitor worker pool utilization
-   - Implement backpressure
-   - Handle cleanup in compensation
-
-3. **Error Handling**
-   - Implement proper compensation
-   - Log detailed error information
-   - Consider retry strategies
 
 ## Best Practices
 
-1. **Action Design**
+1. **Keep Actions Focused**: Each Action should do one thing well
+2. **Validate Inputs**: Use comprehensive schemas to catch issues early
+3. **Handle Errors**: Implement proper error handling and compensation
+4. **Provide Context**: Use the context parameter for shared state
+5. **Document Well**: Include clear descriptions and parameter documentation
 
-   - Keep actions focused and small
-   - Validate all inputs
-   - Handle all error cases
+## Next Steps
 
-2. **Workflow Composition**
+- Learn about [Action Workflows](workflows.html)
+- Explore [Testing Actions](testing.html)
+- Understand [Action Directives](directives.html)
+- See [Actions as Tools](actions-as-tools.html)
 
-   - Use proper concurrency patterns
-   - Implement proper error handling
-   - Consider resource constraints
+## See Also
 
-3. **Testing**
-
-   - Write comprehensive unit tests
-   - Use property-based testing
-   - Test concurrent execution
-
-4. **Production**
-   - Monitor execution times
-   - Track error rates
-   - Implement circuit breakers
-
-## Further Reading
-
-- [Agent Documentation](../agents/overview.md)
-- [Signal Routing](../signals/overview.md)
-- [Error Handling](../practices/error-handling.md)
-- [Advanced Patterns](../practices/advanced-patterns.md)
+- [Signal Overview](../signals/overview.html)
+- [Agent Overview](../agents/overview.html)
+- [Workflow Documentation](../workflow/overview.html)

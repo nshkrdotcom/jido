@@ -92,14 +92,14 @@ defmodule Jido.MixProject do
           "guides/signals/routing.md",
           "guides/signals/dispatching.md",
           "guides/signals/bus.md",
-          "guides/signals/serialization.md"
+          "guides/signals/serialization.md",
+          "guides/signals/testing.md"
         ],
         Actions: [
           "guides/actions/overview.md",
           "guides/actions/workflows.md",
           "guides/actions/instructions.md",
           "guides/actions/directives.md",
-          "guides/actions/chaining.md",
           "guides/actions/runners.md",
           "guides/actions/actions-as-tools.md",
           "guides/actions/testing.md"
@@ -165,7 +165,6 @@ defmodule Jido.MixProject do
         {"guides/actions/workflows.md", title: "Executing Actions"},
         {"guides/actions/instructions.md", title: "Instructions"},
         {"guides/actions/directives.md", title: "Directives"},
-        {"guides/actions/chaining.md", title: "Chaining Actions"},
         {"guides/actions/runners.md", title: "Runners"},
         {"guides/actions/actions-as-tools.md", title: "Actions as LLM Tools"},
         {"guides/actions/testing.md", title: "Testing"},

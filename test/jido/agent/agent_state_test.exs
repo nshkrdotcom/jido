@@ -114,7 +114,7 @@ defmodule JidoTest.AgentStateTest do
       assert error.type == :validation_error
 
       assert error.message =~
-               "Invalid agent type. Expected #{BasicAgent}, got #{FullFeaturedAgent}"
+               "Invalid agent type. Expected JidoTest.TestAgents.BasicAgent, got JidoTest.TestAgents.FullFeaturedAgent"
     end
 
     test "invalid state update with non-map or non-keyword list", %{agent: agent} do
@@ -152,7 +152,7 @@ defmodule JidoTest.AgentStateTest do
       assert error.type == :validation_error
 
       assert error.message =~
-               "Invalid agent type. Expected #{BasicAgent}, got #{FullFeaturedAgent}"
+               "Invalid agent type. Expected Elixir.JidoTest.TestAgents.BasicAgent, got Elixir.JidoTest.TestAgents.FullFeaturedAgent"
     end
 
     test "strict validation in callbacks", %{agent: agent} do

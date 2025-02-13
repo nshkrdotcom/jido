@@ -102,27 +102,18 @@ defmodule Jido.Agent.Server.Router do
 
   ## Returns
   - `{:ok, updated_state}` - Routes removed successfully
-  - `{:error, reason}` - Failed to remove routes
 
   ## Examples
 
       {:ok, state} = Router.remove(state, "metrics.collected")
       {:ok, state} = Router.remove(state, ["user.created", "user.updated"])
   """
-  @spec remove(ServerState.t(), String.t() | [String.t()]) ::
-          {:ok, ServerState.t()} | {:error, term()}
+  @spec remove(ServerState.t(), String.t() | [String.t()]) :: {:ok, ServerState.t()}
   def remove(%ServerState{} = state, paths) when is_list(paths) do
     dbug("Removing routes", state: state, paths: paths)
-
-    case Signal.Router.remove(state.router, paths) do
-      {:ok, updated_router} ->
-        dbug("Routes removed successfully")
-        {:ok, %{state | router: updated_router}}
-
-      {:error, reason} ->
-        dbug("Failed to remove routes", error: reason)
-        {:error, reason}
-    end
+    {:ok, updated_router} = Signal.Router.remove(state.router, paths)
+    dbug("Routes removed successfully")
+    {:ok, %{state | router: updated_router}}
   end
 
   def remove(%ServerState{} = state, path) when is_binary(path) do
@@ -146,12 +137,10 @@ defmodule Jido.Agent.Server.Router do
         IO.puts("\#{route.path} -> \#{inspect(route.instruction)}")
       end)
   """
-  @spec list(ServerState.t()) :: {:ok, [Signal.Router.Route.t()]}
+  @spec list(ServerState.t()) :: {:ok, [Signal.Router.Route.t()]} | {:error, term()}
   def list(%ServerState{} = state) do
     dbug("Listing routes", state: state)
-    routes = Signal.Router.list(state.router)
-    dbug("Routes retrieved", routes: routes)
-    {:ok, routes}
+    Signal.Router.list(state.router)
   end
 
   @doc """
@@ -185,23 +174,23 @@ defmodule Jido.Agent.Server.Router do
         dbug("Routes merged successfully")
         {:ok, %{state | router: updated_router}}
 
-      error ->
-        dbug("Failed to merge routes", error: error)
-        error
+      {:error, reason} ->
+        dbug("Failed to merge routes", error: reason)
+        {:error, reason}
     end
   end
 
   def merge(%ServerState{} = state, %Router.Router{} = other_router) do
     dbug("Merging router", state: state, other_router: other_router)
 
-    case Signal.Router.merge(state.router, other_router) do
-      {:ok, updated_router} ->
-        dbug("Router merged successfully")
-        {:ok, %{state | router: updated_router}}
-
-      error ->
-        dbug("Failed to merge router", error: error)
-        error
+    with {:ok, routes} <- Signal.Router.list(other_router),
+         {:ok, updated_router} <- Signal.Router.merge(state.router, routes) do
+      dbug("Router merged successfully")
+      {:ok, %{state | router: updated_router}}
+    else
+      {:error, reason} ->
+        dbug("Failed to merge router", error: reason)
+        {:error, reason}
     end
   end
 

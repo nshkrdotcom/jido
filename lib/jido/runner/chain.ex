@@ -91,9 +91,11 @@ defmodule Jido.Runner.Chain do
       {:ok, updated_agent, server_directives} ->
         {:ok, updated_agent, server_directives}
 
+      {:error, %Error{} = error} ->
+        {:error, error}
+
       {:error, reason} ->
-        {:error,
-         %Error{type: :validation_error, message: "Invalid directive", details: %{reason: reason}}}
+        {:error, Error.new(:validation_error, "Invalid directive", %{reason: reason})}
     end
   end
 
@@ -125,13 +127,18 @@ defmodule Jido.Runner.Chain do
       {:ok, state_map} ->
         handle_state_result(state_map, remaining, agent, accumulated_directives, opts)
 
-      {:error, error} ->
+      {:error, %Error{} = error} ->
         {:error, error}
+
+      {:error, reason} ->
+        {:error, Error.new(:execution_error, "Chain execution failed", reason)}
     end
   end
 
   @spec execute_instruction(Instruction.t(), map(), keyword()) ::
-          {:ok, map()} | {:ok, map(), Directive.t()} | {:error, term()}
+          {:ok, map()}
+          | {:ok, map(), Directive.t() | [Directive.t()] | Instruction.t() | [Instruction.t()]}
+          | {:error, Error.t() | term()}
   defp execute_instruction(
          %Instruction{action: action, params: params, context: context},
          state,
@@ -152,8 +159,11 @@ defmodule Jido.Runner.Chain do
         merged_state = Map.merge(state, state_map)
         {:ok, merged_state}
 
-      {:error, error} ->
+      {:error, %Error{} = error} ->
         {:error, error}
+
+      {:error, reason} ->
+        {:error, Error.new(:execution_error, "Workflow execution failed", reason)}
     end
   end
 

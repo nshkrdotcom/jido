@@ -33,7 +33,7 @@ defmodule Jido.Agent.Server.RouterTest do
       ]
 
       assert {:ok, updated_state} = Router.build(state, routes: routes)
-      {:ok, {:ok, routes_list}} = Router.list(updated_state)
+      {:ok, routes_list} = Router.list(updated_state)
       assert length(routes_list) == 2
       assert Enum.any?(routes_list, fn route -> route.path == "test.signal" end)
       assert Enum.any?(routes_list, fn route -> route.path == "another.signal" end)
@@ -63,7 +63,7 @@ defmodule Jido.Agent.Server.RouterTest do
     test "adds single route", %{state: state} do
       route = {"test.signal", %Instruction{action: :test_action}}
       assert {:ok, updated_state} = Router.add(state, route)
-      {:ok, {:ok, routes}} = Router.list(updated_state)
+      {:ok, routes} = Router.list(updated_state)
       assert length(routes) == 1
       assert hd(routes).path == "test.signal"
     end
@@ -75,7 +75,7 @@ defmodule Jido.Agent.Server.RouterTest do
       ]
 
       assert {:ok, updated_state} = Router.add(state, routes)
-      {:ok, {:ok, routes_list}} = Router.list(updated_state)
+      {:ok, routes_list} = Router.list(updated_state)
       assert length(routes_list) == 2
     end
   end
@@ -93,14 +93,14 @@ defmodule Jido.Agent.Server.RouterTest do
 
     test "removes single route", %{state: state} do
       assert {:ok, updated_state} = Router.remove(state, "test.signal")
-      {:ok, {:ok, routes}} = Router.list(updated_state)
+      {:ok, routes} = Router.list(updated_state)
       assert length(routes) == 1
       assert hd(routes).path == "another.signal"
     end
 
     test "removes multiple routes", %{state: state} do
       assert {:ok, updated_state} = Router.remove(state, ["test.signal", "another.signal"])
-      {:ok, {:ok, routes}} = Router.list(updated_state)
+      {:ok, routes} = Router.list(updated_state)
       assert Enum.empty?(routes)
     end
   end
@@ -112,7 +112,7 @@ defmodule Jido.Agent.Server.RouterTest do
       ]
 
       assert {:ok, updated_state} = Router.merge(state, routes)
-      {:ok, {:ok, merged_routes}} = Router.list(updated_state)
+      {:ok, merged_routes} = Router.list(updated_state)
       assert length(merged_routes) == 1
     end
 
@@ -123,7 +123,7 @@ defmodule Jido.Agent.Server.RouterTest do
         Signal.Router.add(other_router, {"test.path", %Instruction{action: :test_action}})
 
       assert {:ok, updated_state} = Router.merge(state, other_router)
-      {:ok, {:ok, merged_routes}} = Router.list(updated_state)
+      {:ok, merged_routes} = Router.list(updated_state)
       assert length(merged_routes) == 1
     end
 

@@ -361,21 +361,18 @@ defmodule Jido.Signal.Router do
   Removes one or more routes from the router.
 
   ## Parameters
-  - router: The existing router struct
+  - router: The Router struct to modify
   - paths: A path string or list of path strings to remove
 
   ## Returns
-  `{:ok, updated_router}` or `{:error, reason}`
+  - `{:ok, updated_router}` - Routes removed successfully
 
   ## Examples
 
-      # Remove a single route
-      {:ok, router} = Router.remove(router, "metrics.**")
-
-      # Remove multiple routes
-      {:ok, router} = Router.remove(router, ["audit.*", "user.created"])
+      {:ok, router} = Router.remove(router, "metrics.collected")
+      {:ok, router} = Router.remove(router, ["user.created", "user.updated"])
   """
-  @spec remove(Router.t(), String.t() | [String.t()]) :: {:ok, Router.t()} | {:error, term()}
+  @spec remove(Router.t(), String.t() | [String.t()]) :: {:ok, Router.t()}
   def remove(%Router{} = router, paths) when is_list(paths) do
     new_trie = Enum.reduce(paths, router.trie, &remove_path/2)
     route_count = count_routes(new_trie)

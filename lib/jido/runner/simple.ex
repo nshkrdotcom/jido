@@ -121,11 +121,14 @@ defmodule Jido.Runner.Simple do
         agent_with_state = apply_state(agent, state_map, apply_state)
         {:ok, agent_with_state, []}
 
+      {:error, %Error{} = error} ->
+        {:error, error}
+
       {:error, reason} when is_binary(reason) ->
         handle_directive_error(reason)
 
-      {:error, error} ->
-        {:error, error}
+      {:error, reason} ->
+        {:error, Error.new(:execution_error, "Workflow execution failed", reason)}
     end
   end
 
@@ -137,9 +140,11 @@ defmodule Jido.Runner.Simple do
       {:ok, updated_agent, server_directives} ->
         {:ok, updated_agent, server_directives}
 
+      {:error, %Error{} = error} ->
+        {:error, error}
+
       {:error, reason} ->
-        {:error,
-         %Error{type: :validation_error, message: "Invalid directive", details: %{reason: reason}}}
+        {:error, Error.new(:validation_error, "Invalid directive", %{reason: reason})}
     end
   end
 

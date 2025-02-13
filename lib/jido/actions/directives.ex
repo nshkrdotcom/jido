@@ -22,6 +22,7 @@ defmodule Jido.Actions.Directives do
         params: [type: :map, default: %{}]
       ]
 
+    @spec run(map(), map()) :: {:ok, map(), Jido.Agent.Directive.Enqueue.t()}
     def run(%{action: action} = input, context \\ %{}) do
       params = Map.get(input, :params, %{})
       opts = Map.get(input, :opts, [])
@@ -46,6 +47,7 @@ defmodule Jido.Actions.Directives do
         action_module: [type: :atom, required: true]
       ]
 
+    @spec run(map(), map()) :: {:ok, map(), Jido.Agent.Directive.RegisterAction.t()}
     def run(%{action_module: action_module}, _context) do
       directive = %Jido.Agent.Directive.RegisterAction{
         action_module: action_module
@@ -64,6 +66,9 @@ defmodule Jido.Actions.Directives do
         action_module: [type: :atom, required: true]
       ]
 
+    @spec run(map(), map()) ::
+            {:ok, map(), Jido.Agent.Directive.DeregisterAction.t()}
+            | {:error, :cannot_deregister_self}
     def run(%{action_module: action_module}, _context) do
       # Prevent deregistering this module
       if action_module == __MODULE__ do
@@ -88,8 +93,7 @@ defmodule Jido.Actions.Directives do
         args: [type: :any, required: true, doc: "Arguments to pass to the module"]
       ]
 
-    @spec run(map(), map()) ::
-            {:ok, map(), Jido.Agent.Directive.Spawn.t()} | {:error, term()}
+    @spec run(map(), map()) :: {:ok, map(), Jido.Agent.Directive.Spawn.t()} | {:error, term()}
     def run(%{module: module, args: args}, _ctx) do
       directive = %Jido.Agent.Directive.Spawn{
         module: module,
@@ -109,8 +113,7 @@ defmodule Jido.Actions.Directives do
         pid: [type: :pid, required: true, doc: "PID of process to terminate"]
       ]
 
-    @spec run(map(), map()) ::
-            {:ok, map(), Jido.Agent.Directive.Kill.t()} | {:error, term()}
+    @spec run(map(), map()) :: {:ok, map(), Jido.Agent.Directive.Kill.t()} | {:error, term()}
     def run(%{pid: pid}, _ctx) do
       directive = %Jido.Agent.Directive.Kill{pid: pid}
       {:ok, %{}, directive}

@@ -139,9 +139,14 @@ defmodule Jido.Agent do
   * `agent_result()` - `{:ok, t()} | {:error, term()}`
   """
   use TypedStruct
-  alias Jido.Error
-  alias Jido.Instruction
+  use Private
+  use ExDbug, enabled: false
+
+  alias Jido.{Error, Signal, Instruction}
+  alias Jido.Agent.Directive
   alias Jido.Agent.Server.Signal, as: ServerSignal
+  alias Jido.Agent.Server.State, as: ServerState
+
   require OK
 
   @type instruction :: Instruction.t() | module() | {module(), map()}
@@ -613,12 +618,12 @@ defmodule Jido.Agent do
 
           def set(%_{} = agent, _attrs, _opts) do
             Error.validation_error(
-              "Invalid agent type. Expected #{agent.__struct__}, got #{__MODULE__}"
+              "Invalid agent type. Expected #{inspect(agent.__struct__)}, got #{inspect(__MODULE__)}"
             )
             |> OK.failure()
           end
 
-          def set(server, attrs, opts) do
+          def set(server, attrs, opts) when not is_struct(server) do
             with {:ok, pid} <- Jido.resolve_pid(server),
                  signal <- ServerSignal.cmd_signal(:set, server, attrs, opts) do
               GenServer.call(pid, signal)

@@ -13,6 +13,7 @@ defmodule Jido.Agent.Server.Runtime do
   alias Jido.Agent.Server.Signal, as: ServerSignal
   alias Jido.Agent.Server.Output, as: ServerOutput
   alias Jido.Agent.Server.Directive, as: ServerDirective
+  alias Jido.Agent.Directive
 
   @doc """
   Process a signal in a unified way, handling both synchronous and asynchronous signals.
@@ -135,9 +136,8 @@ defmodule Jido.Agent.Server.Runtime do
     defp do_agent_run(%ServerState{agent: agent} = state, opts) do
       is_empty =
         case agent.pending_instructions do
-          [] -> true
-          queue when is_tuple(queue) -> :queue.is_empty(queue)
-          _ -> false
+          nil -> true
+          queue -> :queue.is_empty(queue)
         end
 
       case is_empty do
@@ -267,20 +267,24 @@ defmodule Jido.Agent.Server.Runtime do
       end
     end
 
-    defp route_signal(%ServerState{router: nil}, %Signal{}), do: {:error, :no_router}
+    defp route_signal(%ServerState{router: router} = state, %Signal{} = signal) do
+      case router do
+        nil ->
+          {:error, :no_router}
 
-    defp route_signal(%ServerState{} = state, %Signal{} = signal) do
-      case ServerRouter.route(state, signal) do
-        {:ok, instructions} ->
-          {:ok, instructions}
+        _ ->
+          case ServerRouter.route(state, signal) do
+            {:ok, instructions} ->
+              {:ok, instructions}
 
-        {:error, reason} ->
-          runtime_error(state, "Error routing signal", reason)
-          {:error, reason}
+            {:error, reason} ->
+              runtime_error(state, "Error routing signal", reason)
+              {:error, reason}
+          end
       end
     end
 
-    defp route_signal(%ServerState{}, _invalid), do: {:error, :invalid_signal}
+    defp route_signal(_state, _invalid), do: {:error, :invalid_signal}
 
     defp apply_signal_to_first_instruction(%Signal{} = signal, [%Instruction{} = first | rest]) do
       dbug("Applying signal to first instruction", instruction: first)

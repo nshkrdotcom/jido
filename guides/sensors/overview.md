@@ -286,10 +286,10 @@ end
 
 ## See Also
 
-- [Cron Sensor Guide](cron.html)
-- [Heartbeat Sensor Guide](heartbeat.html)
-- [Testing Sensors](testing.html)
-- [Signal System Overview](../signals/overview.html)
+- [Cron & Heartbeat Sensors](cron-heartbeat.md)
+- [Signal Overview](../signals/overview.livemd)
+- [Signal Testing](../signals/testing.md)
+- [Signal Dispatching](../signals/dispatching.md)
 
 For API details, see:
 

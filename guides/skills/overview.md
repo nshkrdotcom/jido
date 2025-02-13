@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Skills are the fundamental building blocks of agent capabilities in Jido. Think of Skills as composable "feature packs" that give agents new abilities. Just as a human might learn new skills like "cooking" or "programming", Jido agents gain new capabilities through Skills.
+Skills are a module to group a set of Routing rules, Sensors and Actions into a Plugin of functionality for a Jido Agent. As your agents grow and get more sophisticated, the intent is to support just adding a "Chat Skill" or "Database Skill" to an Agent that accepts a few customization parameters - empowering your agent with a useful set of functionality very easily.
 
 A Skill encapsulates:
 
@@ -16,7 +16,7 @@ A Skill encapsulates:
 
 ### 1. Skill Structure
 
-A Skill is defined by several key components:
+A Skill is defined by creating a module that uses the `use Jido.Skill` macro.
 
 ```elixir
 defmodule MyApp.WeatherMonitorSkill do
@@ -26,11 +26,14 @@ defmodule MyApp.WeatherMonitorSkill do
     category: "monitoring",
     tags: ["weather", "alerts"],
     vsn: "1.0.0",
+    # An optional schema key to namespace the skill's state
     schema_key: :weather,
+    # An optional list of signals the skill will handle
     signals: [
       input: ["weather.data.received", "weather.alert.*"],
       output: ["weather.alert.generated"]
     ],
+    # An optional configuration schema for the skill
     config: [
       weather_api: [
         type: :map,
@@ -153,7 +156,7 @@ def initial_state do
   }
 end
 
-# Child processes to supervise
+# Child processes to supervise, such as custom Sensors
 def child_spec(config) do
   [
     {DataProcessor.BatchWorker,
@@ -275,7 +278,7 @@ Some common types of shared skills:
 
 ## See Also
 
-- [Testing Skills](testing.md) - Comprehensive testing guide
-- [Signal Router](../signals/routing.md) - Signal routing details
-- [State Management](../agents/state.md) - Agent state management
-- [Process Supervision](../agents/processes.md) - Process management
+- [Testing Skills](testing.md)
+- [Signal Router](../signals/routing.md)
+- [Agent State](../agents/stateful.md)
+- [Child Processes](../agents/child-processes.md)

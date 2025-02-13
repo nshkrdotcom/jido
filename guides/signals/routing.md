@@ -410,6 +410,7 @@ The trie structure enables efficient path matching while maintaining proper exec
 
 ## See Also
 
-- `Jido.Signal` - Signal structure and validation
-- `Jido.Instruction` - Handler instruction format
-- `Jido.Error` - Error types and handling
+- [Signal Overview](overview.livemd)
+- [Signal Dispatching](dispatching.md)
+- [Signal Bus](bus.md)
+- [Testing Signals](testing.md)

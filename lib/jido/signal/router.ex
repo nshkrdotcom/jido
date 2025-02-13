@@ -154,7 +154,7 @@ defmodule Jido.Signal.Router do
           | {String.t(), pid()}
 
   typedstruct module: HandlerInfo do
-    @moduledoc false
+    @moduledoc "Router Helper struct to store handler metadata"
     @default_priority 0
     field(:instruction, Instruction.t(), enforce: true)
     field(:priority, Router.priority(), default: @default_priority)
@@ -162,7 +162,7 @@ defmodule Jido.Signal.Router do
   end
 
   typedstruct module: PatternMatch do
-    @moduledoc false
+    @moduledoc "Router Helper struct to store pattern match metadata"
     @default_priority 0
     field(:match, Router.match(), enforce: true)
     field(:instruction, Instruction.t(), enforce: true)
@@ -170,26 +170,26 @@ defmodule Jido.Signal.Router do
   end
 
   typedstruct module: NodeHandlers do
-    @moduledoc false
+    @moduledoc "Router Helper struct to store node handler metadata"
     field(:handlers, [HandlerInfo.t()], default: [])
     field(:matchers, [PatternMatch.t()], default: [])
   end
 
   typedstruct module: WildcardHandlers do
-    @moduledoc false
+    @moduledoc "Router Helper struct to store wildcard handler metadata"
     field(:type, Router.wildcard_type(), enforce: true)
     field(:handlers, NodeHandlers.t(), enforce: true)
   end
 
   typedstruct module: TrieNode do
-    @moduledoc false
+    @moduledoc "Router Helper struct to store trie node metadata"
     field(:segments, %{String.t() => TrieNode.t()}, default: %{})
     field(:wildcards, [WildcardHandlers.t()], default: [])
     field(:handlers, NodeHandlers.t())
   end
 
   typedstruct module: Route do
-    @moduledoc false
+    @moduledoc "Router Helper struct to store route metadata"
     @default_priority 0
     field(:path, String.t(), enforce: true)
     field(:instruction, Instruction.t(), enforce: true)
@@ -198,7 +198,7 @@ defmodule Jido.Signal.Router do
   end
 
   typedstruct module: Router do
-    @moduledoc false
+    @moduledoc "Router Helper struct to store router metadata"
     field(:trie, TrieNode.t(), default: %TrieNode{})
     field(:route_count, non_neg_integer(), default: 0)
   end
@@ -477,9 +477,10 @@ defmodule Jido.Signal.Router do
   - routes: A %Route{} struct or list of %Route{} structs to validate
 
   ## Returns
-  - {:ok, %Route{}} - Single validated Route struct
-  - {:ok, [%Route{}]} - List of validated Route structs
-  - {:error, term()} - If validation fails
+
+  * `{:ok, %Route{}}` - Single validated Route struct
+  * `{:ok, [%Route{}]}` - List of validated Route structs
+  * `{:error, term()}` - If validation fails
   """
   @spec validate(Route.t() | [Route.t()]) :: {:ok, Route.t() | [Route.t()]} | {:error, term()}
   def validate(%Route{} = route) do
@@ -528,8 +529,9 @@ defmodule Jido.Signal.Router do
   - signal: The signal to route
 
   ## Returns
-  - {:ok, [instruction]} - List of matching instructions, may be empty if no matches
-  - {:error, term()} - Other errors that occurred during routing
+
+  * `{:ok, [instruction]}` - List of matching instructions, may be empty if no matches
+  * `{:error, term()}` - Other errors that occurred during routing
 
   ## Examples
 

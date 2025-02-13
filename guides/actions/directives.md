@@ -242,6 +242,6 @@ end
 
 ## See Also
 
-- [Agent State Management](agents/state.md)
-- [Action Development](actions/overview.md)
-- [Testing Directives](testing/directives.md)
+- [Agent State Management](../agents/stateful.md)
+- [Action Development](overview.md)
+- [Testing Actions](testing.md)

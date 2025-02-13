@@ -356,5 +356,12 @@ config :my_app, MyApp.TaskAgent,
 
 - [Actions and Workflows](../actions/overview.md)
 - [Signal Routing](../signals/overview.md)
-- [Advanced Patterns](../practices/advanced-patterns.md)
-- [Error Handling](../practices/error-handling.md)
+
+## See Also
+
+- [Agent State Management](stateful.md)
+- [Agent Output](output.md)
+- [Signal Overview](../signals/overview.livemd)
+- [Testing Guide](../signals/testing.md)
+- [Child Processes](child-processes.md)
+- [Directives](directives.md)

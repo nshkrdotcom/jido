@@ -29,7 +29,7 @@ Each Instruction contains:
 
 Jido supports multiple formats for creating instructions, offering flexibility while maintaining type safety:
 
-### 1. Full Struct (Most Explicit)
+### 1. Full Instruction Struct
 
 ```elixir
 %Instruction{
@@ -39,13 +39,13 @@ Jido supports multiple formats for creating instructions, offering flexibility w
 }
 ```
 
-### 2. Action Module Only (Simplest)
+### 2. Action Module Only
 
 ```elixir
 MyApp.Actions.ProcessOrder
 ```
 
-### 3. Action With Parameters (Common)
+### 3. Action With Parameters
 
 ```elixir
 {MyApp.Actions.ProcessOrder, %{order_id: "123"}}
@@ -59,6 +59,19 @@ Instruction.new!(%{
   params: %{order_id: "123"},
   context: %{tenant_id: "456"}
 })
+```
+
+### 5. Lists of any of the above
+
+```elixir
+[
+  MyApp.Actions.ProcessOrder,
+  %Instruction{
+    action: MyApp.Actions.ProcessOrder,
+    params: %{order_id: "123"},
+    context: %{tenant_id: "456"}
+  }
+]
 ```
 
 ## Working with Instructions
@@ -86,12 +99,12 @@ Convert various input formats to standard instruction structs:
 Ensure instructions use allowed actions:
 
 ```elixir
-allowed_actions = [
+agent_allowed_actions = [
   MyApp.Actions.ValidateOrder,
   MyApp.Actions.ProcessOrder
 ]
 
-:ok = Instruction.validate_allowed_actions(instructions, allowed_actions)
+:ok = Instruction.validate_allowed_actions(instructions, agent_allowed_actions)
 ```
 
 ## Common Patterns

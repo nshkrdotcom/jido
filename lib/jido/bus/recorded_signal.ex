@@ -1,5 +1,5 @@
 defmodule Jido.Bus.RecordedSignal do
-  @moduledoc false
+  @moduledoc "RecordedSignal Helper struct to store recorded signal metadata"
 
   alias Jido.Bus.RecordedSignal
 

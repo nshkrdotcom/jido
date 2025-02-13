@@ -388,7 +388,7 @@ end
 
 ## See Also
 
-- [Signal Testing Guide](../signals/testing.md) - Testing signal handling
-- [Action Testing](../actions/testing.md) - Testing individual actions
-- [Agent Testing](../agents/testing.md) - Testing agent integration
-- [Process Testing](../agents/process_testing.md) - Testing process management
+- [Signal Testing](../signals/testing.md)
+- [Agent Testing](../signals/testing.md)
+- [Action Testing](../actions/testing.md)
+- [Child Processes](../agents/child-processes.md)

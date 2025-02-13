@@ -118,8 +118,7 @@ defmodule Jido.MixProject do
           "guides/agents/routing.md",
           "guides/agents/sensors.md",
           "guides/agents/callbacks.md",
-          "guides/agents/child-processes.md",
-          "guides/agents/testing.md"
+          "guides/agents/child-processes.md"
         ],
         Skills: [
           "guides/skills/overview.md",
@@ -144,10 +143,10 @@ defmodule Jido.MixProject do
         {"LICENSE.md", title: "Apache 2.0 License"},
 
         # Examples
-        {"guides/examples/your-first-agent.livemd", title: "Your First Agent"},
+        {"guides/examples/hello-world.livemd", title: "Hello World"},
         {"guides/examples/tool-use.livemd", title: "Agents with Tools"},
-        {"guides/examples/chain-of-thought.livemd", title: "Chain of Thought Agents"},
         {"guides/examples/think-plan-act.livemd", title: "Think-Plan-Act"},
+        {"guides/examples/chain-of-thought.livemd", title: "Chain of Thought"},
         {"guides/examples/multi-agent.livemd", title: "Multi-Agent Systems"},
 
         # Signals
@@ -182,7 +181,6 @@ defmodule Jido.MixProject do
         {"guides/agents/sensors.md", title: "Sensors"},
         {"guides/agents/callbacks.md", title: "Callbacks"},
         {"guides/agents/child-processes.md", title: "Child Processes"},
-        {"guides/agents/testing.md", title: "Testing"},
 
         # Skills
         {"guides/skills/overview.md", title: "Overview"},
@@ -226,13 +224,24 @@ defmodule Jido.MixProject do
         ],
         "Signals: Core": [
           Jido.Signal,
-          Jido.Signal.Router
+          Jido.Signal.Router,
+          Jido.Signal.Router.Instruction,
+          Jido.Signal.Router.Match,
+          Jido.Signal.Router.NodeHandlers,
+          Jido.Signal.Router.PatternMatch,
+          Jido.Signal.Router.Route,
+          Jido.Signal.Router.TrieNode,
+          Jido.Signal.Router.HandlerInfo,
+          Jido.Signal.Router.Router,
+          Jido.Signal.Router.WildcardHandlers
         ],
         "Signals: Bus": [
           Jido.Bus,
           Jido.Bus.Adapter,
           Jido.Bus.Adapters.InMemory,
-          Jido.Bus.Adapters.PubSub
+          Jido.Bus.Adapters.PubSub,
+          Jido.Bus.Snapshot,
+          Jido.Bus.RecordedSignal
         ],
         "Signals: Dispatch": [
           Jido.Signal.Dispatch,
@@ -266,6 +275,7 @@ defmodule Jido.MixProject do
           Jido.Serialization.ModuleNameTypeProvider,
           Jido.Serialization.TypeProvider,
           Jido.Supervisor,
+          Jido.Agent.Server.State,
           Jido.Util
         ]
       ]

@@ -6,7 +6,7 @@ The Jido `Workflow` module provides a robust execution engine for running Action
 
 ## Basic Usage
 
-The `Workflow.run/4` function can accept either an Action module or an Instruction struct. Instructions provide a way to encapsulate the complete execution context for an Action. See the [Instructions guide](instructions.md) for more details on working with Instructions.
+The `Workflow.run/4` function can accept either Action parameters or an Instruction struct. Instructions provide a way to encapsulate the complete execution context for an Action. See the [Instructions guide](instructions.md) for more details on working with Instructions.
 
 ```elixir
 # Using an Action module directly
@@ -123,18 +123,22 @@ Async Actions run under a Task Supervisor, providing:
 - Timeout handling
 - Cancellation support
 
-Your application must start the supervisor:
+The Jido framework starts a Task Supervisor by default. You can customize this by setting the `task_supervisor` option:
 
 ```elixir
 # In your application.ex
 children = [
-  {Task.Supervisor, name: Jido.Workflow.TaskSupervisor}
+  {Task.Supervisor, name: MyApp.TaskSupervisor}
 ]
+
+# Configure Jido to use your supervisor
+config :jido,
+  task_supervisor: MyApp.TaskSupervisor
 ```
 
 ## Error Handling
 
-Actions use the `OK` monad for consistent error handling:
+Actions should use standard `{:ok, result}` and `{:error, error}` tuples for consistent error handling:
 
 ```elixir
 case Workflow.run(MyAction, params) do

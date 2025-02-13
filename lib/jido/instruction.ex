@@ -29,7 +29,7 @@ defmodule Jido.Instruction do
 
   Instructions support multiple creation formats for convenience:
 
-  ### 1. Full Struct (Most Explicit)
+  ### 1. Full Struct
   ```elixir
   %Instruction{
     action: MyApp.Actions.ProcessOrder,
@@ -38,12 +38,12 @@ defmodule Jido.Instruction do
   }
   ```
 
-  ### 2. Action Module Only (Simplest)
+  ### 2. Action Module Only
   ```elixir
   MyApp.Actions.ProcessOrder
   ```
 
-  ### 3. Action With Parameters (Common)
+  ### 3. Action With Parameters
   ```elixir
   {MyApp.Actions.ProcessOrder, %{order_id: "123"}}
   ```

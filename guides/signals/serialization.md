@@ -197,9 +197,9 @@ end
 
 ## See Also
 
-- [Signal Overview](signals/overview.md)
-- [Type System](core/types.md)
-- [Testing Guide](guides/testing.md)
+- [Signal Overview](overview.livemd)
+- [Signal Testing](testing.md)
+- [Signal Dispatching](dispatching.md)
 
 ## Attribution
 

@@ -100,6 +100,8 @@ defmodule Jido.Agent do
   Each Agent module defines its own struct type and behavior. Agent functions must be called
   on matching agent structs:
 
+
+  ```elixir
     # Correct usage:
     agent = MyAgent.new()
     {:ok, agent} = MyAgent.set(agent, attrs)
@@ -107,6 +109,7 @@ defmodule Jido.Agent do
     # Incorrect usage:
     agent = MyAgent.new()
     {:ok, agent} = OtherAgent.set(agent, attrs)  # Will fail - type mismatch
+  ```
 
   ## Runner Architecture
 

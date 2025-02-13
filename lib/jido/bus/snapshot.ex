@@ -1,5 +1,5 @@
 defmodule Jido.Bus.Snapshot do
-  @moduledoc false
+  @moduledoc "Snapshot Helper struct to store bus snapshot metadata"
 
   @type t :: %Jido.Bus.Snapshot{
           source_id: String.t(),

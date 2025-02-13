@@ -1,275 +1,311 @@
-# Agent Directives
+# Agent Directives Guide
 
-_Part of the "Agents" section in the documentation._
+## Overview
 
-This guide explains how agents handle directives, which are special instructions that modify agent behavior or state. It covers built-in directives, their usage patterns, and how to implement custom directives for specialized agent behaviors.
+Directives provide a type-safe mechanism for modifying agent behavior and state at runtime. They act as discrete, immutable instructions that tell agents how to change their state or behavior. This guide covers directive types, usage patterns, and state management considerations.
 
-In our previous guides, we explored how Agents provide stateful wrappers around Actions and how Signals enable real-time monitoring. Now, let's discover how Directives enable agents to modify their own behavior and capabilities at runtime.
+## Core Concepts
 
-## Understanding Directives
+Directives in Jido fall into two main categories:
 
-Directives are special instructions that allow agents to modify their own state and capabilities. Think of them as meta-actions that let agents:
+1. **Agent Directives**: Modify the core agent struct and its internal state
 
-1. Queue up new actions to execute (Enqueue)
-2. Learn new capabilities (RegisterAction)
-3. Remove capabilities (DeregisterAction)
+   - Queueing instructions
+   - Managing action registrations
+   - State transitions
 
-This self-modification ability is crucial for building adaptive agents that can:
+2. **Server Directives**: Control server behavior in agent processes
+   - Process spawning and termination
+   - Router management
+   - Event subscription
 
-- Respond to new situations by queueing appropriate actions
-- Learn new behaviors by registering actions
-- Optimize themselves by removing unused capabilities
-- Build complex workflows dynamically
+## Agent Directives
 
-Let's see how to implement these patterns.
+### Enqueue Directive
 
-## Creating Your First Directive-Based Agent
-
-We'll create an agent that can adapt its behavior by learning new arithmetic operations. This will demonstrate how directives enable runtime evolution of agent capabilities.
+The most common directive type, used to add new instructions to an agent's pending queue:
 
 ```elixir
-defmodule MyApp.AdaptiveCalculator do
+%Directive.Enqueue{
+  action: :process_data,
+  params: %{file: "data.csv"},
+  context: %{user_id: "123"},
+  opts: [retry: true]
+}
+```
+
+### RegisterAction Directive
+
+Registers a new action module with the agent:
+
+```elixir
+%Directive.RegisterAction{
+  action_module: MyApp.Actions.ProcessData
+}
+```
+
+### DeregisterAction Directive
+
+Removes an action module from the agent:
+
+```elixir
+%Directive.DeregisterAction{
+  action_module: MyApp.Actions.ProcessData
+}
+```
+
+## Server Directives
+
+### Spawn Directive
+
+Spawns a child process under the agent's supervisor:
+
+```elixir
+%Directive.Spawn{
+  module: MyWorker,
+  args: [id: 1]
+}
+```
+
+### Kill Directive
+
+Terminates a specific child process:
+
+```elixir
+%Directive.Kill{
+  pid: worker_pid
+}
+```
+
+## Returning Directives from Actions
+
+Actions can return directives in several ways:
+
+### 1. Return a Single Directive
+
+```elixir
+defmodule MyAction do
+  use Jido.Action
+
+  def run(_params, _context) do
+    directive = %Directive.Enqueue{
+      action: :next_step,
+      params: %{value: 42}
+    }
+
+    {:ok, %{completed: true}, directive}
+  end
+end
+```
+
+### 2. Return Multiple Directives
+
+```elixir
+defmodule ChainedAction do
+  use Jido.Action
+
+  def run(_params, _context) do
+    directives = [
+      %Directive.Enqueue{action: :validate_data},
+      %Directive.Enqueue{action: :process_data},
+      %Directive.Enqueue{action: :save_results}
+    ]
+
+    {:ok, %{chain_started: true}, directives}
+  end
+end
+```
+
+### 3. Return Instructions Directly
+
+Instructions are automatically converted to Enqueue directives:
+
+```elixir
+defmodule InstructionAction do
+  use Jido.Action
+
+  def run(_params, _context) do
+    instruction = %Instruction{
+      action: :process_data,
+      params: %{file: "data.csv"}
+    }
+
+    {:ok, %{setup_complete: true}, instruction}
+  end
+end
+```
+
+## State Management Considerations
+
+### Stateless Agents
+
+Stateless agents ([see Stateless Agents Guide](agents/stateless.md)) handle directives differently:
+
+- Will enqueue instructions but not execute them
+- Return the full queue for external processing
+- Ignore state-modifying directives
+- Maintain immutability guarantees
+
+Example of stateless agent behavior:
+
+```elixir
+defmodule StatelessAgent do
   use Jido.Agent,
-    name: "adaptive_calculator",
-    description: "A calculator that can learn new operations",
-    actions: [
-      # Core actions for self-modification
-      Jido.Actions.Directives.EnqueueAction,
-      Jido.Actions.Directives.RegisterAction,
-      Jido.Actions.Directives.DeregisterAction,
+    name: "stateless_example",
+    state_type: :stateless
 
-      # Initial arithmetic capabilities
-      MyApp.Actions.Add,
-      MyApp.Actions.Subtract
-    ],
-    schema: [
-      value: [type: :float, default: 0.0],
-      operations_used: [type: {:list, :atom}, default: []],
-      last_operation: [type: {:or, [:atom, nil]}, default: nil]
-    ]
-
-  # Optional callbacks for tracking operations
-  def on_after_run(agent, result) do
-    case result do
-      %{status: :ok, action: action} ->
-        operations = [action | agent.state.operations_used] |> Enum.uniq()
-        {:ok, %{agent | state: Map.put(agent.state, :operations_used, operations)}}
-      _ ->
-        {:ok, agent}
-    end
+  def run(_params, _context) do
+    # Instructions are queued but not executed
+    directive = %Directive.Enqueue{action: :process}
+    {:ok, %{queued: true}, directive}
   end
 end
 ```
 
-Now let's implement some basic arithmetic actions that can work with our calculator:
+### Stateful Agents
+
+Stateful agents ([see Stateful Agents Guide](agents/stateful.md)) provide full directive support:
+
+- Execute queued instructions
+- Apply state modifications
+- Handle all directive types
+- Maintain execution context
+
+Example of stateful agent behavior:
 
 ```elixir
-defmodule MyApp.Actions.Add do
-  use Jido.Action,
-    name: "add",
-    description: "Adds a number to the current value",
-    schema: [
-      value: [type: :float, required: true],
-      amount: [type: :float, required: true]
+defmodule StatefulAgent do
+  use Jido.Agent,
+    name: "stateful_example",
+    state_type: :stateful
+
+  def run(_params, _context) do
+    # Instructions are queued and executed
+    directives = [
+      %Directive.Enqueue{action: :validate},
+      %Directive.Enqueue{action: :process},
+      %Directive.RegisterAction{action_module: NewAction}
     ]
-
-  def run(%{value: current, amount: amount}, _context) do
-    {:ok, %{value: current + amount}}
-  end
-end
-
-defmodule MyApp.Actions.Multiply do
-  use Jido.Action,
-    name: "multiply",
-    description: "Multiplies the current value by an amount",
-    schema: [
-      value: [type: :float, required: true],
-      amount: [type: :float, required: true]
-    ]
-
-  def run(%{value: current, amount: amount}, _context) do
-    {:ok, %{value: current * amount}}
-  end
-end
-
-defmodule MyApp.Actions.Power do
-  use Jido.Action,
-    name: "power",
-    description: "Raises the current value to a power",
-    schema: [
-      value: [type: :float, required: true],
-      exponent: [type: :float, required: true]
-    ]
-
-  def run(%{value: current, exponent: exp}, _context) do
-    {:ok, %{value: :math.pow(current, exp)}}
+    {:ok, %{processing: true}, directives}
   end
 end
 ```
 
-## Working with Directives
+## Directive Processing
 
-Let's explore how our calculator can use directives to evolve its capabilities:
+When an action returns a directive, it goes through several stages:
 
-### 1. Queueing New Operations (Enqueue)
+1. **Validation**: The directive structure and content are validated
+2. **Classification**: Directives are split into agent and server types
+3. **Application**: Each directive is applied in order
+4. **State Update**: The agent/server state is updated accordingly
 
-The Enqueue lets an agent add new instructions to its pending queue. This is useful for building dynamic workflows:
+### Validation Rules
+
+Each directive type has specific validation rules:
 
 ```elixir
-# Create our calculator
-calculator = MyApp.AdaptiveCalculator.new()
+# Enqueue requires a valid action atom
+validate_directive(%Enqueue{action: nil})
+  # => {:error, :invalid_action}
 
-# Start with a simple addition
-{:ok, calculator} = MyApp.AdaptiveCalculator.set(calculator, %{value: 5})
-
-# Queue up a sequence of operations using EnqueueAction
-{:ok, calculator} = MyApp.AdaptiveCalculator.cmd(
-  calculator,
-  [
-    # Utilize a directive to queue up an instruction rather than planning it directly
-    {Jido.Actions.Directives.EnqueueAction, %{
-      action: MyApp.Actions.Add,
-      params: %{amount: 10}
-    }},
-    {Jido.Actions.Directives.EnqueueAction, %{
-      action: MyApp.Actions.Add,
-      params: %{amount: 20}
-    }}
-  ]
-)
-
-# Final value should be 35 (5 + 10 + 20)
-calculator.state.value #=> 35.0
+# RegisterAction requires a valid module
+validate_directive(%RegisterAction{action_module: MyAction})
+  # => :ok
 ```
 
-### 2. Learning New Operations (RegisterAction)
+### Error Handling
 
-The RegisterAction lets an agent learn new capabilities at runtime:
-
-```elixir
-# Our calculator doesn't know how to multiply yet
-{:error, _} = MyApp.AdaptiveCalculator.plan(calculator, MyApp.Actions.Multiply)
-
-# Teach it multiplication
-{:ok, calculator} = MyApp.AdaptiveCalculator.cmd(
-  calculator,
-  {Jido.Actions.Directives.RegisterAction, %{
-    action_module: MyApp.Actions.Multiply
-  }}
-)
-
-# Now we can multiply!
-{:ok, calculator} = MyApp.AdaptiveCalculator.cmd(
-  calculator,
-  {MyApp.Actions.Multiply, %{amount: 2}}
-)
-
-calculator.state.value #=> 70.0  # (35 * 2)
-```
-
-### 3. Removing Operations (DeregisterAction)
-
-The DeregisterAction lets an agent remove capabilities it no longer needs:
+Directive application uses tagged tuples for consistent error handling:
 
 ```elixir
-# Remove multiplication if we don't need it anymore
-{:ok, calculator} = MyApp.AdaptiveCalculator.cmd(
-  calculator,
-  {Jido.Actions.Directives.DeregisterAction, %{
-    action_module: MyApp.Actions.Multiply
-  }}
-)
+case Directive.apply_directives(agent, directives) do
+  {:ok, updated_agent, server_directives} ->
+    # Handle success
 
-# Trying to multiply now will fail
-{:error, _} = MyApp.AdaptiveCalculator.plan(calculator, MyApp.Actions.Multiply)
-```
-
-## Building Complex Self-Modifying Workflows
-
-Directives become really powerful when combined into workflows that let agents adapt their behavior based on conditions. Here's an example of a calculator that learns more advanced operations when needed:
-
-```elixir
-defmodule MyApp.Actions.LearnAdvancedMath do
-  use Jido.Action,
-    name: "learn_advanced_math",
-    description: "Teaches the calculator advanced operations",
-    schema: [
-      value: [type: :float, required: true]
-    ]
-
-  def run(%{value: value}, _context) do
-    # First register the power operation
-    power_directive = %Jido.Agent.Directive.RegisterAction{
-      action_module: MyApp.Actions.Power
-    }
-
-    # Then queue up a calculation using it
-    calculate_directive = %Jido.Agent.Directive.Enqueue{
-      action: MyApp.Actions.Power,
-      params: %{value: value, exponent: 2}
-    }
-
-    # Return both directives to be applied in order
-    {:ok, [power_directive, calculate_directive]}
-  end
+  {:error, reason} ->
+    # Handle error
 end
-
-# Use our advanced learning action
-calculator = MyApp.AdaptiveCalculator.new()
-{:ok, calculator} = MyApp.AdaptiveCalculator.set(calculator, %{value: 5})
-
-# Learn and apply advanced math
-{:ok, calculator} = MyApp.AdaptiveCalculator.cmd(
-  calculator,
-  [
-    {MyApp.Actions.LearnAdvancedMath, %{}},  # This will register Power and queue its use
-    {Jido.Actions.Directives.EnqueueAction, %{  # Then we'll queue another operation
-      action: MyApp.Actions.Add,
-      params: %{amount: 10}
-    }}
-  ]
-)
-
-# Final value: 5^2 + 10 = 35
-calculator.state.value #=> 35.0
 ```
 
 ## Best Practices
 
-When working with directives, keep these principles in mind:
+1. **Atomic Changes**
 
-1. **Capability Management**
+   - Return related directives together
+   - Keep directive changes focused and minimal
 
-   - Only register actions the agent actually needs
-   - Consider deregistering unused actions to keep the agent focused
-   - Track which operations are most frequently used
+2. **Validation**
 
-2. **Directive Chains**
+   - Always validate input parameters
+   - Use strict typing for directive fields
 
-   - Order directives carefully - registration must happen before usage
-   - Consider using composite actions for complex directive sequences
-   - Validate directive success before proceeding
+3. **Error Handling**
 
-3. **State Evolution**
-
-   - Keep track of how agent capabilities change over time
-   - Consider implementing rollback mechanisms for failed directive chains
-   - Use callbacks to monitor and log capability changes
+   - Implement compensation logic for failures
+   - Handle partial directive application
 
 4. **Testing**
-   - Test both successful and failed directive applications
-   - Verify capability addition and removal
-   - Test complex directive chains
-   - Check state consistency after directive application
+   - Test directive validation
+   - Verify state changes
+   - Check error conditions
 
-## Next Steps
+## Common Patterns
 
-Now that you understand directives, you can explore:
+### Sequential Operations
 
-- More complex self-modification patterns
-- Conditional capability loading
-- Dynamic workflow construction
-- State-based capability management
-- Multi-agent capability sharing
+Chain multiple operations using Enqueue directives:
 
-Remember: Directives give agents the power to evolve and adapt. Use them thoughtfully to create agents that can grow and optimize themselves while maintaining stability and predictability.
+```elixir
+directives = [
+  %Directive.Enqueue{action: :validate_input},
+  %Directive.Enqueue{action: :process_data},
+  %Directive.Enqueue{action: :save_results}
+]
+```
+
+### Dynamic Action Registration
+
+Register actions based on runtime conditions:
+
+```elixir
+def run(%{feature_enabled: true} = _params, _context) do
+  directive = %Directive.RegisterAction{
+    action_module: MyApp.Actions.FeatureAction
+  }
+  {:ok, %{}, directive}
+end
+```
+
+### Worker Management
+
+Manage worker processes with spawn/kill directives:
+
+```elixir
+def run(%{worker_count: count} = _params, _context) do
+  directives = for i <- 1..count do
+    %Directive.Spawn{
+      module: MyApp.Worker,
+      args: [id: i]
+    }
+  end
+
+  {:ok, %{}, directives}
+end
+```
+
+## Future Considerations
+
+The directive system is designed for extensibility. Future directives might include:
+
+- Mode changes
+- Verbosity controls
+- Router management
+- Skill management
+- Dispatcher configuration
+
+## See Also
+
+- [Agent State Management](../agents/stateful.md)
+- [Action Development](overview.md)
+- [Testing Actions](testing.md)

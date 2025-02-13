@@ -41,7 +41,7 @@ defmodule Jido.Signal do
   - `jido_instructions`: List of instructions to execute (optional)
   - `jido_opts`: Processing options and flags (optional)
   - `jido_dispatch`: Routing and delivery configuration (optional)
-  - `jido_metadata`: Additional context and tracking data (optional)
+  - `jido_metadata`: Additional context and tracking data - primarily for internal use (optional)
 
   ## Creating Signals
 

@@ -121,7 +121,6 @@ defmodule Jido.Discovery do
     # end
   end
   ```
-  ```
 
   ## Cache Structure
 
@@ -149,39 +148,6 @@ defmodule Jido.Discovery do
   - `:description` - Filter by description (partial match)
   - `:category` - Filter by category (exact match)
   - `:tag` - Filter by tag (must have exact tag)
-
-  ## Common Patterns
-
-  ### 1. Component Lookup with Fallback
-  ```elixir
-  def find_action(slug, fallback \\ nil) do
-    case Discovery.get_action_by_slug(slug) do
-      %{module: module} -> {:ok, module}
-      nil -> {:ok, fallback}
-    end
-  end
-  ```
-
-  ### 2. Category-Based Component Loading
-  ```elixir
-  def load_monitoring_sensors do
-    Discovery.list_sensors(
-      category: :monitoring,
-      tag: :active
-    )
-  end
-  ```
-
-  ### 3. Paginated Search
-  ```elixir
-  def search_agents(term, page, per_page) do
-    Discovery.list_agents(
-      name: term,
-      offset: (page - 1) * per_page,
-      limit: per_page
-    )
-  end
-  ```
 
   ## Important Notes
 
@@ -588,8 +554,6 @@ defmodule Jido.Discovery do
   end
 
   @doc false
-  # Helper for testing use
-
   def __get_cache__, do: get_cache()
 
   # Private functions

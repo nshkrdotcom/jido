@@ -1,10 +1,14 @@
 defmodule JidoTest.TestStructs do
+  @moduledoc false
+
   defmodule TestStruct do
+    @moduledoc false
     @derive Jason.Encoder
     defstruct [:field1, :field2]
   end
 
   defmodule CustomDecodedStruct do
+    @moduledoc false
     @derive Jason.Encoder
     defstruct [:value]
   end

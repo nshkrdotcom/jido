@@ -1,10 +1,12 @@
 defmodule Jido.Bus.SnapshotTestCase do
+  @moduledoc false
   import JidoTest.SharedTestCase
 
   define_tests do
     alias Jido.Bus.Snapshot
 
     defmodule BankAccountOpened do
+      @moduledoc false
       @derive Jason.Encoder
       defstruct [:account_number, :initial_balance]
     end

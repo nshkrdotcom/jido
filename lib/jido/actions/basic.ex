@@ -159,7 +159,8 @@ defmodule Jido.Actions.Basic do
 
     @spec run(map(), map()) :: {:ok, map()}
     def run(%{value: value} = params, _ctx) do
-      IO.inspect(value)
+      # credo:disable-for-next-line Credo.Check.Warning.IoInspect
+      IO.inspect(value, label: "Inspect action output")
       {:ok, params}
     end
   end

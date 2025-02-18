@@ -1,5 +1,8 @@
 defmodule JidoTest.TestSkills do
+  @moduledoc false
+
   defmodule TestSkill do
+    @moduledoc false
     use Jido.Skill,
       name: "test_skill",
       description: "Test skill for callback testing",
@@ -21,6 +24,7 @@ defmodule JidoTest.TestSkills do
   end
 
   defmodule WeatherMonitorSkill do
+    @moduledoc false
     use Jido.Skill,
       name: "weather_monitor",
       description: "Extends agent with weather monitoring capabilities",
@@ -59,7 +63,9 @@ defmodule JidoTest.TestSkills do
 
     # Actions that this skill provides to the agent
     defmodule Actions do
+      @moduledoc false
       defmodule ProcessWeatherData do
+        @moduledoc false
         use Jido.Action,
           name: "process_weather_data",
           description: "Processes incoming weather data",
@@ -111,6 +117,7 @@ defmodule JidoTest.TestSkills do
       end
 
       defmodule GenerateWeatherAlert do
+        @moduledoc false
         use Jido.Action,
           name: "generate_weather_alert",
           schema: [
@@ -286,6 +293,7 @@ defmodule JidoTest.TestSkills do
   end
 
   defmodule MockSkill do
+    @moduledoc false
     def routes do
       [
         {:test_route, :test_handler}
@@ -302,6 +310,7 @@ defmodule JidoTest.TestSkills do
   end
 
   defmodule InvalidSkill do
+    @moduledoc false
     def routes do
       :not_a_list
     end

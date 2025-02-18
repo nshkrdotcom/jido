@@ -299,7 +299,7 @@ defmodule Jido.MixProject do
       # Jido Deps
       {:backoff, "~> 1.1"},
       {:deep_merge, "~> 1.0"},
-      {:elixir_uuid, "~> 1.2"},
+      # {:elixir_uuid, "~> 1.2"},
       {:jason, "~> 1.4"},
       {:nimble_options, "~> 1.1"},
       {:nimble_parsec, "~> 1.4"},
@@ -311,6 +311,7 @@ defmodule Jido.MixProject do
       {:typed_struct, "~> 0.3.0"},
       {:typed_struct_nimble_options, "~> 0.1.1"},
       {:quantum, "~> 3.5"},
+      {:uniq, "~> 0.6.1"},
       {:ex_dbug, "~> 1.2"},
 
       # Skill & Action Dependencies for examples

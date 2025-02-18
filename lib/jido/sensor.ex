@@ -107,8 +107,11 @@ defmodule Jido.Sensor do
   defmacro __using__(opts) do
     escaped_schema = Macro.escape(@sensor_compiletime_options_schema)
 
+    # credo:disable-for-next-line Credo.Check.Refactor.LongQuoteBlocks
     quote location: :keep do
       @behaviour Jido.Sensor
+      @type t :: Jido.Sensor.t()
+      @type sensor_result :: Jido.Sensor.sensor_result()
 
       use GenServer
 

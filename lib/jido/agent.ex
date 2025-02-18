@@ -222,6 +222,7 @@ defmodule Jido.Agent do
   defmacro __using__(opts) do
     escaped_schema = Macro.escape(@agent_compiletime_options_schema)
 
+    # credo:disable-for-next-line Credo.Check.Refactor.LongQuoteBlocks
     quote location: :keep do
       @behaviour Jido.Agent
       @type t :: Jido.Agent.t()

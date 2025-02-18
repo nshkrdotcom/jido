@@ -28,7 +28,15 @@ defmodule Jido.Util do
   Generates a unique ID.
   """
   @spec generate_id() :: String.t()
-  def generate_id, do: UUID.uuid4()
+  def generate_id, do: Uniq.UUID.uuid4()
+
+  @doc """
+  Converts a string to a binary.
+  """
+  @spec string_to_binary!(String.t()) :: binary()
+  def string_to_binary!(string) when is_binary(string) do
+    string
+  end
 
   @doc """
   Validates the name of a Action.

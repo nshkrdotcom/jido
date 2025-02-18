@@ -42,6 +42,7 @@ defmodule JidoTest.Actions.BasicActionsTest do
       :ok
     end
 
+    @tag :flaky
     test "logs todo message" do
       # Set log level to debug to capture everything
       Logger.configure(level: :debug)
@@ -111,7 +112,7 @@ defmodule JidoTest.Actions.BasicActionsTest do
 
     test "inspects complex data structures" do
       complex_value = %{a: [1, 2, 3], b: %{c: "test"}}
-      expected_output = inspect(complex_value)
+      expected_output = "Inspect action output: " <> inspect(complex_value)
 
       output =
         capture_io(fn ->

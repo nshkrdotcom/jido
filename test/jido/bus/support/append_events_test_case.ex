@@ -1,4 +1,5 @@
 defmodule Jido.Bus.AppendSignalsTestCase do
+  @moduledoc false
   import JidoTest.SharedTestCase
 
   define_tests do
@@ -7,6 +8,7 @@ defmodule Jido.Bus.AppendSignalsTestCase do
     alias Jido.Signal
 
     defmodule BankAccountOpened do
+      @moduledoc false
       @derive Jason.Encoder
       defstruct [:account_number, :initial_balance]
     end
@@ -252,7 +254,7 @@ defmodule Jido.Bus.AppendSignalsTestCase do
     end
 
     defp assert_is_uuid(uuid) do
-      assert uuid |> UUID.string_to_binary!() |> is_binary()
+      assert uuid |> Jido.Util.string_to_binary!() |> is_binary()
     end
 
     # Returns `true` if module implements behaviour.

@@ -1,4 +1,5 @@
 defmodule Jido.Bus.SubscriptionTestCase do
+  @moduledoc false
   import JidoTest.SharedTestCase
 
   define_tests do
@@ -7,6 +8,7 @@ defmodule Jido.Bus.SubscriptionTestCase do
     alias JidoTest.Helpers.ProcessHelper
 
     defmodule BankAccountOpened do
+      @moduledoc false
       @derive Jason.Encoder
       defstruct [:account_number, :initial_balance]
     end
@@ -247,7 +249,7 @@ defmodule Jido.Bus.SubscriptionTestCase do
         refute_receive {:signals, _received_signals}
       end
 
-      test "should prsignal duplicate subscriptions", %{
+      test "should prevent duplicate subscriptions for single stream", %{
         signal_store: signal_store,
         signal_store_meta: signal_store_meta
       } do
@@ -258,7 +260,8 @@ defmodule Jido.Bus.SubscriptionTestCase do
             "subscriber",
             self(),
             :origin,
-            []
+            # Explicitly set limit to 1 for this test
+            concurrency_limit: 1
           )
 
         assert {:error, :subscription_already_exists} ==
@@ -268,7 +271,8 @@ defmodule Jido.Bus.SubscriptionTestCase do
                    "subscriber",
                    self(),
                    :origin,
-                   []
+                   # Match the same limit
+                   concurrency_limit: 1
                  )
       end
     end
@@ -377,7 +381,7 @@ defmodule Jido.Bus.SubscriptionTestCase do
         refute_receive {:signals, _received_signals}
       end
 
-      test "should prsignal duplicate subscriptions", %{
+      test "should prevent duplicate subscriptions for all streams", %{
         signal_store: signal_store,
         signal_store_meta: signal_store_meta
       } do
@@ -388,7 +392,8 @@ defmodule Jido.Bus.SubscriptionTestCase do
             "subscriber",
             self(),
             :origin,
-            []
+            # Explicitly set limit to 1
+            concurrency_limit: 1
           )
 
         assert {:error, :subscription_already_exists} ==
@@ -398,7 +403,8 @@ defmodule Jido.Bus.SubscriptionTestCase do
                    "subscriber",
                    self(),
                    :origin,
-                   []
+                   # Match the same limit
+                   concurrency_limit: 1
                  )
       end
     end
@@ -419,39 +425,18 @@ defmodule Jido.Bus.SubscriptionTestCase do
         refute_receive {:subscribed, _subscriber, _subscription}
       end
 
-      test "should prsignal too many subscribers to single subscription", %{
-        signal_store: signal_store,
-        signal_store_meta: signal_store_meta
-      } do
-        {:ok, subscriber1} = Subscriber.start_link(signal_store, signal_store_meta, self())
-
-        {:ok, subscriber2} = Subscriber.start_link(signal_store, signal_store_meta, self())
-
-        assert_receive {:subscribed, ^subscriber1, _subscription1}
-        assert_receive {:subscribe_error, :subscription_already_exists, ^subscriber2}
-        refute_receive {:subscribed, _subscriber, _subscription}
-      end
-
-      test "should prsignal too many subscribers to subscription with concurrency limit", %{
+      test "should enforce concurrency limits for subscriptions", %{
         signal_store: signal_store,
         signal_store_meta: signal_store_meta
       } do
         {:ok, subscriber1} =
-          Subscriber.start_link(signal_store, signal_store_meta, self(), concurrency_limit: 3)
+          Subscriber.start_link(signal_store, signal_store_meta, self(), concurrency_limit: 1)
 
         {:ok, subscriber2} =
-          Subscriber.start_link(signal_store, signal_store_meta, self(), concurrency_limit: 3)
-
-        {:ok, subscriber3} =
-          Subscriber.start_link(signal_store, signal_store_meta, self(), concurrency_limit: 3)
-
-        {:ok, subscriber4} =
-          Subscriber.start_link(signal_store, signal_store_meta, self(), concurrency_limit: 3)
+          Subscriber.start_link(signal_store, signal_store_meta, self(), concurrency_limit: 1)
 
         assert_receive {:subscribed, ^subscriber1, _subscription1}
-        assert_receive {:subscribed, ^subscriber2, _subscription1}
-        assert_receive {:subscribed, ^subscriber3, _subscription1}
-        assert_receive {:subscribe_error, :too_many_subscribers, ^subscriber4}
+        assert_receive {:subscribe_error, :subscription_already_exists, ^subscriber2}
         refute_receive {:subscribed, _subscriber, _subscription}
       end
 

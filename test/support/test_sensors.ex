@@ -1,4 +1,6 @@
 defmodule JidoTest.TestSensors do
+  @moduledoc false
+
   defmodule TestSensor do
     @moduledoc false
     use Jido.Sensor,
@@ -163,6 +165,7 @@ defmodule JidoTest.TestSensors do
   end
 
   defmodule ErrorSensor1 do
+    @moduledoc false
     use Jido.Sensor,
       name: "error_sensor",
       description: "A sensor that generates errors",
@@ -216,6 +219,7 @@ defmodule JidoTest.TestSensors do
   end
 
   defmodule ErrorSensor2 do
+    @moduledoc false
     use Jido.Sensor,
       name: "error_sensor",
       description: "A sensor that generates errors",

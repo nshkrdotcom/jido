@@ -11,7 +11,7 @@ defmodule JidoTest.Agent.Server.RuntimeOutputTest do
   alias Jido.Agent.Server.Signal, as: ServerSignal
 
   @moduletag :capture_log
-  @moduletag timeout: 30000
+  @moduletag timeout: 30_000
   # Mock the Agent module's run function
   defmodule MockAgent do
     def run(%Agent{} = agent, _opts) do
@@ -56,7 +56,7 @@ defmodule JidoTest.Agent.Server.RuntimeOutputTest do
       status: :idle,
       pending_signals: :queue.new(),
       router: router,
-      max_queue_size: 10000
+      max_queue_size: 10_000
     }
 
     {:ok, state: state}

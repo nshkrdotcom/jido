@@ -1,110 +1,16 @@
-<p align="center">
-  <h1>Jido (自動)</h1>
-</p>
+# Jido (自動)
 
-<p align="center">
-Autonomous agent framework for Elixir, built for distributed, autonomous behavior and dynamic workflows.<br />
-
-Reliable, observable, and loaded with <a href="#features">sophisticated agent features</a>.<br />
+Jido is a foundational framework for building autonomous, distributed agent systems in Elixir.
 
 The name "Jido" (自動) comes from the Japanese word meaning "automatic" or "automated", where 自 (ji) means "self" and 動 (dō) means "movement".
 
-</p>
-
-<p align="center">
-  <a href="https://hex.pm/packages/jido">
-    <img alt="Hex Version" src="https://img.shields.io/hexpm/v/jido.svg">
-  </a>
-
-  <a href="https://hexdocs.pm/jido">
-    <img alt="Hex Docs" src="http://img.shields.io/badge/hex.pm-docs-green.svg?style=flat">
-  </a>
-
-  <a href="https://github.com/agentjido/jido/actions/workflows/elixir-ci.yml">
-    <img alt="Mix Test" src="https://github.com/agentjido/jido/actions/workflows/elixir-ci.yml/badge.svg">
-  </a>
-
-  <a href="https://coveralls.io/github/agentjido/jido?branch=main">
-    <img alt="Coverage Status" src="https://coveralls.io/repos/github/agentjido/jido/badge.svg?branch=main">
-  </a>
-
-  <a href="https://opensource.org/licenses/Apache-2.0">
-    <img alt="Apache 2 License" src="https://img.shields.io/hexpm/l/jido">
-  </a>
-</p>
-
-## Table of Contents
-
-- [Features](#features)
-- [Do You Need an Agent?](#do-you-need-an-agent)
-- [Quick Start](#quick-start)
-- [Installation](#installation)
-- [Core Concepts](#core-concepts)
-- [Learning](#learning)
-- [Community](#community)
-- [Contributing](#contributing)
-
----
-
-> [!NOTE]
-> This README is for the unreleased main branch. Please reference the [official documentation on hexdocs](https://hexdocs.pm/jido) for the latest stable release.
-
----
-
-## Features
-
-Jido's primary goals are **reliability**, **composability**, and **observability** in agent-based systems.
-
-#### Core Capabilities
-
-- 🧩 **Composable Actions**
-
-  - Build complex behaviors from discrete, validated actions
-  - Compose Actions at runtime into dynamic workflows
-  - Comprehensive error handling and compensation
-  - Clear contracts with schema validation
-
-- 🔄 **Flexible Messaging via Signals**
-
-  - Cloudevents compatible messaging envelope
-  - Asynchronous and synchronous request/response
-  - Flexible routing and filtering
-  - Adapter based output dispatching
-
-- 🤖 **Autonomous Agents**
-
-  - OTP-native agent process supervision
-  - Asynchronous and synchronous request/response
-  - Dynamic workflow control
-  - State-aware self-directed behavior
-
-- 📡 **Real-time Sensors**
-
-  - Extension to consume external system events
-  - Simple custom sensor development
-  - Configurable event filtering
-
-- 🧪 **Testing Tools**
-  - Easily tested architecture
-  - Behavioral verification
-  - Mock sensors and actions
-  - Integration test helpers
-
-## Do You Need an Agent?
-
-Agents are powerful but not always necessary. Consider using Jido when you need:
-
-- Dynamic workflow orchestration
-- Adaptive decision making
-- Complex state management
-- Autonomous operation
-- Distributed coordination
-
-[Learn more about when to use agents →](https://hexdocs.pm/jido/about/do-you-need-an-agent.html)
+[![Hex Version](https://img.shields.io/hexpm/v/jido.svg)](https://hex.pm/packages/jido)
+[![Hex Docs](http://img.shields.io/badge/hex.pm-docs-green.svg?style=flat)](https://hexdocs.pm/jido)
+[![Mix Test](https://github.com/agentjido/jido/actions/workflows/elixir-ci.yml/badge.svg)](https://github.com/agentjido/jido/actions/workflows/elixir-ci.yml)
+[![Coverage Status](https://coveralls.io/repos/github/agentjido/jido/badge.svg?branch=main)](https://coveralls.io/github/agentjido/jido?branch=main)
+[![Apache 2 License](https://img.shields.io/hexpm/l/jido)](https://opensource.org/licenses/Apache-2.0)
 
 ## Quick Start
-
-Define and start an agent with a few lines of code. Direct it using Signals, and receive results via the Agent's PID:
 
 ```elixir
 # First, define our Calculator agent with supported operations
@@ -134,27 +40,7 @@ iex> flush()
 :ok
 ```
 
-This example barely scratches the surface of what Jido can do. For more examples, see the [Getting Started Guide](guides/getting-started.livemd) and [Jido Workbench](https://github.com/agentjido/jido_workbench) to play with our growing catalog of real-life examples.
-
-## Installation
-
-Add Jido to your dependencies:
-
-```elixir
-def deps do
-  [
-    {:jido, "~> 1.0.0"}
-  ]
-end
-```
-
-You may also want to add Jido ecosystem dependencies:
-
-- [jido_ai](https://github.com/agentjido/jido_ai) for LLM-driven agents
-- [jido_chat](https://github.com/agentjido/jido_chat) for chat based messaging
-- [jido_memory](https://github.com/agentjido/jido_memory) for persistent agent memory
-
-You can see examples of each of these in the [Jido Workbench](https://github.com/agentjido/jido_workbench).
+This example barely scratches the surface of what Jido can do. For more examples, see the [Getting Started Guide](guides/getting-started.md) and [Jido Workbench](https://github.com/agentjido/jido_workbench) to play with our growing catalog of real-life examples.
 
 ## Overview
 
@@ -162,23 +48,23 @@ Jido provides a robust foundation for building autonomous agents that can plan, 
 
 ## Are You Sure You Need an Agent?
 
-Agents are a hot topic right now, but they aren't a silver bullet. In particular, Large Language Models (LLMs) are powerful yet slow and costly—if your application doesn't require dynamic decision-making or complex planning, consider whether you really need an Agent at all.
+Agents are a hot topic right now, but they aren’t a silver bullet. In particular, Large Language Models (LLMs) are powerful yet slow and costly—if your application doesn’t require dynamic decision-making or complex planning, consider whether you really need an Agent at all.
 
-- **LLMs aren't required for all tasks** — Avoid building them into your core logic unless necessary
+- **LLMs aren’t required for all tasks** — Avoid building them into your core logic unless necessary
 - **Agents as Dynamic ETL** — Agents dynamically direct data ingestion, transformation, and output based on:
   - LLMs (e.g., GPT)
   - Classical planning algorithms (A\*, Behavior Trees, etc.)
-- **Simplicity often wins** — If you don't need these dynamic behaviors, you probably don't need an Agent. This library is likely overkill compared to straightforward code.
+- **Simplicity often wins** — If you don’t need these dynamic behaviors, you probably don’t need an Agent. This library is likely overkill compared to straightforward code.
 
 ### Our Definition of an Agent
 
 An Agent is a system where LLMs _or_ classical planning algorithms dynamically direct their own processes. Some great definitions from the community:
 
-- "Agents are Dynamic ETL processes directed by LLMs" — [YouTube](https://youtu.be/KY8n96Erp5Q?si=5Itt7QR11jgfWDTY&t=22)
-- "Agents are systems where LLMs dynamically direct their own processes" — [Anthropic Research](https://www.anthropic.com/research/building-effective-agents)
-- "AI Agents are programs where LLM outputs control the workflow" — [Hugging Face Blog](https://huggingface.co/blog/smolagents)
+- “Agents are Dynamic ETL processes directed by LLMs” — [YouTube](https://youtu.be/KY8n96Erp5Q?si=5Itt7QR11jgfWDTY&t=22)
+- “Agents are systems where LLMs dynamically direct their own processes” — [Anthropic Research](https://www.anthropic.com/research/building-effective-agents)
+- “AI Agents are programs where LLM outputs control the workflow” — [Hugging Face Blog](https://huggingface.co/blog/smolagents)
 
-If your application doesn't involve dynamic workflows or data pipelines that change based on AI or planning algorithms, you can likely do more with less.
+If your application doesn’t involve dynamic workflows or data pipelines that change based on AI or planning algorithms, you can likely do more with less.
 
 > 💡 **NOTE**: This library intends to support both LLM planning and Classical AI planning (ie. [Behavior Trees](https://github.com/jschomay/elixir-behavior-tree) as a design principle via Actions. See [`jido_ai`](https://github.com/agentjido/jido_ai) for example LLM actions.
 
@@ -231,7 +117,7 @@ defmodule MyApp.Actions.FormatUser do
 end
 ```
 
-[Learn more about Actions →](guides/actions/overview.md)
+[Learn more about Actions →](guides/actions.md)
 
 ### Workflows
 
@@ -249,7 +135,7 @@ alias MyApp.Actions.{FormatUser, EnrichUserData, NotifyUser}
 )
 ```
 
-[Learn more about Workflows →](guides/actions/workflows.md)
+[Learn more about Workflows →](guides/actions.md#combining-actions-into-a-workflow)
 
 ### Agents
 
@@ -278,7 +164,7 @@ defmodule MyApp.CalculatorAgent do
 end
 ```
 
-[Learn more about Agents →](guides/agents/overview.md)
+[Learn more about Agents →](guides/agents.md)
 
 ### Sensors
 
@@ -304,7 +190,7 @@ defmodule MyApp.Sensors.OperationCounter do
 end
 ```
 
-[Learn more about Sensors →](guides/sensors/overview.md)
+[Learn more about Sensors →](guides/sensors.md)
 
 ## Running in Production
 
@@ -336,11 +222,11 @@ Supervisor.start_link(children, strategy: :one_for_one)
 
 ## Documentation
 
-- [📘 Getting Started Guide](guides/getting-started.livemd)
-- [🧩 Actions & Workflows](guides/actions/overview.md)
-- [🤖 Building Agents](guides/agents/overview.md)
-- [📡 Sensors & Monitoring](guides/sensors/overview.md)
-- [🔄 Agent Directives](guides/agents/directives.md)
+- [📘 Getting Started Guide](guides/getting-started.md)
+- [🧩 Actions & Workflows](guides/actions.md)
+- [🤖 Building Agents](guides/agents.md)
+- [📡 Sensors & Monitoring](guides/sensors.md)
+- [🔄 Agent Directives](guides/directives.md)
 
 ## Contributing
 

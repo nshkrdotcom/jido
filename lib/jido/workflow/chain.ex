@@ -62,7 +62,7 @@ defmodule Jido.Workflow.Chain do
       Enum.reduce_while(workflows, {:ok, initial_params}, fn
         workflow, {:ok, params} = _acc ->
           if should_interrupt?(interrupt_check) do
-            Logger.info("Chain interrupted before workflow", workflow: workflow)
+            Logger.info("Chain interrupted before workflow: #{inspect(workflow)}")
             {:halt, {:interrupted, params}}
           else
             process_workflow(workflow, params, context, opts)
@@ -87,11 +87,13 @@ defmodule Jido.Workflow.Chain do
           {:cont, OK.t()} | {:halt, chain_result()}
   defp process_workflow({workflow, workflow_opts}, params, context, opts)
        when is_atom(workflow) and (is_list(workflow_opts) or is_map(workflow_opts)) do
-    with {:ok, workflow_params} <- validate_workflow_params(workflow_opts) do
-      merged_params = Map.merge(params, workflow_params)
-      run_workflow(workflow, merged_params, context, opts)
-    else
-      {:error, error} -> {:halt, {:error, error}}
+    case validate_workflow_params(workflow_opts) do
+      {:ok, workflow_params} ->
+        merged_params = Map.merge(params, workflow_params)
+        run_workflow(workflow, merged_params, context, opts)
+
+      {:error, error} ->
+        {:halt, {:error, error}}
     end
   end
 
@@ -128,7 +130,7 @@ defmodule Jido.Workflow.Chain do
         {:cont, OK.success(Map.put(params, :result, result))}
 
       OK.failure(error) ->
-        Logger.warning("Workflow in chain failed", workflow: workflow, error: error)
+        Logger.warning("Workflow in chain failed: #{inspect(workflow)} #{inspect(error)}")
         {:halt, OK.failure(error)}
     end
   end

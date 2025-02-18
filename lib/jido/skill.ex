@@ -417,9 +417,8 @@ defmodule Jido.Skill do
   """
   @spec validate_config(module(), map()) :: {:ok, map()} | {:error, Error.t()}
   def validate_config(skill_module, config) do
-    with {:ok, schema} <- get_config_schema(skill_module),
-         {:ok, validated} <- NimbleOptions.validate(config, schema) do
-      {:ok, validated}
+    with {:ok, schema} <- get_config_schema(skill_module) do
+      NimbleOptions.validate(config, schema)
     end
   end
 

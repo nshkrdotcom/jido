@@ -11,7 +11,7 @@ defmodule JidoTest.Agent.Server.RuntimeInputTest do
   alias JidoTest.TestActions
 
   @moduletag :capture_log
-  @moduletag timeout: 30000
+  @moduletag timeout: 30_000
 
   setup do
     {:ok, supervisor} = start_supervised(DynamicSupervisor)
@@ -38,7 +38,7 @@ defmodule JidoTest.Agent.Server.RuntimeInputTest do
       status: :idle,
       pending_signals: :queue.new(),
       router: router,
-      max_queue_size: 10000
+      max_queue_size: 10_000
     }
 
     {:ok, state: state}

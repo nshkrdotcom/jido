@@ -271,9 +271,8 @@ defmodule Jido.Discovery do
   """
   @spec get_action_by_slug(String.t()) :: component_metadata() | nil
   def get_action_by_slug(slug) do
-    with {:ok, cache} <- get_cache() do
-      Enum.find(cache.actions, fn action -> action.slug == slug end)
-    else
+    case get_cache() do
+      {:ok, cache} -> Enum.find(cache.actions, fn action -> action.slug == slug end)
       _ -> nil
     end
   end
@@ -299,9 +298,8 @@ defmodule Jido.Discovery do
   """
   @spec get_sensor_by_slug(String.t()) :: component_metadata() | nil
   def get_sensor_by_slug(slug) do
-    with {:ok, cache} <- get_cache() do
-      Enum.find(cache.sensors, fn sensor -> sensor.slug == slug end)
-    else
+    case get_cache() do
+      {:ok, cache} -> Enum.find(cache.sensors, fn sensor -> sensor.slug == slug end)
       _ -> nil
     end
   end
@@ -328,9 +326,8 @@ defmodule Jido.Discovery do
   """
   @spec get_agent_by_slug(String.t()) :: component_metadata() | nil
   def get_agent_by_slug(slug) do
-    with {:ok, cache} <- get_cache() do
-      Enum.find(cache.agents, fn agent -> agent.slug == slug end)
-    else
+    case get_cache() do
+      {:ok, cache} -> Enum.find(cache.agents, fn agent -> agent.slug == slug end)
       _ -> nil
     end
   end
@@ -357,9 +354,8 @@ defmodule Jido.Discovery do
   """
   @spec get_skill_by_slug(String.t()) :: component_metadata() | nil
   def get_skill_by_slug(slug) do
-    with {:ok, cache} <- get_cache() do
-      Enum.find(cache.skills, fn skill -> skill.slug == slug end)
-    else
+    case get_cache() do
+      {:ok, cache} -> Enum.find(cache.skills, fn skill -> skill.slug == slug end)
       _ -> nil
     end
   end
@@ -386,9 +382,8 @@ defmodule Jido.Discovery do
   """
   @spec get_demo_by_slug(String.t()) :: component_metadata() | nil
   def get_demo_by_slug(slug) do
-    with {:ok, cache} <- get_cache() do
-      Enum.find(cache.demos, fn demo -> demo.slug == slug end)
-    else
+    case get_cache() do
+      {:ok, cache} -> Enum.find(cache.demos, fn demo -> demo.slug == slug end)
       _ -> nil
     end
   end
@@ -418,9 +413,8 @@ defmodule Jido.Discovery do
   """
   @spec list_actions(keyword()) :: [component_metadata()]
   def list_actions(opts \\ []) do
-    with {:ok, cache} <- get_cache() do
-      filter_and_paginate(cache.actions, opts)
-    else
+    case get_cache() do
+      {:ok, cache} -> filter_and_paginate(cache.actions, opts)
       _ -> []
     end
   end
@@ -450,9 +444,8 @@ defmodule Jido.Discovery do
   """
   @spec list_sensors(keyword()) :: [component_metadata()]
   def list_sensors(opts \\ []) do
-    with {:ok, cache} <- get_cache() do
-      filter_and_paginate(cache.sensors, opts)
-    else
+    case get_cache() do
+      {:ok, cache} -> filter_and_paginate(cache.sensors, opts)
       _ -> []
     end
   end
@@ -482,9 +475,8 @@ defmodule Jido.Discovery do
   """
   @spec list_agents(keyword()) :: [component_metadata()]
   def list_agents(opts \\ []) do
-    with {:ok, cache} <- get_cache() do
-      filter_and_paginate(cache.agents, opts)
-    else
+    case get_cache() do
+      {:ok, cache} -> filter_and_paginate(cache.agents, opts)
       _ -> []
     end
   end
@@ -514,9 +506,8 @@ defmodule Jido.Discovery do
   """
   @spec list_skills(keyword()) :: [component_metadata()]
   def list_skills(opts \\ []) do
-    with {:ok, cache} <- get_cache() do
-      filter_and_paginate(cache.skills, opts)
-    else
+    case get_cache() do
+      {:ok, cache} -> filter_and_paginate(cache.skills, opts)
       _ -> []
     end
   end
@@ -546,9 +537,8 @@ defmodule Jido.Discovery do
   """
   @spec list_demos(keyword()) :: [component_metadata()]
   def list_demos(opts \\ []) do
-    with {:ok, cache} <- get_cache() do
-      filter_and_paginate(cache.demos, opts)
-    else
+    case get_cache() do
+      {:ok, cache} -> filter_and_paginate(cache.demos, opts)
       _ -> []
     end
   end

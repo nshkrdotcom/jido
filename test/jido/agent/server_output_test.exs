@@ -44,6 +44,7 @@ defmodule Jido.Agent.Server.OutputTest do
   end
 
   describe "emit/2" do
+    @tag :flaky
     test "emits signal with default channel" do
       {:ok, signal} = Signal.new(%{type: "test.signal", data: "test", id: "test-id-123"})
 

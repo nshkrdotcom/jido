@@ -41,6 +41,12 @@ defmodule Jido.Agent.Server.ProcessTest do
       assert signal.data.child_spec == child_spec
     end
 
+    test "handles empty child spec list", %{state: state} do
+      assert {:ok, %ServerState{}, []} = ServerProcess.start(state, [])
+      # No signal should be emitted for empty child specs
+      refute_receive {:signal, _signal}
+    end
+
     test "emits failure signal when start fails", %{state: state} do
       invalid_spec = %{
         id: :invalid_child,

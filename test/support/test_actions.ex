@@ -844,6 +844,7 @@ defmodule JidoTest.TestActions do
   end
 
   defmodule MultiDirectiveAction do
+    @moduledoc false
     use Jido.Action,
       name: "multi_directive_action"
 

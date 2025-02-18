@@ -339,7 +339,7 @@ defmodule JidoTest.TestAgents do
 
     @impl true
     def mount(agent, opts) do
-      Logger.debug("Mounting CustomServerAgent", agent_id: agent.id, opts: opts)
+      Logger.debug("Mounting CustomServerAgent: #{inspect(agent)} #{inspect(opts)}")
 
       # Validate battery level is positive
       if agent.state.battery_level < 0 do
@@ -352,7 +352,7 @@ defmodule JidoTest.TestAgents do
 
     @impl true
     def shutdown(agent, reason) do
-      Logger.debug("Shutting down CustomServerAgent", agent_id: agent.id, reason: reason)
+      Logger.debug("Shutting down CustomServerAgent: #{inspect(agent)} #{inspect(reason)}")
 
       # Validate battery level is positive
       if agent.state.battery_level < 0 do
@@ -365,6 +365,7 @@ defmodule JidoTest.TestAgents do
   end
 
   defmodule SignalOutputAgent do
+    @moduledoc false
     use Jido.Agent,
       name: "signal_output_agent",
       schema: [

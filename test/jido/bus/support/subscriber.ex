@@ -1,9 +1,11 @@
 defmodule Jido.Bus.Subscriber do
+  @moduledoc false
   use GenServer
 
   alias Jido.Bus.Subscriber
 
   defmodule State do
+    @moduledoc false
     defstruct [
       :subscription_opts,
       :signal_store,

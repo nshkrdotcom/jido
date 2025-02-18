@@ -1,4 +1,5 @@
 defmodule Jido.Bus.InMemoryTestCase do
+  @moduledoc false
   use ExUnit.CaseTemplate
 
   alias Jido.Bus.Adapters.InMemory

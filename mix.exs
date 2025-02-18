@@ -334,8 +334,10 @@ defmodule Jido.MixProject do
   defp aliases do
     [
       # Helper to run tests with trace when needed
-      # test: "test --trace",
-      docs: "docs -f html --open",
+      test: "test --trace --exclude flaky",
+
+      # Helper to run docs
+      # docs: "docs -f html --open",
 
       # Run to check the quality of your code
       q: ["quality"],

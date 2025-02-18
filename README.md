@@ -1,6 +1,6 @@
 # Jido (自動)
 
-Jido is a foundational framework for building autonomous, distributed agent systems in Elixir.
+Jido is a toolkit for building autonomous, distributed agent systems in Elixir.
 
 The name "Jido" (自動) comes from the Japanese word meaning "automatic" or "automated", where 自 (ji) means "self" and 動 (dō) means "movement".
 
@@ -10,73 +10,34 @@ The name "Jido" (自動) comes from the Japanese word meaning "automatic" or "au
 [![Coverage Status](https://coveralls.io/repos/github/agentjido/jido/badge.svg?branch=main)](https://coveralls.io/github/agentjido/jido?branch=main)
 [![Apache 2 License](https://img.shields.io/hexpm/l/jido)](https://opensource.org/licenses/Apache-2.0)
 
-## Quick Start
-
-```elixir
-# First, define our Calculator agent with supported operations
-iex> defmodule CalculatorAgent do
-...>   use Jido.Agent,
-...>     name: "calculator",
-...>     actions: [Actions.Add, Actions.Subtract, Actions.Multiply, Actions.Divide]
-...>   # Omitting the router that maps the "add" signal to the Add Action
-...> end
-{:module, CalculatorAgent, <<...>>, %{}}
-
-# Start the agent process
-iex> {:ok, pid} = CalculatorAgent.start_link()
-{:ok, #PID<0.123.0>}
-
-# Send a synchronous request to the agent
-iex> {:ok, result} = CalculatorAgent.call(pid, Signal.new(%{type: "add", data: %{a: 1, b: 2}}))
-{:ok, 3}
-
-# Send an asynchronous request to the agent
-iex> {:ok, request_id} = CalculatorAgent.cast(pid, Signal.new(%{type: "multiply", data: %{a: 2, b: 4}}))
-{:ok, "req_abc123"}
-
-# Receive the result of the asynchronous request
-iex> flush()
-{:jido_agent, "req_abc123", 8}
-:ok
-```
-
-This example barely scratches the surface of what Jido can do. For more examples, see the [Getting Started Guide](guides/getting-started.md) and [Jido Workbench](https://github.com/agentjido/jido_workbench) to play with our growing catalog of real-life examples.
-
 ## Overview
 
-Jido provides a robust foundation for building autonomous agents that can plan, execute, and adapt their behavior in distributed Elixir applications. Think of it as a toolkit for creating smart, composable workflows that can evolve and respond to their environment.
+Jido provides the foundation for building autonomous agents that can plan, execute, and adapt their behavior in distributed Elixir applications. Think of it as a toolkit for creating smart, composable workflows that can evolve and respond to their environment.
 
-## Are You Sure You Need an Agent?
+This package is geared towards Agent builders. It contains the basis building blocks for creating advanced agentic systems. This is why there's no AI baked into the core of this framework.
 
-Agents are a hot topic right now, but they aren’t a silver bullet. In particular, Large Language Models (LLMs) are powerful yet slow and costly—if your application doesn’t require dynamic decision-making or complex planning, consider whether you really need an Agent at all.
+To see demo's and examples, check out our [Jido Workbench](https://github.com/agentjido/jido_workbench). It includes many examples of agents and workflows, including:
 
-- **LLMs aren’t required for all tasks** — Avoid building them into your core logic unless necessary
-- **Agents as Dynamic ETL** — Agents dynamically direct data ingestion, transformation, and output based on:
-  - LLMs (e.g., GPT)
-  - Classical planning algorithms (A\*, Behavior Trees, etc.)
-- **Simplicity often wins** — If you don’t need these dynamic behaviors, you probably don’t need an Agent. This library is likely overkill compared to straightforward code.
+- Agents with Tools
+- ChatBots
+- Agents acting as a Team
+- Multi-modal input & output
+- ... and many more examples
 
-### Our Definition of an Agent
+Jido Workbench relies on the following packages to extend Jido's capabilities:
 
-An Agent is a system where LLMs _or_ classical planning algorithms dynamically direct their own processes. Some great definitions from the community:
-
-- “Agents are Dynamic ETL processes directed by LLMs” — [YouTube](https://youtu.be/KY8n96Erp5Q?si=5Itt7QR11jgfWDTY&t=22)
-- “Agents are systems where LLMs dynamically direct their own processes” — [Anthropic Research](https://www.anthropic.com/research/building-effective-agents)
-- “AI Agents are programs where LLM outputs control the workflow” — [Hugging Face Blog](https://huggingface.co/blog/smolagents)
-
-If your application doesn’t involve dynamic workflows or data pipelines that change based on AI or planning algorithms, you can likely do more with less.
-
-> 💡 **NOTE**: This library intends to support both LLM planning and Classical AI planning (ie. [Behavior Trees](https://github.com/jschomay/elixir-behavior-tree) as a design principle via Actions. See [`jido_ai`](https://github.com/agentjido/jido_ai) for example LLM actions.
-
-_This space is evolving rapidly. Last updated 2025-01-01_
+- [`jido_ai`](https://github.com/agentjido/jido_ai) package for the AI capabilities.
+- [`jido_chat`](https://github.com/agentjido/jido_chat) package for the chat capabilities.
+- [`jido_memory`](https://github.com/agentjido/jido_memory) package for the memory capabilities.
 
 ## Key Features
 
 - 🧩 **Composable Actions**: Build complex behaviors from simple, reusable actions
-- 🤖 **Autonomous Agents**: Self-directing entities that plan and execute workflows
+- 🤖 **Agent Data Structures**: Stateless agentic data structures for planning, execution, and monitoring
+- 🔥 **Agent GenServer**: Comprehensive GenServer implementation for agents, with support for dynamic capabilities
 - 📡 **Real-time Sensors**: Event-driven data gathering and monitoring
-- 🔄 **Adaptive Learning**: Agents can modify their capabilities at runtime
-- 📊 **Built-in Telemetry**: Comprehensive observability and debugging
+- 📨 **Signal System**: Comprehensive signal system for communication between agents and other systems
+- 🧠 **Skills**: Skills are reusable, composable behavior groups that can be used by agents - think Agentic plugins
 - ⚡ **Distributed by Design**: Built for multi-node Elixir clusters
 - 🧪 **Testing Tools**: Rich helpers for unit and property-based testing
 
@@ -87,7 +48,7 @@ Add Jido to your dependencies:
 ```elixir
 def deps do
   [
-    {:jido, "~> 1.0.0"}
+    {:jido, "~> 1.1.0"}
   ]
 end
 ```
@@ -115,27 +76,12 @@ defmodule MyApp.Actions.FormatUser do
     }}
   end
 end
+
+# Execute a single Action via the Workflow system
+{:ok, result} = Jido.Workflow.run(FormatUser, %{name: "John Doe", email: "john@example.com"})
 ```
 
-[Learn more about Actions →](guides/actions.md)
-
-### Workflows
-
-Workflows chain Actions together to accomplish complex tasks. Jido handles data flow and error handling between steps:
-
-```elixir
-alias MyApp.Actions.{FormatUser, EnrichUserData, NotifyUser}
-
-{:ok, result} = Jido.Workflow.Chain.chain(
-  [FormatUser, EnrichUserData, NotifyUser],
-  %{
-    name: "John Doe ",
-    email: "JOHN@EXAMPLE.COM"
-  }
-)
-```
-
-[Learn more about Workflows →](guides/actions.md#combining-actions-into-a-workflow)
+[Learn more about Actions →](guides/actions/overview.md)
 
 ### Agents
 
@@ -155,16 +101,19 @@ defmodule MyApp.CalculatorAgent do
       value: [type: :float, default: 0.0],
       operations: [type: {:list, :atom}, default: []]
     ]
-
-  def on_after_run(agent, result) do
-    # Track which operations we've used
-    ops = [result.action | agent.state.operations] |> Enum.uniq()
-    {:ok, %{agent | state: %{agent.state | operations: ops}}}
-  end
 end
+
+# Start the agent
+{:ok, pid} = MyApp.CalculatorAgent.start_link()
+
+# Synchronous call
+{:ok, result} = MyApp.CalculatorAgent.call(pid, Signal.new!(%{type: "add", data: %{a: 1, b: 2}}))
+
+# Asynchronous call
+{:ok, response_ref} = MyApp.CalculatorAgent.cast(pid, Signal.new!(%{type: "add", data: %{a: 1, b: 2}}))
 ```
 
-[Learn more about Agents →](guides/agents.md)
+[Learn more about Agents →](guides/agents/overview.md)
 
 ### Sensors
 
@@ -190,7 +139,7 @@ defmodule MyApp.Sensors.OperationCounter do
 end
 ```
 
-[Learn more about Sensors →](guides/sensors.md)
+[Learn more about Sensors →](guides/sensors/overview.md)
 
 ## Running in Production
 
@@ -201,32 +150,22 @@ Start your agents under supervision:
 children = [
   {Registry, keys: :unique, name: Jido.AgentRegistry},
   {Phoenix.PubSub, name: MyApp.PubSub},
-  {Jido.Agent.Supervisor, pubsub: MyApp.PubSub},
-  {Jido.Agent.Server,
-    agent: MyApp.CalculatorAgent.new(),
-    name: "calculator_1"
-  }
+
+  # Agents fit into your existing supervision tree
+  # Specify an id to always uniquely identify the agent
+  {MyApp.CalculatorAgent, id: "calculator_1"}
 ]
 
 Supervisor.start_link(children, strategy: :one_for_one)
 ```
 
-## Example Use Cases
-
-- **Service Orchestration**: Coordinate complex workflows across multiple services
-- **Data Processing**: Build adaptive ETL pipelines that evolve with your data
-- **Business Automation**: Model complex business processes with autonomous agents
-- **System Monitoring**: Create smart monitoring agents that adapt to system behavior
-- **Transaction Management**: Handle multi-step transactions with built-in compensation
-- **Event Processing**: Process and react to event streams in real-time
-
 ## Documentation
 
 - [📘 Getting Started Guide](guides/getting-started.md)
-- [🧩 Actions & Workflows](guides/actions.md)
-- [🤖 Building Agents](guides/agents.md)
-- [📡 Sensors & Monitoring](guides/sensors.md)
-- [🔄 Agent Directives](guides/directives.md)
+- [🧩 Actions & Workflows](guides/actions/overview.md)
+- [🤖 Building Agents](guides/agents/overview.md)
+- [📡 Sensors & Monitoring](guides/sensors/overview.md)
+- [🔄 Agent Directives](guides/agents/directives.md)
 
 ## Contributing
 

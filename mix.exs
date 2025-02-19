@@ -20,8 +20,7 @@ defmodule Jido.MixProject do
 
       # Docs
       name: "Jido",
-      description:
-        "A foundational framework for building autonomous, distributed agent systems in Elixir",
+      description: "A toolkit for building autonomous, distributed agent systems in Elixir",
       source_url: "https://github.com/agentjido/jido",
       homepage_url: "https://github.com/agentjido/jido",
       package: package(),
@@ -289,7 +288,7 @@ defmodule Jido.MixProject do
       licenses: ["Apache-2.0"],
       links: %{
         "GitHub" => "https://github.com/agentjido/jido",
-        "Jido Workbench" => "https://github.com/agentjido/jido_workbench"
+        "Agent Workbench" => "https://github.com/agentjido/jido_workbench"
       }
     ]
   end
@@ -334,7 +333,7 @@ defmodule Jido.MixProject do
   defp aliases do
     [
       # Helper to run tests with trace when needed
-      test: "test --trace --exclude flaky",
+      # test: "test --trace --exclude flaky",
 
       # Helper to run docs
       # docs: "docs -f html --open",

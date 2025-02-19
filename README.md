@@ -32,12 +32,13 @@ Jido Workbench relies on the following packages to extend Jido's capabilities:
 
 ## Key Features
 
+- 📦 **State Management**: Core state primitives for agents
 - 🧩 **Composable Actions**: Build complex behaviors from simple, reusable actions
-- 🤖 **Agent Data Structures**: Stateless agentic data structures for planning, execution, and monitoring
-- 🔥 **Agent GenServer**: Comprehensive GenServer implementation for agents, with support for dynamic capabilities
+- 🤖 **Agent Data Structures**: Stateless agentic data structures for planning and execution
+- 🔥 **Agent GenServer**: OTP integration for agents, with dynamic supervisors
 - 📡 **Real-time Sensors**: Event-driven data gathering and monitoring
-- 📨 **Signal System**: Comprehensive signal system for communication between agents and other systems
-- 🧠 **Skills**: Skills are reusable, composable behavior groups that can be used by agents - think Agentic plugins
+- 📨 **Signal System**: Comprehensive system for agent and external communication
+- 🧠 **Skills**: Reusable, composable behavior modules - Plugins for agents
 - ⚡ **Distributed by Design**: Built for multi-node Elixir clusters
 - 🧪 **Testing Tools**: Rich helpers for unit and property-based testing
 

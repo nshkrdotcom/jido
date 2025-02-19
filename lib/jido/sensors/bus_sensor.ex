@@ -124,7 +124,13 @@ defmodule Jido.Sensors.Bus do
   @impl true
   def shutdown(state) do
     if subscription = Map.get(state, :subscription) do
-      :ok = Jido.Bus.unsubscribe(state.config.bus_name, subscription)
+      case Jido.Bus.whereis(state.config.bus_name) do
+        {:ok, bus} ->
+          Jido.Bus.unsubscribe(bus, subscription)
+
+        _error ->
+          :ok
+      end
     end
 
     :ok
@@ -135,14 +141,20 @@ defmodule Jido.Sensors.Bus do
   defp subscribe_to_bus(%{config: config, id: id}) do
     stream = Map.get(config, :stream_id, :all)
 
-    Jido.Bus.subscribe_persistent(
-      config.bus_name,
-      stream,
-      "#{id}_subscription",
-      self(),
-      :origin,
-      []
-    )
+    case Jido.Bus.whereis(config.bus_name) do
+      {:ok, bus} ->
+        Jido.Bus.subscribe_persistent(
+          bus,
+          stream,
+          "#{id}_subscription",
+          self(),
+          :origin,
+          []
+        )
+
+      error ->
+        error
+    end
   end
 
   defp handle_signals(signals, state) do

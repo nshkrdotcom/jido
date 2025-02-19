@@ -43,7 +43,58 @@ defmodule Jido.Bus do
           | {:pubsub_name, atom()}
           | {atom(), term()}
 
+  @type server ::
+          pid() | atom() | binary() | {name :: atom() | binary(), registry :: module()}
+
   # Client API
+
+  @doc """
+  Resolves a server reference to a PID.
+
+  ## Parameters
+
+  - `server`: Can be one of:
+    - pid: Used directly
+    - {name, registry}: Name and custom registry module
+    - name: Name to look up in default Jido.Bus.Registry
+
+  ## Returns
+
+  - `{:ok, pid}` if process found
+  - `{:error, :server_not_found}` if process not found
+
+  ## Examples
+
+      # Using a PID directly
+      iex> pid = :erlang.list_to_pid(~c"<0.123.0>")
+      iex> Jido.Bus.resolve_pid(pid)
+      {:ok, pid}
+
+      # Using a custom registry
+      iex> Jido.Bus.resolve_pid({:my_bus, Jido.Bus.Registry})
+      {:error, :server_not_found}
+
+      # Using default registry
+      iex> Jido.Bus.resolve_pid(:my_bus)
+      {:error, :server_not_found}
+  """
+  @spec resolve_pid(server()) :: {:ok, pid()} | {:error, :server_not_found}
+  def resolve_pid(pid) when is_pid(pid), do: {:ok, pid}
+
+  def resolve_pid({name, registry})
+      when (is_atom(name) or is_binary(name)) and is_atom(registry) do
+    name = if is_atom(name), do: Atom.to_string(name), else: name
+
+    case Registry.lookup(registry, name) do
+      [{pid, _}] -> {:ok, pid}
+      [] -> {:error, :server_not_found}
+    end
+  end
+
+  def resolve_pid(name) when is_atom(name) or is_binary(name) do
+    name = if is_atom(name), do: Atom.to_string(name), else: name
+    resolve_pid({name, Jido.Bus.Registry})
+  end
 
   @doc """
   Start a bus as part of a supervision tree.
@@ -86,17 +137,17 @@ defmodule Jido.Bus do
   Returns a via tuple for addressing the bus process.
 
   ## Options
-    * `:registry` - The registry to use (defaults to Jido.BusRegistry)
+    * `:registry` - The registry to use (defaults to Jido.Bus.Registry)
 
   ## Examples
       iex> Jido.Bus.via_tuple(:my_bus)
-      {:via, Registry, {Jido.BusRegistry, :my_bus}}
+      {:via, Registry, {Jido.Bus.Registry, :my_bus}}
 
       iex> Jido.Bus.via_tuple(:my_bus, registry: MyApp.Registry)
       {:via, Registry, {MyApp.Registry, :my_bus}}
   """
   def via_tuple(name, opts \\ []) do
-    registry = Keyword.get(opts, :registry, Jido.BusRegistry)
+    registry = Keyword.get(opts, :registry, Jido.Bus.Registry)
     {:via, Registry, {registry, name}}
   end
 
@@ -106,7 +157,7 @@ defmodule Jido.Bus do
   Returns `{:ok, pid}` if found, `{:error, :not_found}` otherwise.
   """
   def whereis(name, opts \\ []) do
-    registry = Keyword.get(opts, :registry, Jido.BusRegistry)
+    registry = Keyword.get(opts, :registry, Jido.Bus.Registry)
 
     case Registry.lookup(registry, name) do
       [{pid, _}] -> {:ok, pid}
@@ -117,74 +168,101 @@ defmodule Jido.Bus do
   @doc """
   Append one or more signals to a stream atomically.
   """
-  def publish(name, stream_id, expected_version, signals, opts \\ []) do
-    GenServer.call(via_tuple(name), {:publish, stream_id, expected_version, signals, opts})
+  def publish(server, stream_id, expected_version, signals, opts \\ []) do
+    with {:ok, pid} <- resolve_pid(server) do
+      GenServer.call(pid, {:publish, stream_id, expected_version, signals, opts})
+    end
   end
 
   @doc """
   Streams signals from the given stream, in the order in which they were originally written.
   """
-  def replay(name, stream_id, start_version \\ 0, read_batch_size \\ 1_000) do
-    GenServer.call(via_tuple(name), {:replay, stream_id, start_version, read_batch_size})
+  def replay(server, stream_id, start_version \\ 0, read_batch_size \\ 1_000) do
+    with {:ok, pid} <- resolve_pid(server) do
+      GenServer.call(pid, {:replay, stream_id, start_version, read_batch_size})
+    end
   end
 
   @doc """
   Create a transient subscription to a single signal stream.
   """
-  def subscribe(name, stream_id) do
-    GenServer.call(via_tuple(name), {:subscribe, stream_id})
+  def subscribe(server, stream_id) do
+    with {:ok, pid} <- resolve_pid(server) do
+      GenServer.call(pid, {:subscribe, stream_id})
+    end
   end
 
   @doc """
   Create a persistent subscription to an signal stream.
   """
-  def subscribe_persistent(name, stream_id, subscription_name, subscriber, start_from, opts \\ []) do
-    GenServer.call(
-      via_tuple(name),
-      {:subscribe_persistent, stream_id, subscription_name, subscriber, start_from, opts}
-    )
+  def subscribe_persistent(
+        server,
+        stream_id,
+        subscription_name,
+        subscriber,
+        start_from,
+        opts \\ []
+      ) do
+    with {:ok, pid} <- resolve_pid(server) do
+      GenServer.call(
+        pid,
+        {:subscribe_persistent, stream_id, subscription_name, subscriber, start_from, opts}
+      )
+    end
   end
 
   @doc """
   Acknowledge receipt and successful processing of a signal.
   """
-  def ack(name, subscription, signal) do
-    GenServer.call(via_tuple(name), {:ack, subscription, signal})
+  def ack(server, subscription, signal) do
+    with {:ok, pid} <- resolve_pid(server) do
+      GenServer.call(pid, {:ack, subscription, signal})
+    end
   end
 
   @doc """
   Unsubscribe an existing subscriber from signal notifications.
   """
-  def unsubscribe(name, subscription) do
-    GenServer.call(via_tuple(name), {:unsubscribe, subscription})
+  def unsubscribe(server, subscription) do
+    with {:ok, pid} <- resolve_pid(server) do
+      GenServer.call(pid, {:unsubscribe, subscription})
+    end
   end
 
   @doc """
   Delete an existing subscription.
   """
-  def unsubscribe(name, subscribe_persistent, handler_name) do
-    GenServer.call(via_tuple(name), {:unsubscribe, subscribe_persistent, handler_name})
+  def unsubscribe(server, subscribe_persistent, handler_name) do
+    with {:ok, pid} <- resolve_pid(server) do
+      GenServer.call(pid, {:unsubscribe, subscribe_persistent, handler_name})
+    end
   end
 
   @doc """
   Read a snapshot, if available, for a given source.
   """
-  def read_snapshot(name, source_id) do
-    GenServer.call(via_tuple(name), {:read_snapshot, source_id})
+  def read_snapshot(server, source_id) do
+    with {:ok, pid} <- resolve_pid(server) do
+      GenServer.call(pid, {:read_snapshot, source_id})
+    end
   end
 
   @doc """
   Record a snapshot of the data and metadata for a given source
   """
-  def record_snapshot(name, snapshot) do
-    GenServer.call(via_tuple(name), {:record_snapshot, snapshot})
+  def record_snapshot(server, snapshot) do
+    with {:ok, pid} <- resolve_pid(server) do
+      GenServer.call(pid, {:record_snapshot, snapshot})
+    end
   end
 
   @doc """
   Delete a previously recorded snapshot for a given source
   """
-  def delete_snapshot(name, source_id) do
-    GenServer.call(via_tuple(name), {:delete_snapshot, source_id})
+  def delete_snapshot(server, source_id) do
+    with {:ok, pid} <- resolve_pid(server) do
+      GenServer.call(pid, {:delete_snapshot, source_id})
+    end
   end
 
   # Server Callbacks
@@ -196,7 +274,7 @@ defmodule Jido.Bus do
     with {:ok, children, adapter_meta} <- adapter.child_spec(name, opts) do
       results =
         Enum.map(children, fn child ->
-          DynamicSupervisor.start_child(Jido.BusSupervisor, child)
+          DynamicSupervisor.start_child(Jido.Bus.Supervisor, child)
         end)
 
       case Enum.find(results, &match?({:error, _}, &1)) do

@@ -16,12 +16,13 @@ defmodule Jido.BusTest do
   setup do
     bus_name = :"bus_#{:erlang.unique_integer()}"
     start_supervised!({Bus, name: bus_name, adapter: :in_memory})
-    %{bus: bus_name}
+    {:ok, pid} = Bus.whereis(bus_name)
+    %{bus: pid, bus_name: bus_name}
   end
 
   describe "via_tuple/2" do
     test "returns via tuple with default registry" do
-      assert Bus.via_tuple(:my_bus) == {:via, Registry, {Jido.BusRegistry, :my_bus}}
+      assert Bus.via_tuple(:my_bus) == {:via, Registry, {Jido.Bus.Registry, :my_bus}}
     end
 
     test "returns via tuple with custom registry" do
@@ -31,8 +32,8 @@ defmodule Jido.BusTest do
   end
 
   describe "whereis/2" do
-    test "returns pid for running bus", %{bus: bus} do
-      assert {:ok, pid} = Bus.whereis(bus)
+    test "returns pid for running bus", %{bus_name: bus_name} do
+      assert {:ok, pid} = Bus.whereis(bus_name)
       assert is_pid(pid)
     end
 

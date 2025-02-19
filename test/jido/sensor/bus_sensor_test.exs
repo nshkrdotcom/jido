@@ -7,8 +7,9 @@ defmodule Jido.Sensors.BusTest do
   setup do
     # Start a test bus with a unique name for each test
     bus_name = :"test_bus_#{:erlang.unique_integer()}"
-    {:ok, _pid} = Jido.Bus.start_link(name: bus_name)
-    {:ok, %{bus_name: bus_name}}
+    start_supervised!({Jido.Bus, name: bus_name, adapter: :in_memory})
+    {:ok, pid} = Jido.Bus.whereis(bus_name)
+    {:ok, %{bus_name: bus_name, bus: pid}}
   end
 
   describe "Bus Sensor" do
@@ -31,7 +32,7 @@ defmodule Jido.Sensors.BusTest do
       :ok = GenServer.stop(pid)
     end
 
-    test "forwards signals matching stream_id", %{bus_name: bus_name} do
+    test "forwards signals matching stream_id", %{bus_name: bus_name, bus: bus} do
       opts = [
         id: "test_bus",
         target: {:pid, target: self()},
@@ -54,7 +55,7 @@ defmodule Jido.Sensors.BusTest do
       }
 
       # Publish the signal
-      :ok = Jido.Bus.publish(bus_name, "test_stream", :any_version, [signal])
+      :ok = Jido.Bus.publish(bus, "test_stream", :any_version, [signal])
 
       assert_receive {:signal, {:ok, received_signal}}, 200
       assert received_signal.type == "test.event"
@@ -66,7 +67,7 @@ defmodule Jido.Sensors.BusTest do
       :ok = GenServer.stop(pid)
     end
 
-    test "filters out signals with non-matching stream_id", %{bus_name: bus_name} do
+    test "filters out signals with non-matching stream_id", %{bus_name: bus_name, bus: bus} do
       opts = [
         id: "test_bus",
         target: {:pid, target: self()},
@@ -89,14 +90,17 @@ defmodule Jido.Sensors.BusTest do
       }
 
       # Publish the signal
-      :ok = Jido.Bus.publish(bus_name, "other_stream", :any_version, [signal])
+      :ok = Jido.Bus.publish(bus, "other_stream", :any_version, [signal])
 
       refute_receive {:signal, _}, 200
 
       :ok = GenServer.stop(pid)
     end
 
-    test "handles subscription format with subscription reference", %{bus_name: bus_name} do
+    test "handles subscription format with subscription reference", %{
+      bus_name: bus_name,
+      bus: bus
+    } do
       opts = [
         id: "test_bus",
         target: {:pid, target: self()},
@@ -119,7 +123,7 @@ defmodule Jido.Sensors.BusTest do
       }
 
       # Publish the signal
-      :ok = Jido.Bus.publish(bus_name, "test_stream", :any_version, [signal])
+      :ok = Jido.Bus.publish(bus, "test_stream", :any_version, [signal])
 
       assert_receive {:signal, {:ok, received_signal}}, 200
       assert received_signal.type == "test.event"

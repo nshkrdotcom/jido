@@ -107,8 +107,8 @@ defmodule Jido.Signal.Dispatch.Bus do
     stream = Keyword.fetch!(opts, :stream)
 
     case Jido.Bus.whereis(bus_name) do
-      {:ok, _pid} ->
-        Jido.Bus.publish(bus_name, stream, :any_version, [signal])
+      {:ok, pid} ->
+        Jido.Bus.publish(pid, stream, :any_version, [signal])
 
       {:error, :not_found} ->
         Logger.error("Bus not found: #{bus_name}")

@@ -15,8 +15,8 @@ defmodule Jido.Application do
       {DynamicSupervisor, strategy: :one_for_one, name: Jido.AgentSupervisor},
 
       # Bus Registry & Default Supervisor
-      {Registry, keys: :unique, name: Jido.BusRegistry},
-      {DynamicSupervisor, strategy: :one_for_one, name: Jido.BusSupervisor},
+      {Registry, keys: :unique, name: Jido.Bus.Registry},
+      {DynamicSupervisor, strategy: :one_for_one, name: Jido.Bus.Supervisor},
 
       # Add the Jido Scheduler (Quantum) under the name :jido_quantum
       {Jido.Scheduler, name: :jido_quantum}

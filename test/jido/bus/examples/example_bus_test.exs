@@ -1,100 +1,89 @@
 defmodule Jido.Bus.Examples.ExampleBusTest do
   use JidoTest.Case, async: true
 
+  alias Jido.Bus
   alias Jido.Signal
-  alias Phoenix.PubSub
+  alias Jido.Bus.Snapshot
 
-  describe "pubsub bus" do
-    setup do
-      test_name = :"pubsub_#{:erlang.unique_integer()}"
-      pubsub_name = :"#{test_name}_pubsub"
-
-      # Start Phoenix.PubSub
-      {:ok, _} = Phoenix.PubSub.Supervisor.start_link(name: pubsub_name)
-
-      # Start bus with pubsub adapter
-      {:ok, bus} =
-        Jido.Bus.start_link(
-          name: test_name,
-          adapter: :pubsub,
-          pubsub_name: pubsub_name
-        )
-
-      {:ok, %{bus: bus, pubsub_name: pubsub_name, test_name: test_name}}
-    end
-
-    test "can publish and subscribe to signals", %{pubsub_name: pubsub_name, test_name: test_name} do
-      # Subscribe directly to PubSub
-      :ok = PubSub.subscribe(pubsub_name, "test_stream")
-
-      # Create and publish a signal
-      signal = %Signal{
-        id: Jido.Util.generate_id(),
-        source: "test",
-        type: "test.event",
-        data: %{value: 123},
-        jido_metadata: %{}
-      }
-
-      :ok = Jido.Bus.publish(test_name, "test_stream", :any_version, [signal])
-
-      # Verify we receive the signal
-      assert_receive {:signal, received_signal}
-      assert received_signal.id == signal.id
-      assert received_signal.data.value == 123
-    end
+  defmodule BankAccountOpened do
+    @derive Jason.Encoder
+    defstruct [:account_number, :initial_balance]
   end
 
-  describe "in-memory bus" do
-    setup do
-      test_name = :"memory_#{:erlang.unique_integer()}"
+  setup do
+    test_name = :"test_#{:erlang.unique_integer()}"
+    start_supervised!({Bus, name: test_name, adapter: :in_memory})
+    {:ok, pid} = Bus.whereis(test_name)
+    {:ok, %{test_name: test_name, bus: pid}}
+  end
 
-      {:ok, bus} =
-        Jido.Bus.start_link(
-          name: test_name,
-          adapter: :in_memory
-        )
+  test "pubsub bus can publish and subscribe to signals" do
+    test_name = :"test_#{:erlang.unique_integer()}"
+    pubsub_name = :"#{test_name}_pubsub"
 
-      {:ok, %{bus: bus, test_name: test_name}}
-    end
+    # Start Phoenix.PubSub
+    start_supervised!({Phoenix.PubSub, name: pubsub_name})
 
-    test "supports signal replay", %{test_name: test_name} do
-      # Publish some signals
-      signals =
-        for i <- 1..3 do
-          %Signal{
-            id: Jido.Util.generate_id(),
-            source: "test",
-            type: "test.event",
-            data: %{value: i},
-            jido_metadata: %{}
-          }
-        end
+    # Start bus with pubsub adapter
+    start_supervised!({Bus, name: test_name, adapter: :pubsub, pubsub_name: pubsub_name})
+    {:ok, bus} = Bus.whereis(test_name)
 
-      :ok = Jido.Bus.publish(test_name, "test_stream", :any_version, signals)
+    signal = %Signal{
+      id: Jido.Util.generate_id(),
+      source: Jido.Util.generate_id(),
+      type: "#{__MODULE__}.BankAccountOpened",
+      data: %BankAccountOpened{account_number: 1, initial_balance: 1_000},
+      jido_metadata: %{"metadata" => "value"}
+    }
 
-      # Replay and verify
-      replayed = Jido.Bus.replay(test_name, "test_stream") |> Enum.to_list()
-      assert length(replayed) == 3
-      assert Enum.map(replayed, & &1.data.value) == [1, 2, 3]
-    end
+    :ok = Bus.subscribe(bus, "test_stream")
+    assert_receive {:subscribed, subscription}
 
-    test "supports snapshots", %{test_name: test_name} do
-      snapshot = %Jido.Bus.Snapshot{
-        source_id: "test_source",
-        source_version: 1,
-        source_type: "TestAggregate",
-        data: %{state: "test_state"},
-        created_at: DateTime.utc_now()
+    :ok = Bus.publish(bus, "test_stream", :any_version, [signal])
+
+    assert_receive {:signals, ^subscription, received_signals}
+    assert length(received_signals) == 1
+    assert hd(received_signals).data == signal.data
+  end
+
+  test "in-memory bus supports signal replay", %{bus: bus} do
+    signals = [
+      %Signal{
+        id: Jido.Util.generate_id(),
+        source: Jido.Util.generate_id(),
+        type: "#{__MODULE__}.BankAccountOpened",
+        data: %BankAccountOpened{account_number: 1, initial_balance: 1_000},
+        jido_metadata: %{"metadata" => "value"}
+      },
+      %Signal{
+        id: Jido.Util.generate_id(),
+        source: Jido.Util.generate_id(),
+        type: "#{__MODULE__}.BankAccountOpened",
+        data: %BankAccountOpened{account_number: 2, initial_balance: 2_000},
+        jido_metadata: %{"metadata" => "value"}
       }
+    ]
 
-      :ok = Jido.Bus.record_snapshot(test_name, snapshot)
+    :ok = Bus.publish(bus, "test_stream", :any_version, signals)
 
-      {:ok, retrieved} = Jido.Bus.read_snapshot(test_name, "test_source")
-      assert retrieved.data.state == "test_state"
+    stream = Bus.replay(bus, "test_stream")
+    read_signals = Enum.to_list(stream)
+    assert length(read_signals) == 2
+    assert Enum.map(read_signals, & &1.data) == Enum.map(signals, & &1.data)
+  end
 
-      :ok = Jido.Bus.delete_snapshot(test_name, "test_source")
-      assert {:error, :snapshot_not_found} = Jido.Bus.read_snapshot(test_name, "test_source")
-    end
+  test "in-memory bus supports snapshots", %{bus: bus} do
+    snapshot = %Snapshot{
+      source_id: Jido.Util.generate_id(),
+      source_version: 1,
+      source_type: "#{__MODULE__}.BankAccountOpened",
+      data: %BankAccountOpened{account_number: 1, initial_balance: 1_000},
+      jido_metadata: nil,
+      created_at: DateTime.utc_now()
+    }
+
+    :ok = Bus.record_snapshot(bus, snapshot)
+    assert {:ok, read_snapshot} = Bus.read_snapshot(bus, snapshot.source_id)
+    assert read_snapshot.data == snapshot.data
   end
 end

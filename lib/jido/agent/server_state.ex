@@ -85,7 +85,7 @@ defmodule Jido.Agent.Server.State do
     field(:mode, modes(), default: :auto)
     field(:log_level, log_levels(), default: :info)
     field(:max_queue_size, non_neg_integer(), default: 10_000)
-    field(:registry, atom(), default: Jido.AgentRegistry)
+    field(:registry, atom(), default: Jido.Agent.Registry)
 
     field(:dispatch, dispatch_config(), default: {:logger, []})
 

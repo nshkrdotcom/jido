@@ -41,7 +41,7 @@ defmodule JidoTest do
       {:ok, _} = start_supervised({Phoenix.PubSub, name: pubsub_name})
       {:ok, _} = start_supervised({Registry, keys: :unique, name: registry_name})
 
-      # Temporarily override the Jido.AgentRegistry name for this test
+      # Temporarily override the Jido.Agent.Registry name for this test
       Application.put_env(:jido, :agent_registry, registry_name)
       on_exit(fn -> Application.delete_env(:jido, :agent_registry) end)
 
@@ -73,7 +73,7 @@ defmodule JidoTest do
       {:ok, _} = start_supervised({Phoenix.PubSub, name: pubsub_name})
       {:ok, _} = start_supervised({Registry, keys: :unique, name: registry_name})
 
-      # Temporarily override the Jido.AgentRegistry name for this test
+      # Temporarily override the Jido.Agent.Registry name for this test
       Application.put_env(:jido, :agent_registry, registry_name)
       on_exit(fn -> Application.delete_env(:jido, :agent_registry) end)
 

@@ -11,8 +11,8 @@ defmodule Jido.Application do
       {Phoenix.PubSub, name: Jido.PubSub},
 
       # Agent Registry & Default Supervisor
-      {Registry, keys: :unique, name: Jido.AgentRegistry},
-      {DynamicSupervisor, strategy: :one_for_one, name: Jido.AgentSupervisor},
+      {Registry, keys: :unique, name: Jido.Agent.Registry},
+      {DynamicSupervisor, strategy: :one_for_one, name: Jido.Agent.Supervisor},
 
       # Bus Registry & Default Supervisor
       {Registry, keys: :unique, name: Jido.Bus.Registry},

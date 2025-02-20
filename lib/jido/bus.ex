@@ -72,11 +72,11 @@ defmodule Jido.Bus do
 
       # Using a custom registry
       iex> Jido.Bus.resolve_pid({:my_bus, Jido.Bus.Registry})
-      {:error, :server_not_found}
+      {:error, :not_found}
 
       # Using default registry
       iex> Jido.Bus.resolve_pid(:my_bus)
-      {:error, :server_not_found}
+      {:error, :not_found}
   """
   @spec resolve_pid(server()) :: {:ok, pid()} | {:error, :server_not_found}
   def resolve_pid(pid) when is_pid(pid), do: {:ok, pid}
@@ -87,7 +87,7 @@ defmodule Jido.Bus do
 
     case Registry.lookup(registry, name) do
       [{pid, _}] -> {:ok, pid}
-      [] -> {:error, :server_not_found}
+      [] -> {:error, :not_found}
     end
   end
 

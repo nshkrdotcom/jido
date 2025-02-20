@@ -149,9 +149,6 @@ Start your agents under supervision:
 ```elixir
 # In your application.ex
 children = [
-  {Registry, keys: :unique, name: Jido.AgentRegistry},
-  {Phoenix.PubSub, name: MyApp.PubSub},
-
   # Agents fit into your existing supervision tree
   # Specify an id to always uniquely identify the agent
   {MyApp.CalculatorAgent, id: "calculator_1"}

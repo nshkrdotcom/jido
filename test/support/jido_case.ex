@@ -20,4 +20,25 @@ defmodule JidoTest.Case do
     # Setup any test state or fixtures needed
     :ok
   end
+
+  @doc """
+  Stop the given process with a non-normal exit reason.
+  Can accept either a PID or registered name.
+  """
+  def shutdown_test_process(pid, reason \\ :shutdown)
+
+  def shutdown_test_process(pid, reason) when is_pid(pid) do
+    Process.unlink(pid)
+    Process.exit(pid, reason)
+
+    ref = Process.monitor(pid)
+    assert_receive {:DOWN, ^ref, _, _, _}, 5_000
+  end
+
+  def shutdown_test_process(name, reason) when is_atom(name) do
+    case Process.whereis(name) do
+      nil -> :ok
+      pid -> shutdown_test_process(pid, reason)
+    end
+  end
 end

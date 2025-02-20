@@ -202,7 +202,7 @@ defmodule Jido.Discovery do
     try do
       cache = build_cache()
       :persistent_term.put(@cache_key, cache)
-      Logger.info("Jido discovery cache initialized successfully")
+      Logger.debug("Jido discovery cache initialized successfully")
       :ok
     rescue
       e ->

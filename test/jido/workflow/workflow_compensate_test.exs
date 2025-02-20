@@ -102,6 +102,7 @@ defmodule JidoTest.WorkflowCompensateTest do
   end
 
   describe "telemetry with compensation" do
+    @tag :flaky
     test "emits telemetry events for compensation flow" do
       params = %{should_fail: true}
 

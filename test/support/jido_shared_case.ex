@@ -6,7 +6,7 @@ defmodule JidoTest.SharedTestCase do
         block = unquote(Macro.escape(block))
 
         quote do
-          use ExUnit.Case
+          use JidoTest.Case
 
           @moduletag unquote(options)
           unquote(block)

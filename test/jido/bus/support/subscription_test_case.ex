@@ -5,7 +5,6 @@ defmodule Jido.Bus.SubscriptionTestCase do
   define_tests do
     alias Jido.Bus.{RecordedSignal, Subscriber}
     alias Jido.Signal
-    alias JidoTest.Helpers.ProcessHelper
 
     defmodule BankAccountOpened do
       @moduledoc false
@@ -857,7 +856,7 @@ defmodule Jido.Bus.SubscriptionTestCase do
 
         assert_receive {:subscribed, ^subscriber, subscription}
 
-        ProcessHelper.shutdown(subscription)
+        shutdown_test_process(subscription)
 
         refute Process.alive?(subscription)
         assert Process.alive?(subscriber)
@@ -887,7 +886,7 @@ defmodule Jido.Bus.SubscriptionTestCase do
     end
 
     defp stop_subscriber(subscriber) do
-      ProcessHelper.shutdown(subscriber)
+      shutdown_test_process(subscriber)
 
       wait_for_signal_store()
     end

@@ -2,7 +2,7 @@ defmodule Jido.Bus.RecordedSignalTest do
   use ExUnit.Case
 
   alias Jido.Bus.RecordedSignal
-  alias JidoTest.Helpers.SignalFactory
+  alias Jido.Signal
 
   defmodule BankAccountOpened do
     @derive Jason.Encoder
@@ -11,7 +11,7 @@ defmodule Jido.Bus.RecordedSignalTest do
 
   setup do
     [signal] =
-      SignalFactory.map_to_recorded_signals(
+      map_to_recorded_signals(
         [
           %BankAccountOpened{account_number: "123", initial_balance: 1_000}
         ],
@@ -62,5 +62,36 @@ defmodule Jido.Bus.RecordedSignalTest do
       expected_data = %BankAccountOpened{account_number: "123", initial_balance: 1_000}
       assert RecordedSignal.map_from_recorded_signal(signal) == expected_data
     end
+  end
+
+  def map_to_recorded_signals(signals, initial_signal_number \\ 1, opts \\ []) do
+    stream_id = Jido.Util.generate_id()
+    causation_id = Keyword.get(opts, :causation_id, Jido.Util.generate_id())
+    correlation_id = Keyword.get(opts, :correlation_id, Jido.Util.generate_id())
+    jido_metadata = Keyword.get(opts, :jido_metadata, %{})
+
+    fields = [
+      causation_id: causation_id,
+      correlation_id: correlation_id,
+      jido_metadata: jido_metadata
+    ]
+
+    signals
+    |> Signal.map_to_signal_data(fields)
+    |> Enum.with_index(initial_signal_number)
+    |> Enum.map(fn {signal, index} ->
+      %RecordedSignal{
+        signal_id: Jido.Util.generate_id(),
+        signal_number: index,
+        stream_id: stream_id,
+        stream_version: index,
+        causation_id: signal.source,
+        correlation_id: signal.id,
+        type: signal.type,
+        data: signal.data,
+        jido_metadata: signal.jido_metadata,
+        created_at: DateTime.utc_now()
+      }
+    end)
   end
 end

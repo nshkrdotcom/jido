@@ -36,7 +36,7 @@ defmodule JidoTest.CronTest do
               0 -> false
             end
           end,
-          1000
+          timeout: 1000
         )
 
         # Cleanup
@@ -77,8 +77,7 @@ defmodule JidoTest.CronTest do
               Enum.all?(signals, &(&1.type == "cron_trigger")) and
               Enum.any?(signals, &(&1.data.name == :named_job))
           end,
-          # Increase timeout to ensure we catch both signals
-          2000
+          timeout: 2000
         )
 
         # Cleanup
@@ -111,7 +110,7 @@ defmodule JidoTest.CronTest do
               0 -> false
             end
           end,
-          500
+          timeout: 500
         )
 
         # Cleanup
@@ -148,7 +147,7 @@ defmodule JidoTest.CronTest do
               0 -> false
             end
           end,
-          750
+          timeout: 750
         )
 
         # Cleanup

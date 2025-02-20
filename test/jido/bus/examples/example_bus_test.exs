@@ -37,13 +37,46 @@ defmodule Jido.Bus.Examples.ExampleBusTest do
     }
 
     :ok = Bus.subscribe(bus, "test_stream")
-    assert_receive {:subscribed, subscription}
+
+    # Wait for subscription confirmation
+    assert_eventually(
+      fn ->
+        receive do
+          {:subscribed, _subscription} -> true
+          _ -> false
+        after
+          0 -> false
+        end
+      end,
+      timeout: 1000
+    )
+
+    # Store subscription for later use
+    subscription =
+      receive do
+        {:subscribed, sub} -> sub
+      after
+        0 -> nil
+      end
 
     :ok = Bus.publish(bus, "test_stream", :any_version, [signal])
 
-    assert_receive {:signals, ^subscription, received_signals}
-    assert length(received_signals) == 1
-    assert hd(received_signals).data == signal.data
+    # Wait for published signals
+    assert_eventually(
+      fn ->
+        receive do
+          {:signals, ^subscription, received_signals} ->
+            length(received_signals) == 1 and
+              hd(received_signals).data == signal.data
+
+          _ ->
+            false
+        after
+          0 -> false
+        end
+      end,
+      timeout: 1000
+    )
   end
 
   test "in-memory bus supports signal replay", %{bus: bus} do

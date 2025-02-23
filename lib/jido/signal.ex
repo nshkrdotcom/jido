@@ -146,11 +146,26 @@ defmodule Jido.Signal do
   """
   alias Jido.Instruction
   alias Jido.Signal.Dispatch
+  alias Jido.Signal.ID
   use TypedStruct
+
+  @derive {Jason.Encoder,
+           only: [
+             :id,
+             :source,
+             :type,
+             :subject,
+             :time,
+             :datacontenttype,
+             :dataschema,
+             :data,
+             :specversion,
+             :jido_metadata
+           ]}
 
   typedstruct do
     field(:specversion, String.t(), default: "1.0.2")
-    field(:id, String.t(), enforce: true, default: Jido.Util.generate_id())
+    field(:id, String.t(), enforce: true, default: ID.generate!())
     field(:source, String.t(), enforce: true)
     field(:type, String.t(), enforce: true)
     field(:subject, String.t())
@@ -235,7 +250,7 @@ defmodule Jido.Signal do
 
     defaults = %{
       "specversion" => "1.0.2",
-      "id" => Jido.Util.generate_id(),
+      "id" => ID.generate!(),
       "time" => DateTime.utc_now() |> DateTime.to_iso8601(),
       "source" => caller
     }
@@ -307,12 +322,12 @@ defmodule Jido.Signal do
     Enum.map(signals, &map_to_signal_data(&1, fields))
   end
 
-  alias Jido.Serialization.TypeProvider
+  alias Jido.Signal.Serialization.TypeProvider
 
   @spec map_to_signal_data(struct, Keyword.t()) :: t()
   def map_to_signal_data(signal, fields) do
     %__MODULE__{
-      id: Jido.Util.generate_id(),
+      id: ID.generate(),
       source: "http://example.com/bank",
       type: TypeProvider.to_string(signal),
       data: signal,
@@ -332,7 +347,8 @@ defmodule Jido.Signal do
   defp parse_source(_), do: {:error, "missing source"}
 
   defp parse_id(%{"id" => id}) when byte_size(id) > 0, do: {:ok, id}
-  defp parse_id(_), do: {:error, "missing id"}
+  defp parse_id(%{"id" => ""}), do: {:error, "id given but empty"}
+  defp parse_id(_), do: {:ok, ID.generate!()}
 
   defp parse_subject(%{"subject" => sub}) when byte_size(sub) > 0, do: {:ok, sub}
   defp parse_subject(%{"subject" => ""}), do: {:error, "subject given but empty"}

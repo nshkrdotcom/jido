@@ -3,97 +3,168 @@ defmodule Jido.Signal.RouterDefinitionTest do
 
   alias Jido.Instruction
   alias Jido.Signal.Router
+  alias Jido.Signal.Router.{Route, Validator}
 
   @moduletag :capture_log
 
   describe "normalize/1" do
     test "normalizes single Route struct" do
-      route = %Router.Route{
+      route = %Route{
         path: "test.path",
-        instruction: %Instruction{action: TestAction}
+        target: %Instruction{action: TestAction}
       }
 
-      assert {:ok, [^route]} = Router.normalize(route)
+      assert {:ok, [^route]} = Validator.normalize(route)
     end
 
     test "normalizes list of Route structs" do
       routes = [
-        %Router.Route{path: "test.1", instruction: %Instruction{action: TestAction1}},
-        %Router.Route{path: "test.2", instruction: %Instruction{action: TestAction2}}
+        %Route{
+          path: "test.1",
+          target: %Instruction{action: TestAction1}
+        },
+        %Route{
+          path: "test.2",
+          target: %Instruction{action: TestAction2}
+        }
       ]
 
-      assert {:ok, ^routes} = Router.normalize(routes)
+      assert {:ok, ^routes} = Validator.normalize(routes)
     end
 
-    test "normalizes {path, instruction} tuple" do
+    test "normalizes {path, target} tuple" do
       path = "test.path"
-      instruction = %Instruction{action: TestAction}
+      target = %Instruction{action: TestAction}
 
-      assert {:ok, [%Router.Route{path: ^path, instruction: ^instruction}]} =
-               Router.normalize({path, instruction})
+      assert {:ok, [%Route{path: ^path, target: ^target}]} = Validator.normalize({path, target})
     end
 
-    test "normalizes {path, instruction, priority} tuple" do
+    test "normalizes {path, target, priority} tuple" do
       path = "test.path"
-      instruction = %Instruction{action: TestAction}
-      priority = 10
-
-      assert {:ok, [%Router.Route{path: ^path, instruction: ^instruction, priority: ^priority}]} =
-               Router.normalize({path, instruction, priority})
-    end
-
-    test "normalizes {path, match_fn, instruction} tuple" do
-      path = "test.path"
-      instruction = %Instruction{action: TestAction}
-      match_fn = fn _signal -> true end
-
-      assert {:ok, [%Router.Route{path: ^path, instruction: ^instruction, match: ^match_fn}]} =
-               Router.normalize({path, match_fn, instruction})
-    end
-
-    test "normalizes {path, match_fn, instruction, priority} tuple" do
-      path = "test.path"
-      instruction = %Instruction{action: TestAction}
-      match_fn = fn _signal -> true end
+      target = %Instruction{action: TestAction}
       priority = 10
 
       assert {:ok,
               [
-                %Router.Route{
+                %Route{
                   path: ^path,
-                  instruction: ^instruction,
+                  target: ^target,
+                  priority: ^priority
+                }
+              ]} = Validator.normalize({path, target, priority})
+    end
+
+    test "normalizes {path, match_fn, target} tuple" do
+      path = "test.path"
+      target = %Instruction{action: TestAction}
+
+      match_fn = fn signal ->
+        signal.path == path
+      end
+
+      assert {:ok,
+              [
+                %Route{
+                  path: ^path,
+                  target: ^target,
+                  match: ^match_fn
+                }
+              ]} = Validator.normalize({path, match_fn, target})
+    end
+
+    test "normalizes {path, match_fn, target, priority} tuple" do
+      path = "test.path"
+      target = %Instruction{action: TestAction}
+      priority = 10
+
+      match_fn = fn signal ->
+        signal.path == path
+      end
+
+      assert {:ok,
+              [
+                %Route{
+                  path: ^path,
+                  target: ^target,
                   match: ^match_fn,
                   priority: ^priority
                 }
-              ]} = Router.normalize({path, match_fn, instruction, priority})
+              ]} = Validator.normalize({path, match_fn, target, priority})
     end
 
-    test "normalizes {path, pid} tuple" do
+    test "normalizes {path, {adapter, opts}} tuple" do
       path = "test.path"
-
-      test_pid =
-        spawn(fn ->
-          receive do
-            _ -> :ok
-          end
-        end)
+      adapter = :noop
+      opts = [key: "value"]
 
       assert {:ok,
               [
-                %Router.Route{
+                %Route{
                   path: ^path,
-                  instruction: %Instruction{
-                    action: Jido.Signal.Dispatch.Pid,
-                    params: %{pid: ^test_pid}
-                  },
-                  priority: 0,
-                  match: nil
+                  target: {^adapter, ^opts}
                 }
-              ]} = Router.normalize({path, test_pid})
+              ]} = Validator.normalize({path, {adapter, opts}})
+    end
+
+    test "normalizes {path, [{adapter, opts}, ...]} tuple with multiple dispatch configs" do
+      path = "test.path"
+      test_pid = self()
+
+      configs = [
+        {:noop, [key: "value1"]},
+        {:pid, [target: test_pid]}
+      ]
+
+      {:ok, [route]} = Validator.normalize({path, configs})
+      assert route.path == path
+      assert length(route.target) == 2
+
+      noop_config = Enum.find(route.target, fn {adapter, _opts} -> adapter == :noop end)
+      pid_config = Enum.find(route.target, fn {adapter, _opts} -> adapter == :pid end)
+
+      assert noop_config == {:noop, [key: "value1"]}
+      assert elem(pid_config, 0) == :pid
+      assert Keyword.get(elem(pid_config, 1), :target) == test_pid
+    end
+
+    test "normalizes {path, [{adapter, opts}, ...]} tuple with keyword list format" do
+      path = "test.path"
+      test_pid = self()
+
+      configs = [
+        noop: [key: "value1"],
+        pid: [target: test_pid]
+      ]
+
+      {:ok, [route]} = Validator.normalize({path, configs})
+      assert route.path == path
+      assert length(route.target) == 2
+
+      noop_config = Enum.find(route.target, fn {adapter, _opts} -> adapter == :noop end)
+      pid_config = Enum.find(route.target, fn {adapter, _opts} -> adapter == :pid end)
+
+      assert noop_config == {:noop, [key: "value1"]}
+      assert elem(pid_config, 0) == :pid
+      assert Keyword.get(elem(pid_config, 1), :target) == test_pid
+    end
+
+    test "returns error for invalid dispatch config list" do
+      path = "test.path"
+      # Using an invalid adapter that will be caught by dispatch validation
+      invalid_configs = [
+        {:noop, [key: "value1"]},
+        {:invalid_adapter, [key: "value2"]}
+      ]
+
+      assert {:error, error} = Validator.normalize({path, invalid_configs})
+      assert error.type == :validation_error
+      assert error.message == "Invalid dispatch configuration"
     end
 
     test "returns error for invalid route specification" do
-      assert {:error, _} = Router.normalize({:invalid, "format"})
+      assert {:error, error} = Validator.normalize({:invalid, "format"})
+      assert error.type == :validation_error
+      assert error.message == "Invalid route specification format"
     end
   end
 
@@ -101,7 +172,7 @@ defmodule Jido.Signal.RouterDefinitionTest do
     test "validates valid Route struct" do
       route = %Router.Route{
         path: "test.path",
-        instruction: %Instruction{action: TestAction},
+        target: %Instruction{action: TestAction},
         priority: 0
       }
 
@@ -112,11 +183,11 @@ defmodule Jido.Signal.RouterDefinitionTest do
       routes = [
         %Router.Route{
           path: "test.path1",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         },
         %Router.Route{
           path: "test.path2",
-          instruction: %Instruction{action: TestAction},
+          target: %Instruction{action: TestAction},
           priority: 10
         }
       ]
@@ -126,47 +197,122 @@ defmodule Jido.Signal.RouterDefinitionTest do
       assert Enum.all?(validated, &match?(%Router.Route{}, &1))
     end
 
+    test "validates route with single dispatch config" do
+      route = %Router.Route{
+        path: "test.path",
+        target: {:noop, [key: "value"]}
+      }
+
+      assert {:ok, ^route} = Router.validate(route)
+    end
+
+    test "validates route with multiple dispatch configs" do
+      test_pid = self()
+
+      configs = [
+        {:noop, [key: "value1"]},
+        {:pid, [target: test_pid]}
+      ]
+
+      route = %Router.Route{
+        path: "test.path",
+        target: configs
+      }
+
+      {:ok, validated_route} = Router.validate(route)
+      assert validated_route.path == route.path
+      assert length(validated_route.target) == 2
+
+      noop_config = Enum.find(validated_route.target, fn {adapter, _opts} -> adapter == :noop end)
+      pid_config = Enum.find(validated_route.target, fn {adapter, _opts} -> adapter == :pid end)
+
+      assert noop_config == {:noop, [key: "value1"]}
+      assert elem(pid_config, 0) == :pid
+      assert Keyword.get(elem(pid_config, 1), :target) == test_pid
+    end
+
     test "returns error for invalid path format" do
       route = %Router.Route{
         path: "invalid..path",
-        instruction: %Instruction{action: TestAction}
+        target: %Instruction{action: TestAction}
       }
 
-      assert {:error, _} = Router.validate(route)
+      assert {:error, error} = Router.validate(route)
+      assert error.type == :routing_error
+      assert error.message == "Path cannot contain consecutive dots"
+
+      # Test invalid path with '**' sequence
+      route_with_double_star = %Router.Route{
+        path: "invalid**path",
+        target: %Instruction{action: TestAction}
+      }
+
+      assert {:error, error} = Router.validate(route_with_double_star)
+      assert error.type == :routing_error
+      assert error.message == "Path cannot contain '**' sequence"
+
+      # Test invalid characters
+      route_with_invalid_chars = %Router.Route{
+        path: "invalid@#path",
+        target: %Instruction{action: TestAction}
+      }
+
+      assert {:error, error} = Router.validate(route_with_invalid_chars)
+      assert error.type == :routing_error
+      assert error.message == "Path contains invalid characters"
     end
 
-    test "returns error for invalid instruction" do
+    test "returns error for invalid target" do
       route = %Router.Route{
         path: "test.path",
-        instruction: :invalid
+        target: :invalid
       }
 
-      assert {:error, _} = Router.validate(route)
+      assert {:error, error} = Router.validate(route)
+      assert error.type == :routing_error
+      assert error.message == "Invalid route specification format"
+    end
+
+    test "returns error for invalid dispatch config" do
+      route = %Router.Route{
+        path: "test.path",
+        target: {"not_an_atom", []}
+      }
+
+      assert {:error, error} = Router.validate(route)
+      assert error.type == :routing_error
+      assert error.message == "Invalid route specification format"
     end
 
     test "returns error for invalid priority" do
       route = %Router.Route{
         path: "test.path",
-        instruction: %Instruction{action: TestAction},
+        target: %Instruction{action: TestAction},
         # Above max allowed
         priority: 101
       }
 
-      assert {:error, _} = Router.validate(route)
+      assert {:error, error} = Router.validate(route)
+      assert error.type == :routing_error
+      assert error.message == "Priority value exceeds maximum allowed"
     end
 
     test "returns error for invalid match function" do
       route = %Router.Route{
         path: "test.path",
-        instruction: %Instruction{action: TestAction},
+        target: %Instruction{action: TestAction},
         match: "not_a_function"
       }
 
-      assert {:error, _} = Router.validate(route)
+      assert {:error, error} = Router.validate(route)
+      assert error.type == :routing_error
+      assert error.message == "Match must be a function that takes one argument"
     end
 
     test "returns error for invalid input type" do
-      assert {:error, _} = Router.validate(:invalid)
+      assert {:error, error} = Router.validate(:invalid)
+      assert error.type == :validation_error
+      assert error.message == "Expected Route struct or list of Route structs"
     end
   end
 
@@ -174,7 +320,7 @@ defmodule Jido.Signal.RouterDefinitionTest do
     test "creates router with single route" do
       route = %Router.Route{
         path: "test.path",
-        instruction: %Instruction{action: TestAction}
+        target: %Instruction{action: TestAction}
       }
 
       assert {:ok, router} = Router.new(route)
@@ -190,7 +336,7 @@ defmodule Jido.Signal.RouterDefinitionTest do
                        handlers: %Router.NodeHandlers{
                          handlers: [
                            %Router.HandlerInfo{
-                             instruction: %Instruction{action: TestAction},
+                             target: %Instruction{action: TestAction},
                              priority: 0
                            }
                          ]
@@ -206,11 +352,11 @@ defmodule Jido.Signal.RouterDefinitionTest do
       routes = [
         %Router.Route{
           path: "test.path1",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         },
         %Router.Route{
           path: "test.path2",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         }
       ]
 
@@ -227,7 +373,7 @@ defmodule Jido.Signal.RouterDefinitionTest do
                        handlers: %Router.NodeHandlers{
                          handlers: [
                            %Router.HandlerInfo{
-                             instruction: %Instruction{action: TestAction},
+                             target: %Instruction{action: TestAction},
                              priority: 0
                            }
                          ]
@@ -237,7 +383,7 @@ defmodule Jido.Signal.RouterDefinitionTest do
                        handlers: %Router.NodeHandlers{
                          handlers: [
                            %Router.HandlerInfo{
-                             instruction: %Instruction{action: TestAction},
+                             target: %Instruction{action: TestAction},
                              priority: 0
                            }
                          ]
@@ -263,7 +409,7 @@ defmodule Jido.Signal.RouterDefinitionTest do
 
       route = %Router.Route{
         path: "test.path",
-        instruction: %Instruction{action: TestAction}
+        target: %Instruction{action: TestAction}
       }
 
       assert {:ok, updated} = Router.add(router, route)
@@ -277,7 +423,7 @@ defmodule Jido.Signal.RouterDefinitionTest do
                        handlers: %Router.NodeHandlers{
                          handlers: [
                            %Router.HandlerInfo{
-                             instruction: %Instruction{action: TestAction},
+                             target: %Instruction{action: TestAction},
                              priority: 0
                            }
                          ]
@@ -295,11 +441,11 @@ defmodule Jido.Signal.RouterDefinitionTest do
       routes = [
         %Router.Route{
           path: "test.path1",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         },
         %Router.Route{
           path: "test.path2",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         }
       ]
 
@@ -313,11 +459,11 @@ defmodule Jido.Signal.RouterDefinitionTest do
       routes = [
         %Router.Route{
           path: "test.path1",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         },
         %Router.Route{
           path: "test.path2",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         }
       ]
 
@@ -334,7 +480,7 @@ defmodule Jido.Signal.RouterDefinitionTest do
                        handlers: %Router.NodeHandlers{
                          handlers: [
                            %Router.HandlerInfo{
-                             instruction: %Instruction{action: TestAction},
+                             target: %Instruction{action: TestAction},
                              priority: 0
                            }
                          ]
@@ -350,11 +496,11 @@ defmodule Jido.Signal.RouterDefinitionTest do
       routes = [
         %Router.Route{
           path: "test.path1",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         },
         %Router.Route{
           path: "test.path2",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         }
       ]
 
@@ -371,11 +517,11 @@ defmodule Jido.Signal.RouterDefinitionTest do
       routes = [
         %Router.Route{
           path: "test.path1",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         },
         %Router.Route{
           path: "test.path2",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         }
       ]
 
@@ -387,7 +533,7 @@ defmodule Jido.Signal.RouterDefinitionTest do
       assert Enum.all?(listed_routes, fn route ->
                match?(
                  %Router.Route{
-                   instruction: %Instruction{action: TestAction},
+                   target: %Instruction{action: TestAction},
                    priority: 0
                  },
                  route
@@ -408,22 +554,22 @@ defmodule Jido.Signal.RouterDefinitionTest do
       routes1 = [
         %Router.Route{
           path: "test.path1",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         },
         %Router.Route{
           path: "test.path2",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         }
       ]
 
       routes2 = [
         %Router.Route{
           path: "test.path3",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         },
         %Router.Route{
           path: "test.path4",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         }
       ]
 
@@ -453,7 +599,7 @@ defmodule Jido.Signal.RouterDefinitionTest do
       routes = [
         %Router.Route{
           path: "test.path1",
-          instruction: %Instruction{action: TestAction}
+          target: %Instruction{action: TestAction}
         }
       ]
 
@@ -471,14 +617,14 @@ defmodule Jido.Signal.RouterDefinitionTest do
       routes1 = [
         %Router.Route{
           path: "test.path",
-          instruction: %Instruction{action: TestAction1}
+          target: %Instruction{action: TestAction1}
         }
       ]
 
       routes2 = [
         %Router.Route{
           path: "test.path",
-          instruction: %Instruction{action: TestAction2}
+          target: %Instruction{action: TestAction2}
         }
       ]
 
@@ -494,8 +640,8 @@ defmodule Jido.Signal.RouterDefinitionTest do
       [route1, route2] = routes
       assert route1.path == "test.path"
       assert route2.path == "test.path"
-      assert route1.instruction.action == TestAction1
-      assert route2.instruction.action == TestAction2
+      assert route1.target.action == TestAction1
+      assert route2.target.action == TestAction2
     end
   end
 end

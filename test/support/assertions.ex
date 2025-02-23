@@ -3,6 +3,19 @@ defmodule JidoTest.Helpers.Assertions do
   import ExUnit.Assertions
 
   @doc """
+  Asserts that a module implements a specified behaviour.
+
+  ## Examples
+
+      assert_implements(MyModule, GenServer)
+  """
+  def assert_implements(module, behaviour) do
+    all = Keyword.take(module.__info__(:attributes), [:behaviour])
+
+    assert [behaviour] in Keyword.values(all)
+  end
+
+  @doc """
   Partially adapted from Thomas Millar's wait_for
   https://gist.github.com/thmsmlr/8b32cc702acb48f39e653afc0902374f
 

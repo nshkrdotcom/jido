@@ -1,6 +1,6 @@
 defmodule Jido.Signal.Router do
   @moduledoc """
-  The Router module implements a high-performance, trie-based signal routing system designed specifically for agent-based architectures. It provides sophisticated message routing capabilities with support for exact matches, wildcards, and pattern matching functions.
+  The Router module implements a high-performance, trie-based signal routing system designed specifically for agent-based architectures. It provides sophisticated message routing capabilities with support for exact matches, wildcards, pattern matching functions, and multiple dispatch targets.
 
   ## Core Concepts
 
@@ -10,6 +10,7 @@ defmodule Jido.Signal.Router do
   - Complexity-based ordering for wildcard resolution
   - Dynamic route management (add/remove at runtime)
   - Pattern matching through custom functions
+  - Multiple dispatch targets per route
 
   ### Path Patterns
 
@@ -30,6 +31,16 @@ defmodule Jido.Signal.Router do
   2. Priority (-100 to 100, higher executes first)
   3. Registration order (for equal priority/complexity)
 
+  ### Dispatch Configurations
+
+  The router supports two types of targets:
+  1. Instructions - Standard action instructions with parameters
+  2. Dispatch Configs - Adapter-based dispatch configurations
+
+  Dispatch configs can be specified in two formats:
+  1. Single adapter: `{adapter, opts}`
+  2. Multiple adapters: `[{adapter1, opts1}, {adapter2, opts2}]`
+
   ## Usage Examples
 
   Basic route creation:
@@ -44,7 +55,17 @@ defmodule Jido.Signal.Router do
     # Pattern matching for large payments
     {"payment.processed",
       fn signal -> signal.data.amount > 1000 end,
-      %Instruction{action: HandleLargePayment}}
+      %Instruction{action: HandleLargePayment}},
+
+    # Single dispatch target
+    {"metrics.collected", {MetricsAdapter, [type: :counter]}},
+
+    # Multiple dispatch targets
+    {"system.error", [
+      {MetricsAdapter, [type: :error]},
+      {AlertAdapter, [priority: :high]},
+      {LogAdapter, [level: :error]}
+    ]}
   ])
   ```
 
@@ -52,7 +73,7 @@ defmodule Jido.Signal.Router do
   ```elixir
   # Add routes
   {:ok, router} = Router.add(router, [
-    {"metrics.**", %Instruction{action: CollectMetrics}}
+    {"metrics.**", {MetricsAdapter, [type: :gauge]}}
   ])
 
   # Remove routes
@@ -61,9 +82,20 @@ defmodule Jido.Signal.Router do
 
   Signal routing:
   ```elixir
-  {:ok, instructions} = Router.route(router, %Signal{
-    type: "payment.processed",
-    data: %{amount: 2000}
+  # Route to instruction
+  {:ok, [%Instruction{action: HandleUserCreated}]} = Router.route(router, %Signal{
+    type: "user.created",
+    data: %{id: "123"}
+  })
+
+  # Route to multiple dispatch targets
+  {:ok, [
+    {MetricsAdapter, [type: :error]},
+    {AlertAdapter, [priority: :high]},
+    {LogAdapter, [level: :error]}
+  ]} = Router.route(router, %Signal{
+    type: "system.error",
+    data: %{message: "Critical error"}
   })
   ```
 
@@ -99,7 +131,13 @@ defmodule Jido.Signal.Router do
      - Avoid side effects in match functions
      - Test edge cases thoroughly
 
-  4. Performance Considerations
+  4. Dispatch Configuration
+     - Use single dispatch for simple routing
+     - Use multiple dispatch for cross-cutting concerns
+     - Keep adapter options minimal and focused
+     - Document adapter requirements
+
+  5. Performance Considerations
      - Monitor route count in production
      - Use pattern matching sparingly
      - Consider complexity scores when designing paths
@@ -113,6 +151,7 @@ defmodule Jido.Signal.Router do
   - Invalid match functions
   - Missing handlers
   - Malformed signals
+  - Invalid dispatch configurations
 
   ## Implementation Details
 
@@ -129,44 +168,68 @@ defmodule Jido.Signal.Router do
   - `Jido.Signal` - Signal structure and validation
   - `Jido.Instruction` - Handler instruction format
   - `Jido.Error` - Error types and handling
+  - `Jido.Signal.Dispatch` - Dispatch adapter interface
   """
   use Private
   use TypedStruct
+
   alias Jido.Signal
-  alias Jido.Instruction
   alias Jido.Error
-  alias Jido.Signal.Router
+  alias Jido.Instruction
+  alias Jido.Signal.Dispatch
+  alias Jido.Signal.Router.{Engine, Route, Validator}
 
-  @valid_path_regex ~r/^[a-zA-Z0-9.*_-]+(\.[a-zA-Z0-9.*_-]+)*$/
-  @default_priority 0
-  @max_priority 100
-  @min_priority -100
-
+  @type path :: String.t()
   @type match :: (Signal.t() -> boolean())
   @type priority :: non_neg_integer()
   @type wildcard_type :: :single | :multi
+  @type target :: Instruction.t() | Dispatch.dispatch_config()
 
   @type route_spec ::
-          {String.t(), Instruction.t()}
-          | {String.t(), Instruction.t(), priority()}
-          | {String.t(), match(), Instruction.t()}
-          | {String.t(), match(), Instruction.t(), priority()}
+          {String.t(), target()}
+          | {String.t(), target(), priority()}
+          | {String.t(), match(), target()}
+          | {String.t(), match(), target(), priority()}
           | {String.t(), pid()}
+
+  @doc """
+  Normalizes route specifications into Route structs.
+
+  ## Parameters
+    * `input` - One of:
+      * Single Route struct
+      * List of Route structs
+      * List of route_spec tuples
+      * {path, target} tuple where target is:
+        * %Instruction{}
+        * {adapter, opts}
+        * [{adapter, opts}, ...]
+      * {path, target, priority} tuple
+      * {path, match_fn, target} tuple
+      * {path, match_fn, target, priority} tuple
+  ## Returns
+    * `{:ok, [%Route{}]}` - List of normalized Route structs
+    * `{:error, term()}` - If normalization fails
+  """
+  @spec normalize(Route.t() | [Route.t()] | route_spec() | [route_spec()]) ::
+          {:ok, [Route.t()]} | {:error, term()}
+  defdelegate normalize(input), to: Validator
 
   typedstruct module: HandlerInfo do
     @moduledoc "Router Helper struct to store handler metadata"
     @default_priority 0
-    field(:instruction, Instruction.t(), enforce: true)
-    field(:priority, Router.priority(), default: @default_priority)
+    field(:target, Jido.Signal.Router.target(), enforce: true)
+    field(:priority, Jido.Signal.Router.priority(), default: @default_priority)
     field(:complexity, non_neg_integer(), default: 0)
   end
 
   typedstruct module: PatternMatch do
     @moduledoc "Router Helper struct to store pattern match metadata"
     @default_priority 0
-    field(:match, Router.match(), enforce: true)
-    field(:instruction, Instruction.t(), enforce: true)
-    field(:priority, Router.priority(), default: @default_priority)
+    field(:match, Jido.Signal.Router.match(), enforce: true)
+    field(:target, Jido.Signal.Router.target(), enforce: true)
+    field(:priority, Jido.Signal.Router.priority(), default: @default_priority)
+    field(:complexity, non_neg_integer(), default: 0)
   end
 
   typedstruct module: NodeHandlers do
@@ -177,7 +240,7 @@ defmodule Jido.Signal.Router do
 
   typedstruct module: WildcardHandlers do
     @moduledoc "Router Helper struct to store wildcard handler metadata"
-    field(:type, Router.wildcard_type(), enforce: true)
+    field(:type, Jido.Signal.Router.wildcard_type(), enforce: true)
     field(:handlers, NodeHandlers.t(), enforce: true)
   end
 
@@ -191,10 +254,10 @@ defmodule Jido.Signal.Router do
   typedstruct module: Route do
     @moduledoc "Router Helper struct to store route metadata"
     @default_priority 0
-    field(:path, String.t(), enforce: true)
-    field(:instruction, Instruction.t(), enforce: true)
-    field(:priority, Router.priority(), default: @default_priority)
-    field(:match, Router.match())
+    field(:path, Jido.Signal.Router.path(), enforce: true)
+    field(:target, Jido.Signal.Router.target(), enforce: true)
+    field(:priority, Jido.Signal.Router.priority(), default: @default_priority)
+    field(:match, Jido.Signal.Router.match())
   end
 
   typedstruct module: Router do
@@ -213,9 +276,9 @@ defmodule Jido.Signal.Router do
   def new(nil), do: {:ok, %Router{}}
 
   def new(routes) do
-    with {:ok, normalized} <- normalize(routes),
+    with {:ok, normalized} <- Validator.normalize(routes),
          {:ok, validated} <- validate(normalized) do
-      trie = build_trie(validated)
+      trie = Engine.build_trie(validated)
       {:ok, %Router{trie: trie, route_count: length(validated)}}
     end
   end
@@ -238,97 +301,6 @@ defmodule Jido.Signal.Router do
   end
 
   @doc """
-  Normalizes route specifications into Route structs.
-
-  ## Parameters
-    * `input` - One of:
-      * Single Route struct
-      * List of Route structs
-      * List of route_spec tuples
-      * {path, instruction} tuple
-      * {path, instruction, priority} tuple
-      * {path, match_fn, instruction} tuple
-      * {path, match_fn, instruction, priority} tuple
-
-  ## Returns
-    * `{:ok, [%Route{}]}` - List of normalized Route structs
-    * `{:error, term()}` - If normalization fails
-  """
-  @spec normalize(route_spec() | [route_spec()] | [Route.t()]) ::
-          {:ok, [Route.t()]} | {:error, term()}
-  def normalize(input)
-
-  def normalize(%Route{} = route), do: {:ok, [route]}
-
-  def normalize(routes) when is_list(routes) do
-    routes
-    |> Enum.reduce_while({:ok, []}, fn
-      %Route{} = route, {:ok, acc} ->
-        {:cont, {:ok, [route | acc]}}
-
-      {path, %Instruction{} = instruction}, {:ok, acc} ->
-        route = %Route{path: path, instruction: instruction}
-        {:cont, {:ok, [route | acc]}}
-
-      {path, pid}, {:ok, acc} when is_pid(pid) ->
-        route = %Route{
-          path: path,
-          instruction: %Instruction{action: Jido.Signal.Dispatch.Pid, params: %{pid: pid}}
-        }
-
-        {:cont, {:ok, [route | acc]}}
-
-      {path, %Instruction{} = instruction, priority}, {:ok, acc}
-      when is_integer(priority) ->
-        route = %Route{path: path, instruction: instruction, priority: priority}
-        {:cont, {:ok, [route | acc]}}
-
-      {path, match_fn, %Instruction{} = instruction}, {:ok, acc}
-      when is_function(match_fn, 1) ->
-        route = %Route{path: path, instruction: instruction, match: match_fn}
-        {:cont, {:ok, [route | acc]}}
-
-      {path, match_fn, %Instruction{} = instruction, priority}, {:ok, acc}
-      when is_function(match_fn, 1) and is_integer(priority) ->
-        route = %Route{path: path, instruction: instruction, match: match_fn, priority: priority}
-        {:cont, {:ok, [route | acc]}}
-
-      invalid, {:ok, _acc} ->
-        {:halt,
-         {:error,
-          Error.validation_error("Invalid route specification format", %{
-            route: invalid,
-            expected_formats: [
-              "%Route{}",
-              "{path, instruction}",
-              "{path, instruction, priority}",
-              "{path, match_fn, instruction}",
-              "{path, match_fn, instruction, priority}"
-            ]
-          })}}
-    end)
-    |> case do
-      {:ok, list} -> {:ok, Enum.reverse(list)}
-      error -> error
-    end
-  end
-
-  def normalize({_path, %Instruction{}} = route), do: normalize([route])
-  def normalize({_path, pid} = route) when is_pid(pid), do: normalize([route])
-  def normalize({_path, %Instruction{}, _priority} = route), do: normalize([route])
-
-  def normalize({_path, match_fn, %Instruction{}} = route) when is_function(match_fn, 1),
-    do: normalize([route])
-
-  def normalize({_path, match_fn, %Instruction{}, _priority} = route)
-      when is_function(match_fn, 1),
-      do: normalize([route])
-
-  def normalize(invalid) do
-    {:error, Error.validation_error("Invalid route specification format", %{route: invalid})}
-  end
-
-  @doc """
   Adds one or more routes to the router.
 
   ## Parameters
@@ -346,9 +318,9 @@ defmodule Jido.Signal.Router do
   @spec add(Router.t(), route_spec() | Route.t() | [route_spec()] | [Route.t()]) ::
           {:ok, Router.t()} | {:error, term()}
   def add(%Router{} = router, routes) when is_list(routes) do
-    with {:ok, normalized} <- normalize(routes),
+    with {:ok, normalized} <- Validator.normalize(routes),
          {:ok, validated} <- validate(normalized) do
-      new_trie = build_trie(validated, router.trie)
+      new_trie = Engine.build_trie(validated, router.trie)
       {:ok, %Router{router | trie: new_trie, route_count: router.route_count + length(validated)}}
     end
   end
@@ -374,8 +346,8 @@ defmodule Jido.Signal.Router do
   """
   @spec remove(Router.t(), String.t() | [String.t()]) :: {:ok, Router.t()}
   def remove(%Router{} = router, paths) when is_list(paths) do
-    new_trie = Enum.reduce(paths, router.trie, &remove_path/2)
-    route_count = count_routes(new_trie)
+    new_trie = Enum.reduce(paths, router.trie, &Engine.remove_path/2)
+    route_count = Engine.count_routes(new_trie)
     {:ok, %Router{router | trie: new_trie, route_count: route_count}}
   end
 
@@ -412,10 +384,10 @@ defmodule Jido.Signal.Router do
       Enum.map(routes, fn route ->
         case route.match do
           nil ->
-            {route.path, route.instruction, route.priority}
+            {route.path, route.target, route.priority}
 
           match_fn when is_function(match_fn) ->
-            {route.path, match_fn, route.instruction, route.priority}
+            {route.path, match_fn, route.target, route.priority}
         end
       end)
 
@@ -463,7 +435,7 @@ defmodule Jido.Signal.Router do
   """
   @spec list(Router.t()) :: {:ok, [Route.t()]}
   def list(%Router{} = router) do
-    routes = collect_routes(router.trie, [], "")
+    routes = Engine.collect_routes(router.trie)
     {:ok, routes}
   end
 
@@ -481,14 +453,14 @@ defmodule Jido.Signal.Router do
   """
   @spec validate(Route.t() | [Route.t()]) :: {:ok, Route.t() | [Route.t()]} | {:error, term()}
   def validate(%Route{} = route) do
-    with {:ok, path} <- validate_path(route.path),
-         {:ok, instruction} <- validate_instruction(route.instruction),
-         {:ok, match} <- validate_match(route.match),
-         {:ok, priority} <- validate_priority(route.priority) do
+    with {:ok, path} <- Validator.validate_path(route.path),
+         {:ok, target} <- Validator.validate_target(route.target),
+         {:ok, match} <- Validator.validate_match(route.match),
+         {:ok, priority} <- Validator.validate_priority(route.priority) do
       {:ok,
        %Route{
          path: path,
-         instruction: instruction,
+         target: target,
          match: match,
          priority: priority
        }}
@@ -542,12 +514,8 @@ defmodule Jido.Signal.Router do
     {:error, Error.routing_error("Signal type cannot be nil")}
   end
 
-  def route(%Router{trie: trie}, %Signal{type: type} = signal) do
-    results =
-      type
-      |> String.split(".")
-      |> do_route(trie, signal, [])
-      |> sort_and_execute(signal)
+  def route(%Router{trie: trie}, %Signal{} = signal) do
+    results = Engine.route_signal(trie, signal)
 
     if Enum.empty?(results) do
       {:error, Error.routing_error("No matching handlers found for signal")}
@@ -556,446 +524,192 @@ defmodule Jido.Signal.Router do
     end
   end
 
-  private do
-    # Validates a path string against the allowed format
-    defp validate_path(path) when is_binary(path) do
-      cond do
-        String.contains?(path, "..") ->
-          {:error, Error.routing_error("Path cannot contain consecutive dots")}
+  @doc """
+  Checks if a signal type matches a pattern.
 
-        String.match?(path, ~r/\*\*.*\*\*/) ->
-          {:error, Error.routing_error("Path cannot contain multiple wildcards")}
+  ## Parameters
+  - type: The signal type to check (e.g. "user.created")
+  - pattern: The pattern to match against (e.g. "user.*" or "audit.**")
 
-        not String.match?(path, @valid_path_regex) ->
-          {:error, Error.routing_error("Path contains invalid characters")}
+  ## Returns
+  - `true` if the type matches the pattern
+  - `false` otherwise
 
-        true ->
-          {:ok, path}
+  ## Examples
+
+      iex> Router.matches?("user.created", "user.*")
+      true
+
+      iex> Router.matches?("audit.user.created", "audit.**")
+      true
+
+      iex> Router.matches?("user.created", "payment.*")
+      false
+
+      iex> Router.matches?("user.profile.updated", "user.*")
+      false
+
+      iex> Router.matches?(nil, "user.*")
+      false
+
+      iex> Router.matches?("user.created", nil)
+      false
+  """
+  @spec matches?(String.t() | nil | any(), String.t() | nil | any()) :: boolean()
+  def matches?(nil, _pattern), do: false
+  def matches?(_type, nil), do: false
+  def matches?(type, _pattern) when not is_binary(type), do: false
+  def matches?(_type, pattern) when not is_binary(pattern), do: false
+
+  def matches?(type, pattern) when is_binary(type) and is_binary(pattern) do
+    # For single wildcards, verify segment count matches
+    if String.contains?(pattern, "*") and not String.contains?(pattern, "**") do
+      pattern_segments = String.split(pattern, ".")
+      type_segments = String.split(type, ".")
+
+      # Single wildcard must match exact number of segments
+      if length(pattern_segments) != length(type_segments) do
+        false
+      else
+        do_matches?(type, pattern)
       end
-    end
+    else
+      # For multi-level wildcards, handle empty segments
+      if String.ends_with?(pattern, ".**") do
+        pattern_base = String.replace_trailing(pattern, ".**", "")
 
-    defp validate_path(_invalid) do
-      {:error, Error.routing_error("Path must be a string")}
-    end
-
-    # Validates that an instruction has a valid action
-    defp validate_instruction(%Instruction{action: action} = instruction) when is_atom(action) do
-      {:ok, instruction}
-    end
-
-    defp validate_instruction(_invalid) do
-      {:error, Error.routing_error("Invalid instruction format")}
-    end
-
-    # Validates that a match function returns boolean for a test signal
-    defp validate_match(nil) do
-      {:ok, nil}
-    end
-
-    defp validate_match(match_fn) when is_function(match_fn, 1) do
-      try do
-        test_signal = %Signal{
-          type: "",
-          source: "",
-          id: "",
-          data: %{
-            amount: 0,
-            currency: "USD"
-          }
-        }
-
-        case match_fn.(test_signal) do
-          result when is_boolean(result) ->
-            {:ok, match_fn}
-
-          _other ->
-            {:error, Error.routing_error("Match function must return a boolean")}
+        if String.starts_with?(type, pattern_base) do
+          # The type matches the base pattern (everything before .**)
+          remaining = String.replace_prefix(type, pattern_base, "")
+          # Either there are no remaining segments or they start with a dot
+          remaining == "" or String.starts_with?(remaining, ".")
+        else
+          false
         end
-      rescue
-        _error ->
-          {:error, Error.routing_error("Match function raised an error during validation")}
+      else
+        do_matches?(type, pattern)
       end
-    end
-
-    defp validate_match(_invalid) do
-      {:error, Error.routing_error("Match must be a function that takes one argument")}
-    end
-
-    # Validates that a priority is within allowed bounds
-    defp validate_priority(nil), do: {:ok, @default_priority}
-
-    defp validate_priority(priority) when is_integer(priority) do
-      cond do
-        priority > @max_priority ->
-          {:error, Error.routing_error("Priority value exceeds maximum allowed")}
-
-        priority < @min_priority ->
-          {:error, Error.routing_error("Priority value below minimum allowed")}
-
-        true ->
-          {:ok, priority}
-      end
-    end
-
-    defp validate_priority(_invalid) do
-      {:error, Error.routing_error("Priority must be an integer")}
-    end
-
-    # Cleans up a path string by removing extra dots and whitespace
-    defp sanitize_path(path) do
-      path
-      |> String.trim()
-      |> String.replace(~r/\.+/, ".")
-      |> String.replace(~r/(^\.|\.$)/, "")
-    end
-
-    # Builds the trie structure from validated routes
-    defp build_trie(routes, base_trie \\ %TrieNode{}) do
-      Enum.reduce(routes, base_trie, fn %Route{} = route, trie ->
-        segments = route.path |> sanitize_path() |> String.split(".")
-
-        case route.match do
-          nil ->
-            handler_info = %HandlerInfo{
-              instruction: route.instruction,
-              priority: route.priority,
-              complexity: calculate_complexity(route.path)
-            }
-
-            do_add_path_route(segments, trie, handler_info)
-
-          match_fn ->
-            pattern_match = %PatternMatch{
-              match: match_fn,
-              instruction: route.instruction,
-              priority: route.priority
-            }
-
-            do_add_pattern_route(segments, trie, pattern_match)
-        end
-      end)
-    end
-
-    # Core routing logic
-    defp do_route([], %TrieNode{} = _trie, %Signal{} = _signal, acc), do: acc
-
-    defp do_route([segment | rest] = _segments, %TrieNode{} = trie, %Signal{} = signal, acc) do
-      matching_handlers =
-        case Map.get(trie.segments, segment) do
-          nil ->
-            acc
-
-          %TrieNode{} = node ->
-            handlers = collect_handlers(node.handlers, signal, acc)
-
-            if rest == [] do
-              handlers
-            else
-              do_route(rest, node, signal, handlers)
-            end
-        end
-
-      # Then try single wildcard
-      matching_handlers =
-        case Map.get(trie.segments, "*") do
-          nil ->
-            matching_handlers
-
-          %TrieNode{} = node ->
-            handlers = collect_handlers(node.handlers, signal, matching_handlers)
-
-            if rest == [] do
-              handlers
-            else
-              do_route(rest, node, signal, handlers)
-            end
-        end
-
-      # Finally try multi-level wildcard
-      case Map.get(trie.segments, "**") do
-        nil ->
-          matching_handlers
-
-        %TrieNode{} = node ->
-          handlers = collect_handlers(node.handlers, signal, matching_handlers)
-
-          # Try all possible remaining segment combinations
-          [rest, []]
-          |> Stream.concat(tails(rest))
-          |> Enum.reduce(handlers, fn remaining, acc ->
-            if remaining == [] do
-              acc
-            else
-              do_route(remaining, node, signal, acc)
-            end
-          end)
-      end
-    end
-
-    # Helper to get all possible tails of a list
-    defp tails([]), do: []
-    defp tails([_h | t]), do: [t | tails(t)]
-
-    # Handler collection logic
-    defp collect_handlers(%NodeHandlers{} = node_handlers, %Signal{} = signal, acc) do
-      handler_results =
-        case node_handlers.handlers do
-          handlers when is_list(handlers) ->
-            Enum.map(handlers, fn info ->
-              {info.instruction, info.priority, info.complexity}
-            end)
-
-          _ ->
-            []
-        end
-
-      pattern_results = collect_pattern_matches(node_handlers.matchers || [], signal)
-
-      handler_results ++ pattern_results ++ acc
-    end
-
-    defp collect_handlers(nil, %Signal{} = _signal, acc) do
-      acc
-    end
-
-    # Pattern matching
-    defp collect_pattern_matches(matchers, %Signal{} = signal) do
-      Enum.reduce(matchers, [], fn %PatternMatch{} = matcher, matches ->
-        try do
-          case matcher.match.(signal) do
-            true ->
-              [{matcher.instruction, matcher.priority, 0} | matches]
-
-            false ->
-              matches
-
-            _ ->
-              matches
-          end
-        rescue
-          _ ->
-            matches
-        end
-      end)
-    end
-
-    # Handler execution
-    defp sort_and_execute(handlers, %Signal{} = _signal) do
-      handlers
-      |> Enum.sort_by(
-        fn {_instruction, priority, complexity} ->
-          # Sort by complexity first, then priority
-          {complexity, priority}
-        end,
-        :desc
-      )
-      |> Enum.map(fn {instruction, _priority, _complexity} -> instruction end)
-    end
-
-    defp calculate_complexity(path) do
-      segments = String.split(path, ".")
-
-      # Base score from segment count (increase multiplier)
-      base_score = length(segments) * 2000
-
-      # Exact segment matches are worth more at start of path
-      exact_matches =
-        Enum.with_index(segments)
-        |> Enum.reduce(0, fn {segment, index}, acc ->
-          case segment do
-            "**" -> acc
-            "*" -> acc
-            # Higher weight for exact matches
-            _ -> acc + 3000 * (length(segments) - index)
-          end
-        end)
-
-      # Penalty calculation with position weighting
-      penalties =
-        Enum.with_index(segments)
-        |> Enum.reduce(0, fn {segment, index}, acc ->
-          case segment do
-            # Double wildcard has massive penalty, reduced if it comes after exact matches
-            "**" -> acc + 2000 - index * 200
-            # Single wildcard has smaller penalty
-            "*" -> acc + 1000 - index * 100
-            _ -> acc
-          end
-        end)
-
-      base_score + exact_matches - penalties
-    end
-
-    # Route addition to trie
-    defp do_add_path_route([segment], %TrieNode{} = trie, %HandlerInfo{} = handler_info) do
-      Map.update(
-        trie,
-        :segments,
-        %{segment => %TrieNode{handlers: %NodeHandlers{handlers: [handler_info]}}},
-        fn segments ->
-          Map.update(
-            segments,
-            segment,
-            %TrieNode{handlers: %NodeHandlers{handlers: [handler_info]}},
-            fn node ->
-              %TrieNode{
-                node
-                | handlers: %NodeHandlers{
-                    handlers: (node.handlers.handlers || []) ++ [handler_info],
-                    matchers: node.handlers.matchers
-                  }
-              }
-            end
-          )
-        end
-      )
-    end
-
-    defp do_add_path_route([segment | rest], %TrieNode{} = trie, %HandlerInfo{} = handler_info) do
-      Map.update(
-        trie,
-        :segments,
-        %{segment => do_add_path_route(rest, %TrieNode{}, handler_info)},
-        fn segments ->
-          Map.update(
-            segments,
-            segment,
-            do_add_path_route(rest, %TrieNode{}, handler_info),
-            fn node -> do_add_path_route(rest, node, handler_info) end
-          )
-        end
-      )
-    end
-
-    defp do_add_pattern_route([segment], %TrieNode{} = trie, %PatternMatch{} = matcher) do
-      Map.update(
-        trie,
-        :segments,
-        %{segment => %TrieNode{handlers: %NodeHandlers{matchers: [matcher]}}},
-        fn segments ->
-          Map.update(
-            segments,
-            segment,
-            %TrieNode{handlers: %NodeHandlers{matchers: [matcher]}},
-            fn node ->
-              %TrieNode{
-                node
-                | handlers: %NodeHandlers{matchers: (node.handlers.matchers || []) ++ [matcher]}
-              }
-            end
-          )
-        end
-      )
-    end
-
-    defp do_add_pattern_route([segment | rest], %TrieNode{} = trie, %PatternMatch{} = matcher) do
-      Map.update(
-        trie,
-        :segments,
-        %{segment => do_add_pattern_route(rest, %TrieNode{}, matcher)},
-        fn segments ->
-          Map.update(
-            segments,
-            segment,
-            do_add_pattern_route(rest, %TrieNode{}, matcher),
-            fn node -> do_add_pattern_route(rest, node, matcher) end
-          )
-        end
-      )
-    end
-
-    # Removes a path from the trie
-    defp remove_path(path, trie) do
-      segments = path |> sanitize_path() |> String.split(".")
-      do_remove_path(segments, trie)
-    end
-
-    # Recursively removes a path from the trie
-    defp do_remove_path([], trie), do: trie
-
-    defp do_remove_path([segment], %TrieNode{segments: segments} = trie) do
-      # Remove the leaf node
-      new_segments = Map.delete(segments, segment)
-      %TrieNode{trie | segments: new_segments}
-    end
-
-    defp do_remove_path([segment | rest], %TrieNode{segments: segments} = trie) do
-      case Map.get(segments, segment) do
-        nil ->
-          trie
-
-        node ->
-          new_node = do_remove_path(rest, node)
-          # If the node is empty after removal, remove it too
-          if map_size(new_node.segments) == 0 do
-            %TrieNode{trie | segments: Map.delete(segments, segment)}
-          else
-            %TrieNode{trie | segments: Map.put(segments, segment, new_node)}
-          end
-      end
-    end
-
-    # Counts total routes in the trie
-    defp count_routes(%TrieNode{segments: segments, handlers: handlers}) do
-      handler_count =
-        case handlers do
-          %NodeHandlers{handlers: handlers} when is_list(handlers) ->
-            length(handlers)
-
-          _ ->
-            0
-        end
-
-      Enum.reduce(segments, handler_count, fn {_segment, node}, acc ->
-        acc + count_routes(node)
-      end)
-    end
-
-    # Collects all routes from the trie into a list of Route structs
-    defp collect_routes(%TrieNode{segments: segments, handlers: handlers}, acc, path_prefix) do
-      # Add any handlers at current node
-      acc =
-        case handlers do
-          %NodeHandlers{handlers: handlers} when is_list(handlers) and length(handlers) > 0 ->
-            # Preserve order by not reversing here
-            Enum.map(handlers, fn %HandlerInfo{
-                                    instruction: instruction,
-                                    priority: priority
-                                  } ->
-              %Route{
-                path: String.trim_leading(path_prefix, "."),
-                instruction: instruction,
-                priority: priority
-              }
-            end) ++ acc
-
-          %NodeHandlers{matchers: matchers} when is_list(matchers) and length(matchers) > 0 ->
-            # Preserve order by not reversing here
-            Enum.map(matchers, fn %PatternMatch{
-                                    instruction: instruction,
-                                    priority: priority,
-                                    match: match
-                                  } ->
-              %Route{
-                path: String.trim_leading(path_prefix, "."),
-                instruction: instruction,
-                priority: priority,
-                match: match
-              }
-            end) ++ acc
-
-          _ ->
-            acc
-        end
-
-      # Recursively collect from child nodes
-      segments
-      # Sort segments for consistent ordering
-      |> Enum.sort()
-      |> Enum.reduce(acc, fn {segment, node}, acc ->
-        new_prefix = path_prefix <> "." <> segment
-        collect_routes(node, acc, new_prefix)
-      end)
     end
   end
+
+  defp do_matches?(type, pattern) do
+    # Create a test signal with required fields
+    test_signal = %Signal{
+      type: type,
+      source: "/test",
+      id: Jido.Util.generate_id(),
+      specversion: "1.0.2",
+      data: %{}
+    }
+
+    # Create a test route with a dummy target
+    test_route = %Route{
+      path: pattern,
+      target: {:noop, []},
+      priority: 0
+    }
+
+    # Validate the pattern first
+    case Validator.validate_path(pattern) do
+      {:ok, _} ->
+        # Build a trie with just this route
+        trie = Engine.build_trie([test_route])
+
+        # Route the signal and check if we got any matches
+        case Engine.route_signal(trie, test_signal) do
+          [] -> false
+          _matches -> true
+        end
+
+      {:error, _} ->
+        false
+    end
+  end
+
+  @doc """
+  Filters a list of signals based on a pattern.
+
+  ## Parameters
+  - signals: List of signals to filter
+  - pattern: Pattern to filter by (e.g. "user.*" or "audit.**")
+
+  ## Returns
+  - List of signals whose types match the pattern
+
+  ## Examples
+
+      iex> signals = [
+      ...>   %Signal{type: "user.created"},
+      ...>   %Signal{type: "payment.processed"},
+      ...>   %Signal{type: "user.updated"}
+      ...> ]
+      iex> Router.filter(signals, "user.*")
+      [%Signal{type: "user.created"}, %Signal{type: "user.updated"}]
+
+      iex> Router.filter(nil, "user.*")
+      []
+
+      iex> Router.filter([], nil)
+      []
+
+      iex> Router.filter("not a list", "user.*")
+      []
+  """
+  @spec filter([Signal.t()] | nil | any(), String.t() | nil | any()) :: [Signal.t()]
+  def filter(nil, _pattern), do: []
+  def filter(_signals, nil), do: []
+  def filter(signals, _pattern) when not is_list(signals), do: []
+  def filter(_signals, pattern) when not is_binary(pattern), do: []
+
+  def filter(signals, pattern) when is_list(signals) and is_binary(pattern) do
+    # Validate the pattern first
+    case Validator.validate_path(pattern) do
+      {:ok, _} ->
+        # Create a test route with a dummy target
+        test_route = %Route{
+          path: pattern,
+          target: {:noop, []},
+          priority: 0
+        }
+
+        # Build a trie with just this route
+        trie = Engine.build_trie([test_route])
+
+        # Filter signals by routing each one
+        Enum.filter(signals, fn
+          %Signal{type: nil} ->
+            false
+
+          signal ->
+            case Engine.route_signal(trie, signal) do
+              [] -> false
+              _matches -> true
+            end
+        end)
+
+      {:error, _} ->
+        []
+    end
+  end
+
+  @doc """
+  Checks if a route with the given ID exists in the router.
+
+  ## Parameters
+  - router: The router struct to check
+  - route_id: The ID of the route to check for
+
+  ## Returns
+  - `true` if the route exists
+  - `false` otherwise
+  """
+  @spec has_route?(Router.t(), String.t()) :: boolean()
+  def has_route?(%Router{} = router, route_path) when is_binary(route_path) do
+    case list(router) do
+      {:ok, routes} -> Enum.any?(routes, fn route -> route.path == route_path end)
+      _ -> false
+    end
+  end
+
+  def has_route?(_router, _route_id), do: false
 end

@@ -145,7 +145,12 @@ defmodule Jido.Signal.Dispatch.PidAdapter do
         if Process.alive?(target) do
           try do
             message = message_format.(signal)
-            GenServer.call(target, message, timeout)
+
+            if target == self() do
+              {:error, {:calling_self, {GenServer, :call, [target, message, timeout]}}}
+            else
+              GenServer.call(target, message, timeout)
+            end
           catch
             :exit, {:timeout, _} -> {:error, :timeout}
             :exit, {:noproc, _} -> {:error, :process_not_alive}

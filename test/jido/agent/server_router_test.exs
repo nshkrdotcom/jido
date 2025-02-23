@@ -47,15 +47,7 @@ defmodule Jido.Agent.Server.RouterTest do
       # This error comes directly from Signal.Router
       assert {:error, error} = Router.build(state, routes: [{"test", :not_an_instruction}])
       assert error.type == :validation_error
-      assert error.message == "Invalid route specification format"
-
-      assert error.details.expected_formats == [
-               "%Route{}",
-               "{path, instruction}",
-               "{path, instruction, priority}",
-               "{path, match_fn, instruction}",
-               "{path, match_fn, instruction, priority}"
-             ]
+      assert error.message == "Target must be an Instruction or valid dispatch configuration"
     end
   end
 
@@ -108,7 +100,7 @@ defmodule Jido.Agent.Server.RouterTest do
   describe "merge/2" do
     test "merges list of routes", %{state: state} do
       routes = [
-        %Route{path: "test.path", instruction: %Instruction{action: :test_action}, priority: 0}
+        %Route{path: "test.path", target: %Instruction{action: :test_action}, priority: 0}
       ]
 
       assert {:ok, updated_state} = Router.merge(state, routes)

@@ -121,7 +121,7 @@ defmodule Jido.Agent.ServerTest do
 
       route = %Router.Route{
         path: "test_signal",
-        instruction: %Instruction{
+        target: %Instruction{
           action: JidoTest.TestActions.BasicAction,
           params: %{value: 42}
         }
@@ -196,7 +196,7 @@ defmodule Jido.Agent.ServerTest do
 
       route = %Router.Route{
         path: "test_signal",
-        instruction: %Instruction{
+        target: %Instruction{
           action: JidoTest.TestActions.BasicAction,
           params: %{value: 42}
         }

@@ -1,7 +1,7 @@
-defmodule Jido.SerializationTest do
-  use ExUnit.Case
+defmodule JidoTest.Signal.SerializationTest do
+  use JidoTest.Case
 
-  alias Jido.Serialization.{JsonSerializer, JsonDecoder, ModuleNameTypeProvider}
+  alias Jido.Signal.Serialization.{JsonSerializer, JsonDecoder, ModuleNameTypeProvider}
   alias JidoTest.TestStructs.{TestStruct, CustomDecodedStruct}
 
   describe "JsonSerializer" do

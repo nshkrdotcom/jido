@@ -8,12 +8,7 @@ defmodule Jido.Signal.RouterTest do
   @moduletag :capture_log
 
   setup do
-    test_pid =
-      spawn(fn ->
-        receive do
-          _ -> :ok
-        end
-      end)
+    test_pid = self()
 
     routes = [
       # Static route - adds 1 to value
@@ -36,8 +31,15 @@ defmodule Jido.Signal.RouterTest do
         90
       },
 
-      # PID route - forwards signal to pid
-      {"user.forward", test_pid}
+      # Single dispatch route - logs events
+      {"audit.event", {:logger, [level: :info]}},
+
+      # Multiple dispatch route - metrics and alerts
+      {"system.error",
+       [
+         {:noop, [type: :error]},
+         {:pid, [delivery_mode: :async, target: test_pid]}
+       ]}
     ]
 
     {:ok, router} = Router.new(routes)
@@ -123,7 +125,7 @@ defmodule Jido.Signal.RouterTest do
       assert error.message == "No matching handlers found for signal"
     end
 
-    test "returns empty list for unmatched path", %{router: router} do
+    test "returns error for unmatched path", %{router: router} do
       signal = %Signal{
         id: Jido.Util.generate_id(),
         source: "/test",
@@ -136,18 +138,29 @@ defmodule Jido.Signal.RouterTest do
       assert error.message == "No matching handlers found for signal"
     end
 
-    test "routes pid signal", %{router: router} do
+    test "routes to single dispatch target", %{router: router} do
       signal = %Signal{
         id: Jido.Util.generate_id(),
         source: "/test",
-        type: "user.forward",
-        data: %{value: 5}
+        type: "audit.event",
+        data: %{message: "Test event"}
       }
 
-      assert {:ok, [%Instruction{action: Jido.Signal.Dispatch.Pid, params: %{pid: pid}}]} =
-               Router.route(router, signal)
+      assert {:ok, [{:logger, [level: :info]}]} = Router.route(router, signal)
+    end
 
-      assert is_pid(pid)
+    test "routes to multiple dispatch targets", %{router: router, test_pid: test_pid} do
+      signal = %Signal{
+        id: Jido.Util.generate_id(),
+        source: "/test",
+        type: "system.error",
+        data: %{message: "Critical error"}
+      }
+
+      assert {:ok, targets} = Router.route(router, signal)
+      assert length(targets) == 2
+      assert Enum.member?(targets, {:noop, [type: :error]})
+      assert Enum.member?(targets, {:pid, [delivery_mode: :async, target: test_pid]})
     end
   end
 
@@ -333,6 +346,56 @@ defmodule Jido.Signal.RouterTest do
       signal = %Signal{type: "parent.500", source: "/test", id: Jido.Util.generate_id()}
       {:ok, [instruction]} = Router.route(router, signal)
       assert instruction.action == TestAction
+    end
+
+    test "handles dispatch config edge cases" do
+      test_pid = self()
+      # Test multiple dispatch configs with same priority
+      {:ok, router} =
+        Router.new({
+          "test",
+          [
+            {:logger, [level: :info]},
+            {:noop, [type: :test]},
+            {:pid, [delivery_mode: :async, target: test_pid]}
+          ]
+        })
+
+      signal = %Signal{type: "test", source: "/test", id: Jido.Util.generate_id()}
+      {:ok, targets} = Router.route(router, signal)
+      assert length(targets) == 3
+
+      # Test dispatch config with pattern matching
+      {:ok, router} =
+        Router.new({
+          "test",
+          fn signal -> Map.get(signal.data, :important) == true end,
+          {:pid, [delivery_mode: :async, target: test_pid]}
+        })
+
+      signal = %Signal{
+        type: "test",
+        source: "/test",
+        id: Jido.Util.generate_id(),
+        data: %{important: true}
+      }
+
+      {:ok, targets} = Router.route(router, signal)
+      assert length(targets) == 1
+      assert Enum.member?(targets, {:pid, [delivery_mode: :async, target: test_pid]})
+
+      # Test mixing instructions and dispatch configs
+      {:ok, router} =
+        Router.new([
+          {"test", %Instruction{action: TestAction}},
+          {"test", {:logger, [level: :info]}}
+        ])
+
+      signal = %Signal{type: "test", source: "/test", id: Jido.Util.generate_id()}
+      {:ok, targets} = Router.route(router, signal)
+      assert length(targets) == 2
+      assert Enum.any?(targets, &match?(%Instruction{action: TestAction}, &1))
+      assert Enum.any?(targets, &match?({:logger, [level: :info]}, &1))
     end
   end
 end

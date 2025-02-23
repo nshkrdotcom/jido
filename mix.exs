@@ -269,10 +269,10 @@ defmodule Jido.MixProject do
           Jido.Discovery,
           Jido.Error,
           Jido.Scheduler,
-          Jido.Serialization.JsonDecoder,
-          Jido.Serialization.JsonSerializer,
-          Jido.Serialization.ModuleNameTypeProvider,
-          Jido.Serialization.TypeProvider,
+          Jido.Signal.Serialization.JsonDecoder,
+          Jido.Signal.Serialization.JsonSerializer,
+          Jido.Signal.Serialization.ModuleNameTypeProvider,
+          Jido.Signal.Serialization.TypeProvider,
           Jido.Supervisor,
           Jido.Agent.Server.State,
           Jido.Util
@@ -334,6 +334,7 @@ defmodule Jido.MixProject do
     [
       # Helper to run tests with trace when needed
       # test: "test --trace --exclude flaky",
+      test: "test --exclude flaky",
 
       # Helper to run docs
       # docs: "docs -f html --open",

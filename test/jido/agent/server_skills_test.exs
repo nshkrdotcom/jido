@@ -16,7 +16,7 @@ defmodule Jido.Agent.Server.SkillsTest do
       [
         %Router.Route{
           path: "test.path",
-          instruction: %Instruction{action: :test_handler},
+          target: %Instruction{action: :test_handler},
           priority: 0
         }
       ]
@@ -36,7 +36,7 @@ defmodule Jido.Agent.Server.SkillsTest do
       [
         %Router.Route{
           path: "test.path",
-          instruction: %Instruction{action: :test_handler},
+          target: %Instruction{action: :test_handler},
           priority: 0
         }
       ]
@@ -113,7 +113,7 @@ defmodule Jido.Agent.Server.SkillsTest do
       existing_routes = [
         %Router.Route{
           path: "existing.path",
-          instruction: %Instruction{action: :existing},
+          target: %Instruction{action: :existing},
           priority: 0
         }
       ]

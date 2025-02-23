@@ -14,7 +14,7 @@ defmodule JidoTest.TestStructs do
   end
 
   # Custom decoder implementation
-  defimpl Jido.Serialization.JsonDecoder, for: CustomDecodedStruct do
+  defimpl Jido.Signal.Serialization.JsonDecoder, for: CustomDecodedStruct do
     def decode(%CustomDecodedStruct{value: nil} = data), do: data
 
     def decode(%CustomDecodedStruct{value: value}) when is_number(value) do

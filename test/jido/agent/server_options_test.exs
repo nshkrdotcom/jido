@@ -40,6 +40,21 @@ defmodule Jido.Agent.Server.OptionsTest do
       assert Keyword.get(validated, :registry) == MyRegistry
     end
 
+    test "passes through unknown options" do
+      opts = [
+        agent: MinimalAgent,
+        id: "test-agent",
+        custom_option: "custom value",
+        another_option: 123
+      ]
+
+      assert {:ok, validated} = Options.validate_server_opts(opts)
+      assert Keyword.get(validated, :agent) == MinimalAgent
+      assert Keyword.get(validated, :id) == "test-agent"
+      assert Keyword.get(validated, :custom_option) == "custom value"
+      assert Keyword.get(validated, :another_option) == 123
+    end
+
     test "returns error for missing required options" do
       assert {:error, _} = Options.validate_server_opts([])
       assert {:error, _} = Options.validate_server_opts(agent: MinimalAgent)

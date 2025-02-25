@@ -86,22 +86,32 @@ defmodule Jido.Agent.Server.Options do
   def validate_server_opts(opts) do
     dbug("Validating server options", opts: opts)
 
-    case NimbleOptions.validate(opts, @server_state_opts_schema) do
+    # Known keys from the schema definition
+    known_keys = [
+      :id,
+      :agent,
+      :mode,
+      :log_level,
+      :max_queue_size,
+      :registry,
+      :dispatch,
+      :routes,
+      :sensors,
+      :skills,
+      :child_specs
+    ]
+
+    # Split the options into known and unknown
+    {known_opts, unknown_opts} = Keyword.split(opts, known_keys)
+
+    case NimbleOptions.validate(known_opts, @server_state_opts_schema) do
       {:ok, validated_opts} ->
         dbug("Server options validated successfully", validated_opts: validated_opts)
 
-        {:ok,
-         [
-           agent: validated_opts[:agent],
-           dispatch: validated_opts[:dispatch],
-           routes: validated_opts[:routes],
-           skills: validated_opts[:skills],
-           child_specs: validated_opts[:child_specs],
-           log_level: validated_opts[:log_level],
-           mode: validated_opts[:mode],
-           registry: validated_opts[:registry],
-           max_queue_size: validated_opts[:max_queue_size]
-         ]}
+        # Merge the validated known options with the unknown options
+        merged_opts = Keyword.merge(unknown_opts, validated_opts)
+
+        {:ok, merged_opts}
 
       {:error, error} ->
         dbug("Server options validation failed", error: error)

@@ -383,6 +383,17 @@ defmodule Jido.Agent.Server do
             {:ok, agent_input.new(id, initial_state)}
 
           is_struct(agent_input) ->
+            # Check if the provided ID differs from the agent's ID
+            provided_id = Keyword.get(opts, :id)
+
+            if provided_id && provided_id != agent_input.id do
+              require Logger
+
+              Logger.warning(
+                "Agent ID mismatch: provided ID '#{provided_id}' will be superseded by agent's ID '#{agent_input.id}'"
+              )
+            end
+
             {:ok, agent_input}
 
           true ->

@@ -41,6 +41,29 @@ defmodule Jido.Agent.ServerTest do
       assert state.agent.id == id
     end
 
+    test "agent id takes precedence over provided id and logs warning" do
+      id1 = "test-agent-#{System.unique_integer([:positive])}"
+      id2 = "test-agent-#{System.unique_integer([:positive])}"
+
+      # Create agent with id2
+      agent = BasicAgent.new(id2)
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          # Start server with id1, but agent has id2
+          {:ok, pid} = Server.start_link(agent: agent, id: id1)
+          assert is_pid(pid)
+          {:ok, state} = Server.state(pid)
+          # Verify the agent's ID (id2) was used, not the provided ID (id1)
+          assert state.agent.id == id2
+          refute state.agent.id == id1
+        end)
+
+      # Verify warning was logged
+      assert log =~
+               "Agent ID mismatch: provided ID '#{id1}' will be superseded by agent's ID '#{id2}'"
+    end
+
     test "starts with custom registry", %{registry: registry} do
       id = "test-agent-#{System.unique_integer([:positive])}"
       {:ok, pid} = Server.start_link(agent: BasicAgent, id: id, registry: registry)

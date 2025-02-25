@@ -298,7 +298,6 @@ defmodule Jido.MixProject do
       # Jido Deps
       {:backoff, "~> 1.1"},
       {:deep_merge, "~> 1.0"},
-      # {:elixir_uuid, "~> 1.2"},
       {:jason, "~> 1.4"},
       {:nimble_options, "~> 1.1"},
       {:nimble_parsec, "~> 1.4"},

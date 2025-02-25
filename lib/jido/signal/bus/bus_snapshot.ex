@@ -7,7 +7,7 @@ defmodule Jido.Signal.Bus.Snapshot do
   The bus state only maintains lightweight references to the snapshots.
   """
   use TypedStruct
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
   alias Jido.Signal.Bus.BusState
   alias Jido.Signal.Bus.Stream
   alias Jido.Signal.ID

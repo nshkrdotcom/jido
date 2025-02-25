@@ -1,7 +1,7 @@
 defmodule Jido.Signal.Bus do
   use GenServer
   require Logger
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
   use TypedStruct
   alias Jido.Signal.Router
   alias Jido.Signal.Bus.BusState

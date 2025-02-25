@@ -1,5 +1,5 @@
 defmodule Jido.Signal.Bus.Stream do
-  use ExDbug, enabled: true
+  use ExDbug, enabled: false
   alias Jido.Signal.Bus.BusState
   alias Jido.Signal.Bus.RecordedSignal
   alias Jido.Signal.Router

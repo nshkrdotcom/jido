@@ -1,6 +1,7 @@
 defmodule Jido.Actions.ArithmeticTest do
   use JidoTest.Case, async: true
   alias Jido.Actions.Arithmetic
+  @moduletag :capture_log
 
   # Test for Add action
   describe "Add" do

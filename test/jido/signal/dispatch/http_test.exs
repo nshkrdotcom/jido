@@ -3,6 +3,8 @@ defmodule Jido.Signal.Dispatch.HttpTest do
 
   alias Jido.Signal.Dispatch.Http
 
+  # These tests could be better ...
+
   describe "validate_opts/1" do
     test "validates required url" do
       assert {:error, _} = Http.validate_opts([])

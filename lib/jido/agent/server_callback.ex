@@ -4,6 +4,7 @@ defmodule Jido.Agent.Server.Callback do
   use ExDbug, enabled: false
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Signal
+  alias Jido.Signal.Router
   require OK
 
   @doc """
@@ -217,35 +218,11 @@ defmodule Jido.Agent.Server.Callback do
         all_patterns = input_patterns ++ output_patterns
 
         Enum.any?(all_patterns, fn pattern ->
-          pattern_matches?(signal.type, pattern)
+          Router.matches?(signal.type, pattern)
         end)
       end)
 
     dbug("Found matching skills", matches: matches)
-    matches
-  end
-
-  # Checks if a signal type matches a pattern using glob-style matching.
-  #
-  # Parameters:
-  #   - signal_type: The signal type to check
-  #   - pattern: The pattern to match against (can include * wildcards)
-  #
-  # Returns:
-  #   true if the signal type matches the pattern, false otherwise
-  @spec pattern_matches?(signal_type :: String.t(), pattern :: String.t()) :: boolean()
-  defp pattern_matches?(signal_type, pattern) do
-    dbug("Checking pattern match", signal_type: signal_type, pattern: pattern)
-
-    regex =
-      pattern
-      |> String.replace(".", "\\.")
-      |> String.replace("*", "[^.]+")
-      |> then(&"^#{&1}$")
-      |> Regex.compile!()
-
-    matches = Regex.match?(regex, signal_type)
-    dbug("Pattern match result", matches: matches)
     matches
   end
 end

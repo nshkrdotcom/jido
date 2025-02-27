@@ -22,7 +22,7 @@ defmodule Jido.Agent.Server.CallbackTest do
     skill = %TestSkill{
       name: "test_skill",
       description: "Test skill for callback testing",
-      schema_key: :test_skill,
+      opts_key: :test_skill,
       signals: %{
         input: ["test.skill.*"],
         output: ["test.skill.result"]

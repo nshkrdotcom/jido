@@ -6,13 +6,13 @@ defmodule JidoTest.TestSkills do
     use Jido.Skill,
       name: "test_skill",
       description: "Test skill for callback testing",
-      schema_key: :test_skill,
+      opts_key: :test_skill,
       signals: %{
         input: ["test.skill.*"],
         output: ["test.skill.result"]
       }
 
-    defstruct [:name, :description, :schema_key, :signals]
+    defstruct [:name, :description, :opts_key, :signals]
 
     def handle_signal(signal) do
       {:ok, %{signal | data: Map.put(signal.data, :skill_handled, true)}}
@@ -31,7 +31,7 @@ defmodule JidoTest.TestSkills do
       category: "monitoring",
       tags: ["weather", "alerts", "monitoring"],
       vsn: "1.0.0",
-      schema_key: :weather,
+      opts_key: :weather,
       signals: %{
         # Input signals this skill handles
         input: [
@@ -46,7 +46,7 @@ defmodule JidoTest.TestSkills do
           "weather_monitor.conditions.changed"
         ]
       },
-      config: %{
+      opts_schema: [
         weather_api: [
           type: :map,
           required: true,
@@ -57,9 +57,9 @@ defmodule JidoTest.TestSkills do
           required: false,
           doc: "Alert configuration"
         ]
-      }
+      ]
 
-    defstruct [:name, :description, :category, :tags, :vsn, :schema_key, :signals, :config]
+    defstruct [:name, :description, :category, :tags, :vsn, :opts_key, :signals, :config]
 
     # Actions that this skill provides to the agent
     defmodule Actions do
@@ -236,16 +236,6 @@ defmodule JidoTest.TestSkills do
       ]
     end
 
-    # Optional: Initial state for the skill's keyspace
-    def initial_state do
-      %{
-        current_conditions: nil,
-        alert_history: [],
-        last_report: nil,
-        locations: ["NYC", "LA", "CHI"]
-      }
-    end
-
     def handle_result(
           {:ok, %{weather_data: data}},
           "weather_monitor.data.received"
@@ -292,15 +282,33 @@ defmodule JidoTest.TestSkills do
     end
   end
 
+  # Mock skill for testing
   defmodule MockSkill do
-    @moduledoc false
-    def routes do
+    @moduledoc """
+    A basic mock skill for testing.
+    """
+    use Jido.Skill,
+      name: "mock_skill",
+      description: "Basic mock skill for testing",
+      opts_key: :mock_skill,
+      signals: %{
+        input: ["test.path.*"],
+        output: ["test.result.*"]
+      }
+
+    @impl true
+    def router(_opts \\ []) do
       [
-        {:test_route, :test_handler}
+        %Jido.Signal.Router.Route{
+          path: "test.path",
+          target: %Jido.Instruction{action: :test_handler},
+          priority: 0
+        }
       ]
     end
 
-    def child_spec(_) do
+    @impl true
+    def child_spec(_opts \\ []) do
       %{
         id: __MODULE__,
         start: {__MODULE__, :start_link, []},
@@ -309,18 +317,151 @@ defmodule JidoTest.TestSkills do
     end
   end
 
-  defmodule InvalidSkill do
-    @moduledoc false
-    def routes do
+  # Mock skill with router function
+  defmodule MockSkillWithRouter do
+    @moduledoc """
+    A mock skill with a router function.
+    """
+    use Jido.Skill,
+      name: "mock_skill_with_router",
+      description: "Mock skill with router function",
+      opts_key: :mock_skill_with_router,
+      signals: %{
+        input: ["test.path.*"],
+        output: ["test.result.*"]
+      }
+
+    @impl true
+    def router(_opts \\ []) do
+      [
+        %Jido.Signal.Router.Route{
+          path: "test.path",
+          target: %Jido.Instruction{action: :test_handler},
+          priority: 0
+        }
+      ]
+    end
+
+    @impl true
+    def child_spec(_opts), do: []
+  end
+
+  # Mock skill with invalid router
+  defmodule InvalidRouterSkill do
+    @moduledoc """
+    A mock skill with an invalid router.
+    """
+    use Jido.Skill,
+      name: "invalid_router_skill",
+      description: "Mock skill with invalid router",
+      opts_key: :invalid_router_skill,
+      signals: %{
+        input: ["test.path.*"],
+        output: ["test.result.*"]
+      }
+
+    @impl true
+    def router(_opts \\ []) do
       :not_a_list
     end
 
-    def child_spec(_) do
+    @impl true
+    def child_spec(_opts), do: []
+  end
+
+  # Mock skill with validation schema
+  defmodule MockSkillWithSchema do
+    @moduledoc """
+    A mock skill with a validation schema.
+    """
+    use Jido.Skill,
+      name: "mock_skill_with_schema",
+      description: "Mock skill with validation schema",
+      opts_key: :mock_skill_with_schema,
+      signals: %{
+        input: ["test.path.*"],
+        output: ["test.result.*"]
+      },
+      opts_schema: [
+        api_key: [
+          type: :string,
+          required: true,
+          doc: "API key for the service"
+        ],
+        timeout: [
+          type: :integer,
+          default: 5000,
+          doc: "Timeout in milliseconds"
+        ]
+      ]
+
+    @impl true
+    def router(_opts \\ []) do
+      [
+        %Jido.Signal.Router.Route{
+          path: "test.path",
+          target: %Jido.Instruction{action: :test_handler},
+          priority: 0
+        }
+      ]
+    end
+
+    @impl true
+    def child_spec(_opts \\ []) do
       %{
         id: __MODULE__,
         start: {__MODULE__, :start_link, []},
         type: :worker
       }
+    end
+  end
+
+  # Mock skill with custom mount implementation
+  defmodule MockSkillWithMount do
+    @moduledoc """
+    A mock skill with a custom mount implementation that registers a custom action module.
+    """
+    use Jido.Skill,
+      name: "mock_skill_with_mount",
+      description: "Mock skill with custom mount implementation",
+      opts_key: :mock_skill_with_mount,
+      signals: %{
+        input: ["test.path.*"],
+        output: ["test.result.*"]
+      },
+      opts_schema: []
+
+    @impl true
+    def router(_opts \\ []) do
+      [
+        %Jido.Signal.Router.Route{
+          path: "test.path",
+          target: %Jido.Instruction{action: :test_handler},
+          priority: 0
+        }
+      ]
+    end
+
+    @impl true
+    def child_spec(_opts \\ []) do
+      %{
+        id: __MODULE__,
+        start: {__MODULE__, :start_link, []},
+        type: :worker
+      }
+    end
+
+    @impl true
+    def mount(agent, _opts) do
+      # Register an existing action from JidoTest.TestActions
+      {:ok, updated_agent} = Jido.Agent.register_action(agent, JidoTest.TestActions.BasicAction)
+
+      # Update the agent state to verify the mount was called
+      updated_agent = Map.update!(updated_agent, :state, fn state ->
+        Map.put(state, :mount_called, true)
+      end)
+
+      {:ok, updated_agent}
     end
   end
 end

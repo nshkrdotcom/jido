@@ -11,7 +11,7 @@ defmodule Jido.Skills.Arithmetic do
     category: "math",
     tags: ["math", "arithmetic", "calculations"],
     vsn: "1.0.0",
-    schema_key: :arithmetic,
+    opts_key: :arithmetic,
     signals: %{
       input: [
         "arithmetic.add",
@@ -26,14 +26,14 @@ defmodule Jido.Skills.Arithmetic do
         "arithmetic.error"
       ]
     },
-    config: %{
+    opts_schema: [
       max_value: [
         type: :integer,
         required: false,
         default: 1_000_000,
         doc: "Maximum allowed value for calculations"
       ]
-    }
+    ]
 
   defmodule Actions do
     @moduledoc false
@@ -166,8 +166,8 @@ defmodule Jido.Skills.Arithmetic do
     * arithmetic.result: Result of arithmetic operation
     * arithmetic.error: Error from arithmetic operation
   """
-  @spec routes() :: [map()]
-  def routes do
+  @spec router() :: [map()]
+  def router(_opts \\ []) do
     [
       %{
         path: "arithmetic.add",
@@ -206,24 +206,6 @@ defmodule Jido.Skills.Arithmetic do
         }
       }
     ]
-  end
-
-  @doc """
-  Get the initial state for the arithmetic skill.
-  """
-  @spec initial_state() :: map()
-  def initial_state do
-    %{
-      last_result: nil,
-      operation_count: %{
-        add: 0,
-        subtract: 0,
-        multiply: 0,
-        divide: 0,
-        square: 0,
-        eval: 0
-      }
-    }
   end
 
   @doc """

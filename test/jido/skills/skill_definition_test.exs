@@ -14,7 +14,7 @@ defmodule Jido.SkillDefinitionTest do
       assert WeatherMonitorSkill.category() == "monitoring"
       assert WeatherMonitorSkill.tags() == ["weather", "alerts", "monitoring"]
       assert WeatherMonitorSkill.vsn() == "1.0.0"
-      assert WeatherMonitorSkill.schema_key() == :weather
+      assert WeatherMonitorSkill.opts_key() == :weather
     end
 
     test "skill metadata is accessible" do
@@ -25,7 +25,7 @@ defmodule Jido.SkillDefinitionTest do
       assert metadata.category == "monitoring"
       assert metadata.tags == ["weather", "alerts", "monitoring"]
       assert metadata.vsn == "1.0.0"
-      assert metadata.schema_key == :weather
+      assert metadata.opts_key == :weather
 
       assert metadata.signals == %{
                input: [
@@ -40,10 +40,10 @@ defmodule Jido.SkillDefinitionTest do
                ]
              }
 
-      assert metadata.config_schema == %{
+      assert metadata.opts_schema == [
                weather_api: [type: :map, required: true, doc: "Weather API configuration"],
                alerts: [type: :map, required: false, doc: "Alert configuration"]
-             }
+             ]
     end
 
     test "skill can be serialized to JSON" do
@@ -54,7 +54,7 @@ defmodule Jido.SkillDefinitionTest do
       assert json.category == "monitoring"
       assert json.tags == ["weather", "alerts", "monitoring"]
       assert json.vsn == "1.0.0"
-      assert json.schema_key == :weather
+      assert json.opts_key == :weather
     end
 
     test "skill defines valid signal patterns" do
@@ -71,17 +71,6 @@ defmodule Jido.SkillDefinitionTest do
                "weather_monitor.data.processed",
                "weather_monitor.conditions.changed"
              ]
-    end
-
-    test "skill defines initial state" do
-      initial_state = WeatherMonitorSkill.initial_state()
-
-      assert initial_state == %{
-               current_conditions: nil,
-               alert_history: [],
-               last_report: nil,
-               locations: ["NYC", "LA", "CHI"]
-             }
     end
 
     test "skill defines child specs" do

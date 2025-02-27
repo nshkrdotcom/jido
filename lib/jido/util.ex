@@ -111,7 +111,7 @@ defmodule Jido.Util do
       {:ok, [ValidAction]}
   """
   @spec validate_actions(list(module()) | module()) ::
-          {:ok, list(module())} | {:error, String.t()}
+          {:ok, list(module()) | module()} | {:error, String.t()}
   def validate_actions(actions) when is_list(actions) do
     if Enum.all?(actions, &implements_action?/1) do
       {:ok, actions}
@@ -121,7 +121,11 @@ defmodule Jido.Util do
   end
 
   def validate_actions(action) when is_atom(action) do
-    validate_actions([action])
+    if implements_action?(action) do
+      {:ok, action}
+    else
+      {:error, "All actions must implement the Jido.Action behavior"}
+    end
   end
 
   defp implements_action?(module) when is_atom(module) do

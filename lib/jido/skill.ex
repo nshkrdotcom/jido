@@ -22,8 +22,7 @@ defmodule Jido.Skill do
   Skills use schema-based state isolation to prevent different capabilities from interfering
   with each other. Each skill defines:
 
-  - A unique `schema_key` for namespace isolation
-  - An `initial_state/0` callback for state setup
+  - A unique `opts_key` for namespace isolation
   - Validation rules for configuration
 
   ### Signal Patterns
@@ -88,7 +87,7 @@ defmodule Jido.Skill do
       category: "monitoring",
       tags: ["weather", "alerts"],
       vsn: "1.0.0",
-      schema_key: :weather,
+      opts_key: :weather,
       signals: [
         input: ["weather.data.*", "weather.alert.**"],
         output: ["weather.alert.generated"]
@@ -96,14 +95,6 @@ defmodule Jido.Skill do
       config: [
         api_key: [type: :string, required: true]
       ]
-
-    def initial_state do
-      %{
-        current_conditions: nil,
-        alert_history: [],
-        last_update: nil
-      }
-    end
 
     def child_spec(config) do
       [
@@ -122,23 +113,23 @@ defmodule Jido.Skill do
 
   Skills implement these callbacks:
 
-  - `initial_state/0` - Returns the skill's initial state map
   - `child_spec/1` - Returns child process specifications
-  - `routes/0` - Returns signal routing rules
+  - `router/0` - Returns signal routing rules
   - `handle_signal/1` - Processes incoming signals
   - `process_result/2` - Post-processes signal handling results
+  - `mount/2` - Mounts the skill to an agent
 
   ## Behavior
 
   The Skill behavior enforces a consistent interface:
 
   ```elixir
-  @callback initial_state() :: map()
   @callback child_spec(config :: map()) :: Supervisor.child_spec() | [Supervisor.child_spec()]
-  @callback routes() :: [map()]
+  @callback router() :: [map()]
   @callback handle_signal(signal :: Signal.t()) :: {:ok, Signal.t()} | {:error, term()}
   @callback process_result(signal :: Signal.t(), result :: term()) ::
               {:ok, term()} | {:error, term()}
+  @callback mount(agent :: Jido.Agent.t(), opts :: keyword()) :: Jido.Agent.t()
   ```
 
   ## Configuration
@@ -150,14 +141,14 @@ defmodule Jido.Skill do
   - `category` - Broad classification
   - `tags` - List of searchable tags
   - `vsn` - Version string
-  - `schema_key` - State namespace key
+  - `opts_key` - State namespace key
   - `signals` - Input/output patterns
   - `config` - Configuration schema
 
   ## Best Practices
 
   1. **State Isolation**
-     - Use meaningful schema_key names
+     - Use meaningful opts_key names
      - Keep state focused and minimal
      - Document state structure
 
@@ -196,7 +187,7 @@ defmodule Jido.Skill do
   - `category`: Broad classification for organization
   - `tags`: List of searchable tags
   - `vsn`: Version string for compatibility
-  - `schema_key`: Atom key for state namespace
+  - `opts_key`: Atom key for state namespace
   - `signals`: Input/output signal patterns
   - `config`: Configuration schema
   """
@@ -206,7 +197,7 @@ defmodule Jido.Skill do
     field(:category, String.t())
     field(:tags, [String.t()], default: [])
     field(:vsn, String.t())
-    field(:schema_key, atom())
+    field(:opts_key, atom())
     field(:signals, map())
     field(:config, map())
   end
@@ -239,10 +230,15 @@ defmodule Jido.Skill do
                            required: false,
                            doc: "The version of the Skill."
                          ],
-                         schema_key: [
+                         opts_key: [
                            type: :atom,
                            required: true,
                            doc: "Atom key for state namespace isolation"
+                         ],
+                         opts_schema: [
+                           type: :keyword_list,
+                           default: [],
+                           doc: "Nimble Options schema for skill options"
                          ],
                          signals: [
                            type: :map,
@@ -252,11 +248,6 @@ defmodule Jido.Skill do
                              input: [type: {:list, :string}, default: []],
                              output: [type: {:list, :string}, default: []]
                            ]
-                         ],
-                         config: [
-                           type: :map,
-                           required: false,
-                           doc: "Configuration schema"
                          ]
                        )
 
@@ -274,7 +265,7 @@ defmodule Jido.Skill do
       defmodule MySkill do
         use Jido.Skill,
           name: "my_skill",
-          schema_key: :my_skill,
+          opts_key: :my_skill,
           signals: [
             input: ["my.event.*"],
             output: ["my.result.*"]
@@ -313,13 +304,13 @@ defmodule Jido.Skill do
           def vsn, do: @validated_opts[:vsn]
 
           @doc false
-          def schema_key, do: @validated_opts[:schema_key]
+          def opts_key, do: @validated_opts[:opts_key]
 
           @doc false
           def signals, do: @validated_opts[:signals]
 
           @doc false
-          def config_schema, do: @validated_opts[:config]
+          def opts_schema, do: @validated_opts[:opts_schema]
 
           @doc false
           def to_json do
@@ -329,9 +320,9 @@ defmodule Jido.Skill do
               category: @validated_opts[:category],
               tags: @validated_opts[:tags],
               vsn: @validated_opts[:vsn],
-              schema_key: @validated_opts[:schema_key],
+              opts_key: @validated_opts[:opts_key],
               signals: @validated_opts[:signals],
-              config_schema: @validated_opts[:config]
+              opts_schema: @validated_opts[:opts_schema]
             }
           end
 
@@ -342,13 +333,10 @@ defmodule Jido.Skill do
 
           # Default implementations
           @doc false
-          def initial_state, do: %{}
-
-          @doc false
           def child_spec(_config), do: []
 
           @doc false
-          def routes, do: []
+          def router(_opts), do: []
 
           @doc false
           def handle_signal(signal), do: {:ok, signal}
@@ -356,11 +344,14 @@ defmodule Jido.Skill do
           @doc false
           def process_result(signal, result), do: {:ok, result}
 
-          defoverridable initial_state: 0,
-                         child_spec: 1,
-                         routes: 0,
+          @doc false
+          def mount(agent, _opts), do: {:ok, agent}
+
+          defoverridable child_spec: 1,
+                         router: 1,
                          handle_signal: 1,
-                         process_result: 2
+                         process_result: 2,
+                         mount: 2
 
         {:error, error} ->
           message = Error.format_nimble_config_error(error, "Skill", __MODULE__)
@@ -374,12 +365,13 @@ defmodule Jido.Skill do
   end
 
   # Behaviour callbacks
-  @callback initial_state() :: map()
   @callback child_spec(config :: map()) :: Supervisor.child_spec() | [Supervisor.child_spec()]
-  @callback routes() :: [map()]
+  @callback router(skill_opts :: keyword()) :: [Route.t()]
   @callback handle_signal(signal :: Signal.t()) :: {:ok, Signal.t()} | {:error, term()}
   @callback process_result(signal :: Signal.t(), result :: term()) ::
               {:ok, term()} | {:error, any()}
+  @callback mount(agent :: Jido.Agent.t(), opts :: keyword()) ::
+              {:ok, Jido.Agent.t()} | {:error, Error.t()}
 
   @doc """
   Skills must be defined at compile time, not runtime.
@@ -410,14 +402,14 @@ defmodule Jido.Skill do
 
   ## Example
 
-      Skill.validate_config(WeatherSkill, %{
+      Skill.validate_opts(WeatherSkill, %{
         api_key: "abc123",
         interval: 1000
       })
   """
-  @spec validate_config(module(), map()) :: {:ok, map()} | {:error, Error.t()}
-  def validate_config(skill_module, config) do
-    with {:ok, schema} <- get_config_schema(skill_module) do
+  @spec validate_opts(module(), map()) :: {:ok, map()} | {:error, Error.t()}
+  def validate_opts(skill_module, config) do
+    with {:ok, schema} <- get_opts_schema(skill_module) do
       NimbleOptions.validate(config, schema)
     end
   end
@@ -436,14 +428,14 @@ defmodule Jido.Skill do
 
       Skill.get_config_schema(WeatherSkill)
   """
-  @spec get_config_schema(module()) :: {:ok, map()} | {:error, Error.t()}
-  def get_config_schema(skill_module) do
-    case function_exported?(skill_module, :config_schema, 0) do
+  @spec get_opts_schema(module()) :: {:ok, map()} | {:error, Error.t()}
+  def get_opts_schema(skill_module) do
+    case function_exported?(skill_module, :opts_schema, 0) do
       true ->
-        {:ok, skill_module.config_schema()}
+        {:ok, skill_module.opts_schema()}
 
       false ->
-        {:error, Error.config_error("Skill has no config schema")}
+        {:error, Error.config_error("Skill has no opts schema")}
     end
   end
 

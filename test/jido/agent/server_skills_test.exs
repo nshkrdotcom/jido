@@ -7,6 +7,7 @@ defmodule Jido.Agent.Server.SkillsTest do
   alias Jido.Signal.Router
   alias Jido.Instruction
   alias JidoTest.TestAgents.BasicAgent
+
   alias JidoTest.TestSkills.{
     MockSkill,
     MockSkillWithSchema,
@@ -122,7 +123,11 @@ defmodule Jido.Agent.Server.SkillsTest do
       ]
 
       assert {:error, error_message} = Skills.build(state, opts)
-      assert String.contains?(error_message, "Failed to validate options for skill mock_skill_with_schema")
+
+      assert String.contains?(
+               error_message,
+               "Failed to validate options for skill mock_skill_with_schema"
+             )
     end
 
     test "uses default values for skill options when not provided", %{state: state} do

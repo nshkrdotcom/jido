@@ -457,9 +457,10 @@ defmodule JidoTest.TestSkills do
       {:ok, updated_agent} = Jido.Agent.register_action(agent, JidoTest.TestActions.BasicAction)
 
       # Update the agent state to verify the mount was called
-      updated_agent = Map.update!(updated_agent, :state, fn state ->
-        Map.put(state, :mount_called, true)
-      end)
+      updated_agent =
+        Map.update!(updated_agent, :state, fn state ->
+          Map.put(state, :mount_called, true)
+        end)
 
       {:ok, updated_agent}
     end

@@ -23,7 +23,8 @@ defmodule Jido.Agent.Server.Skills do
   - `{:ok, state, opts}` - The updated state and options
   - `{:error, reason}` - An error occurred
   """
-  @spec build(ServerState.t(), Keyword.t()) :: {:ok, ServerState.t(), Keyword.t()} | {:error, String.t()}
+  @spec build(ServerState.t(), Keyword.t()) ::
+          {:ok, ServerState.t(), Keyword.t()} | {:error, String.t()}
   def build(state, opts) do
     dbug("Building skills", state: state, opts: opts)
 
@@ -105,9 +106,11 @@ defmodule Jido.Agent.Server.Skills do
               dbug("Got skill child specs", child_specs: new_child_specs)
 
               # Continue processing with updated accumulators
-              {:cont, {updated_state, opts, routes_acc ++ new_routes, child_specs_acc ++ new_child_specs}}
+              {:cont,
+               {updated_state, opts, routes_acc ++ new_routes, child_specs_acc ++ new_child_specs}}
             else
-              {:halt, {:error, "Skill #{skill.name()} returned invalid routes: #{inspect(new_routes)}"}}
+              {:halt,
+               {:error, "Skill #{skill.name()} returned invalid routes: #{inspect(new_routes)}"}}
             end
 
           {:error, reason} ->
@@ -117,7 +120,9 @@ defmodule Jido.Agent.Server.Skills do
 
       {:error, reason} ->
         dbug("Skill options validation failed", reason: reason)
-        {:halt, {:error, "Failed to validate options for skill #{skill.name()}: #{inspect(reason)}"}}
+
+        {:halt,
+         {:error, "Failed to validate options for skill #{skill.name()}: #{inspect(reason)}"}}
     end
   end
 end

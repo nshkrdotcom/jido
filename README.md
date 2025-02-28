@@ -159,7 +159,7 @@ Supervisor.start_link(children, strategy: :one_for_one)
 
 ## Documentation
 
-- [📘 Getting Started Guide](guides/getting-started.md)
+- [📘 Getting Started Guide](guides/getting-started.livemd)
 - [🧩 Actions & Workflows](guides/actions/overview.md)
 - [🤖 Building Agents](guides/agents/overview.md)
 - [📡 Sensors & Monitoring](guides/sensors/overview.md)

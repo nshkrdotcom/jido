@@ -10,6 +10,10 @@ The name "Jido" (自動) comes from the Japanese word meaning "automatic" or "au
 [![Coverage Status](https://coveralls.io/repos/github/agentjido/jido/badge.svg?branch=main)](https://coveralls.io/github/agentjido/jido?branch=main)
 [![Apache 2 License](https://img.shields.io/hexpm/l/jido)](https://opensource.org/licenses/Apache-2.0)
 
+## 🚨 Important Notice
+
+As of March 3rd, 2025, I'm working out a few final issues in prep for the v1.1 release. The `main` branch will always represent the latest release - but it may have a few quality issues that don't represent the final release. I welcome input and contributions!  You can find me in the usual Elixir community locations.
+
 ## Overview
 
 Jido provides the foundation for building autonomous agents that can plan, execute, and adapt their behavior in distributed Elixir applications. Think of it as a toolkit for creating smart, composable workflows that can evolve and respond to their environment.

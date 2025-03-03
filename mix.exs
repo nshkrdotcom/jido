@@ -310,13 +310,13 @@ defmodule Jido.MixProject do
       {:typed_struct_nimble_options, "~> 0.1.1"},
       {:quantum, "~> 3.5"},
       {:uniq, "~> 0.6.1"},
-      {:ex_dbug, "~> 1.2"},
+      {:ex_dbug, "~> 2.1"},
 
       # Skill & Action Dependencies for examples
       {:abacus, "~> 2.1"},
 
       # Development & Test Dependencies
-      {:credo, "~> 1.7"},
+      {:credo, "~> 1.7", only: [:dev, :test]},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},

@@ -720,15 +720,13 @@ defmodule Jido.Workflow do
       # Add task_group to context so Actions can use it
       enhanced_context = Map.put(context, :__task_group__, task_group)
 
-      # Set up IO monitoring
-      original_gl = Process.group_leader()
-      io_monitor_ref = make_ref()
-      io_monitor_pid = spawn_io_monitor(parent, io_monitor_ref)
+      # Get the current process's group leader
+      current_gl = Process.group_leader()
 
       {pid, monitor_ref} =
         spawn_monitor(fn ->
-          # Set our custom IO monitor as the group leader
-          Process.group_leader(self(), io_monitor_pid)
+          # Use the parent's group leader to ensure IO is properly captured
+          Process.group_leader(self(), current_gl)
 
           result =
             try do
@@ -738,8 +736,15 @@ defmodule Jido.Workflow do
               result
             catch
               kind, reason ->
+                stacktrace = __STACKTRACE__
                 dbug("Action execution caught error", action: action, kind: kind, reason: reason)
-                {:error, Error.execution_error("Caught #{kind}: #{inspect(reason)}")}
+
+                {:error,
+                 Error.execution_error(
+                   "Caught #{kind}: #{inspect(reason)}",
+                   %{kind: kind, reason: reason, action: action},
+                   stacktrace
+                 )}
             end
 
           send(parent, {:done, ref, result})
@@ -747,43 +752,26 @@ defmodule Jido.Workflow do
 
       result =
         receive do
-          {:io_operation_detected, ^io_monitor_ref, operation} ->
-            dbug("Unsafe IO operation detected", action: action, operation: operation)
-            cleanup_task_group(task_group)
-            Process.exit(pid, :kill)
-            Process.exit(io_monitor_pid, :kill)
-
-            {:error,
-             Error.execution_error(
-               "Unsafe IO operation detected in Action #{inspect(action)}. " <>
-                 "IO operations like #{operation} are not allowed in Actions as they can cause timeouts. " <>
-                 "Use Logger.* functions instead for logging, or Jido.Workflow.safe_inspect for debugging."
-             )}
-
           {:done, ^ref, result} ->
             dbug("Received action result", action: action, result: result)
             cleanup_task_group(task_group)
             Process.demonitor(monitor_ref, [:flush])
-            Process.exit(io_monitor_pid, :kill)
             result
 
           {:DOWN, ^monitor_ref, :process, ^pid, :killed} ->
             dbug("Task was killed", action: action)
             cleanup_task_group(task_group)
-            Process.exit(io_monitor_pid, :kill)
             {:error, Error.execution_error("Task was killed")}
 
           {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
             dbug("Task exited unexpectedly", action: action, reason: reason)
             cleanup_task_group(task_group)
-            Process.exit(io_monitor_pid, :kill)
             {:error, Error.execution_error("Task exited: #{inspect(reason)}")}
         after
           timeout ->
             dbug("Action timed out", action: action, timeout: timeout)
             cleanup_task_group(task_group)
             Process.exit(pid, :kill)
-            Process.exit(io_monitor_pid, :kill)
 
             receive do
               {:DOWN, ^monitor_ref, :process, ^pid, _} -> :ok
@@ -807,7 +795,6 @@ Debug info:
              )}
         end
 
-      Process.group_leader(self(), original_gl)
       result
     end
 
@@ -863,53 +850,38 @@ Debug info:
     rescue
       e in RuntimeError ->
         dbug("Runtime error in action", error: e)
+        stacktrace = __STACKTRACE__
 
         OK.failure(
-          Error.execution_error("Server error in #{inspect(action)}: #{Exception.message(e)}")
+          Error.execution_error(
+            "Server error in #{inspect(action)}: #{Exception.message(e)}",
+            %{original_exception: e, action: action},
+            stacktrace
+          )
         )
 
       e in ArgumentError ->
         dbug("Argument error in action", error: e)
+        stacktrace = __STACKTRACE__
 
         OK.failure(
-          Error.execution_error("Argument error in #{inspect(action)}: #{Exception.message(e)}")
+          Error.execution_error(
+            "Argument error in #{inspect(action)}: #{Exception.message(e)}",
+            %{original_exception: e, action: action},
+            stacktrace
+          )
         )
 
       e ->
+        stacktrace = __STACKTRACE__
+
         OK.failure(
           Error.execution_error(
-            "An unexpected error occurred during execution of #{inspect(action)}: #{inspect(e)}"
+            "An unexpected error occurred during execution of #{inspect(action)}: #{inspect(e)}",
+            %{original_exception: e, action: action},
+            stacktrace
           )
         )
-    end
-
-    # Helper to spawn an IO monitor process
-    defp spawn_io_monitor(parent, ref) do
-      spawn(fn ->
-        Process.flag(:trap_exit, true)
-        io_monitor_loop(parent, ref)
-      end)
-    end
-
-    # IO monitor process loop
-    defp io_monitor_loop(parent, ref) do
-      receive do
-        {:io_request, from, reply_as, {:put_chars, _encoding, chars}} ->
-          # Check if this is an IO.inspect call
-          if to_string(chars) =~ "inspect" do
-            send(parent, {:io_operation_detected, ref, "IO.inspect"})
-          end
-
-          send(from, {:io_reply, reply_as, :ok})
-          io_monitor_loop(parent, ref)
-
-        {:io_request, from, reply_as, _request} ->
-          send(from, {:io_reply, reply_as, :ok})
-          io_monitor_loop(parent, ref)
-
-        {:EXIT, _from, _reason} ->
-          :ok
-      end
     end
   end
 end

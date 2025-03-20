@@ -27,6 +27,15 @@ defmodule Jido.Agent.Server do
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Signal
 
+  # Default actions to register with every agent
+  @default_actions [
+    Jido.Actions.Basic.Log,
+    Jido.Actions.Basic.Sleep,
+    Jido.Actions.Basic.Noop,
+    Jido.Actions.Basic.Inspect,
+    Jido.Actions.Basic.Today
+  ]
+
   @type start_option ::
           {:id, String.t()}
           | {:agent, module() | struct()}
@@ -156,6 +165,7 @@ defmodule Jido.Agent.Server do
          opts = Keyword.put(opts, :agent, agent),
          {:ok, opts} <- ServerOptions.validate_server_opts(opts),
          {:ok, state} <- build_initial_state_from_opts(opts),
+         {:ok, state} <- register_actions(state, opts[:actions]),
          {:ok, state, opts} <- ServerSkills.build(state, opts),
          {:ok, state} <- ServerRouter.build(state, opts),
          {:ok, state, _pids} <- ServerProcess.start(state, opts[:child_specs]),
@@ -503,4 +513,30 @@ defmodule Jido.Agent.Server do
         opts
     end
   end
+
+  @spec register_actions(ServerState.t(), [module()]) :: {:ok, ServerState.t()} | {:error, term()}
+  defp register_actions(%ServerState{} = state, provided_actions) when is_list(provided_actions) do
+    dbug("Registering actions with agent",
+      default_actions: @default_actions,
+      provided_actions: provided_actions
+    )
+
+    # Combine default actions with provided actions
+    all_actions = @default_actions ++ provided_actions
+
+    # Register actions with the agent
+    case Jido.Agent.register_action(state.agent, all_actions) do
+      {:ok, updated_agent} ->
+        dbug("Successfully registered actions",
+          agent_id: updated_agent.id,
+          actions: Jido.Agent.registered_actions(updated_agent)
+        )
+        {:ok, %{state | agent: updated_agent}}
+      {:error, reason} ->
+        dbug("Failed to register actions", reason: reason)
+        {:error, reason}
+    end
+  end
+
+  defp register_actions(state, _), do: {:ok, state}
 end

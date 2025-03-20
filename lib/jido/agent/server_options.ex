@@ -44,6 +44,11 @@ defmodule Jido.Agent.Server.Options do
                                 doc:
                                   "Route specifications for signal routing. Can be a single Route struct, list of Route structs, or list of route spec tuples"
                               ],
+                              actions: [
+                                type: {:custom, __MODULE__, :validate_actions_opts, []},
+                                default: [],
+                                doc: "List of Action modules to register with the agent at startup"
+                              ],
                               sensors: [
                                 type: {:list, :mod_arg},
                                 default: [],
@@ -96,6 +101,7 @@ defmodule Jido.Agent.Server.Options do
       :registry,
       :dispatch,
       :routes,
+      :actions,
       :sensors,
       :skills,
       :child_specs
@@ -179,6 +185,19 @@ defmodule Jido.Agent.Server.Options do
       {:error, reason} ->
         dbug("Route normalization failed", reason: reason)
         {:error, "Invalid route format: #{inspect(reason)}"}
+    end
+  end
+
+  def validate_actions_opts(actions, _opts \\ []) do
+    dbug("Validating actions options", actions: actions)
+
+    case Jido.Util.validate_actions(actions) do
+      {:ok, validated} ->
+        dbug("Actions validated successfully", validated: validated)
+        {:ok, validated}
+      {:error, reason} ->
+        dbug("Actions validation failed", reason: reason)
+        {:error, reason}
     end
   end
 end

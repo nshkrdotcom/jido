@@ -2,6 +2,7 @@ defmodule Jido.Agent.Server.OptionsTest do
   use JidoTest.Case, async: true
   alias Jido.Agent.Server.Options
   alias JidoTest.TestAgents.{MinimalAgent, BasicAgent}
+  alias Jido.Actions.Basic.{Log, Sleep, Noop}
 
   describe "validate_server_opts/1" do
     test "validates minimal valid options" do
@@ -112,6 +113,24 @@ defmodule Jido.Agent.Server.OptionsTest do
     test "returns error for invalid route format" do
       assert {:error, _} = Options.validate_route_opts([{"invalid"}])
       assert {:error, _} = Options.validate_route_opts([{:not_a_string, fn -> :ok end}])
+    end
+  end
+
+  describe "validate_actions_opts/1" do
+    test "validates valid action modules" do
+      # Test with a single action
+      assert {:ok, [Log]} = Options.validate_actions_opts([Log])
+
+      # Test with multiple actions
+      assert {:ok, [Log, Sleep, Noop]} = Options.validate_actions_opts([Log, Sleep, Noop])
+    end
+
+    test "returns error for invalid action modules" do
+      # Test with a module that doesn't implement the Jido.Action behavior
+      assert {:error, _} = Options.validate_actions_opts([String])
+
+      # Test with a non-existent module
+      assert {:error, _} = Options.validate_actions_opts([NonExistentModule])
     end
   end
 end

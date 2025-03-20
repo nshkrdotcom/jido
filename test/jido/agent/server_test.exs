@@ -61,6 +61,71 @@ defmodule Jido.Agent.ServerTest do
       assert state.agent.id == id2
     end
 
+    test "registers default actions with agent" do
+      {:ok, pid} = Server.start_link(agent: BasicAgent)
+      {:ok, state} = Server.state(pid)
+
+      # Check if default actions are registered
+      registered_actions = Jido.Agent.registered_actions(state.agent)
+
+      # Verify some of the default actions are registered
+      assert Jido.Actions.Basic.Log in registered_actions
+      assert Jido.Actions.Basic.Noop in registered_actions
+      assert Jido.Actions.Basic.Sleep in registered_actions
+    end
+
+    test "registers provided actions with agent" do
+      # Use a custom action module for testing
+      defmodule TestAction do
+        use Jido.Action, name: "test_action"
+        def run(_params, _ctx), do: {:ok, %{}}
+      end
+
+      {:ok, pid} = Server.start_link(agent: BasicAgent, actions: [TestAction])
+      {:ok, state} = Server.state(pid)
+
+      # Check if our custom action is registered
+      registered_actions = Jido.Agent.registered_actions(state.agent)
+      assert TestAction in registered_actions
+
+      # Default actions should still be registered
+      assert Jido.Actions.Basic.Log in registered_actions
+    end
+
+    test "merges actions with existing agent actions" do
+      # Create an agent with pre-registered actions
+      defmodule PreregisteredAction do
+        use Jido.Action, name: "preregistered_action"
+        def run(_params, _ctx), do: {:ok, %{}}
+      end
+
+      # Register an action with the agent before starting the server
+      agent = BasicAgent.new()
+      {:ok, agent_with_action} = Jido.Agent.register_action(agent, PreregisteredAction)
+
+      # Define a new action to be registered via server options
+      defmodule ServerAction do
+        use Jido.Action, name: "server_action"
+        def run(_params, _ctx), do: {:ok, %{}}
+      end
+
+      # Start server with the pre-configured agent and additional actions
+      {:ok, pid} = Server.start_link(
+        agent: agent_with_action,
+        actions: [ServerAction]
+      )
+
+      {:ok, state} = Server.state(pid)
+      registered_actions = Jido.Agent.registered_actions(state.agent)
+
+      # Both actions should be registered
+      assert PreregisteredAction in registered_actions
+      assert ServerAction in registered_actions
+
+      # Default actions should also be registered
+      assert Jido.Actions.Basic.Log in registered_actions
+    end
+
     test "starts with custom registry", %{registry: registry} do
       id = "test-agent-#{System.unique_integer([:positive])}"
       {:ok, pid} = Server.start_link(agent: BasicAgent, id: id, registry: registry)

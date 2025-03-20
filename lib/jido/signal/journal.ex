@@ -234,6 +234,10 @@ defmodule Jido.Signal.Journal do
     adapter.get_all_signals()
   end
 
+  defp call_adapter({:error, {:already_started, pid}}, function, args) do
+    apply(Jido.Signal.Journal.Adapters.ETS, function, args ++ [pid])
+  end
+
   defp call_adapter(
          %__MODULE__{adapter: Jido.Signal.Journal.Adapters.ETS, adapter_pid: pid} = _journal,
          function,

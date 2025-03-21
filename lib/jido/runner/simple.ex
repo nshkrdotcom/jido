@@ -87,7 +87,7 @@ defmodule Jido.Runner.Simple do
   Debug logs are emitted at key points:
     * Runner start with agent ID
     * Instruction dequeue result
-    * Execution setup and workflow invocation
+    * Execution setup and action invocation
     * Result processing and categorization
   """
   @impl true
@@ -119,9 +119,9 @@ defmodule Jido.Runner.Simple do
 
     dbug("Executing instruction", instruction: instruction)
 
-    case Jido.Workflow.run(instruction) do
+    case Jido.Exec.run(instruction) do
       {:ok, result, directives} when is_list(directives) ->
-        dbug("Workflow returned result with directive list",
+        dbug("Exec returned result with directive list",
           result: result,
           directives: directives
         )
@@ -129,7 +129,7 @@ defmodule Jido.Runner.Simple do
         handle_directive_result(agent, result, directives, opts)
 
       {:ok, result, directive} ->
-        dbug("Workflow returned result with single directive",
+        dbug("Exec returned result with single directive",
           result: result,
           directive: directive
         )
@@ -137,20 +137,20 @@ defmodule Jido.Runner.Simple do
         handle_directive_result(agent, result, [directive], opts)
 
       {:ok, result} ->
-        dbug("Workflow returned result only", result: result)
+        dbug("Exec returned result only", result: result)
         {:ok, %{agent | result: result}, []}
 
       {:error, %Error{} = error} ->
-        dbug("Workflow returned error struct", error: error)
+        dbug("Exec returned error struct", error: error)
         {:error, error}
 
       {:error, reason} when is_binary(reason) ->
-        dbug("Workflow returned string error", reason: reason)
+        dbug("Exec returned string error", reason: reason)
         handle_directive_error(reason)
 
       {:error, reason} ->
-        dbug("Workflow returned other error", reason: reason)
-        {:error, Error.new(:execution_error, "Workflow execution failed", reason)}
+        dbug("Exec returned other error", reason: reason)
+        {:error, Error.new(:execution_error, "Exec execution failed", reason)}
     end
   end
 

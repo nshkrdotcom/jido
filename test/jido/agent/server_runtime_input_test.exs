@@ -70,7 +70,7 @@ defmodule JidoTest.Agent.Server.RuntimeInputTest do
       # Test each routed action type
       signals = [
         {"test_action", %{value: 1}, %{result: 3}},
-        {"delay_action", %{delay: 0}, %{result: "Async workflow completed"}},
+        {"delay_action", %{delay: 0}, %{result: "Async action completed"}},
         # Changed to match any error
         {"error_action", %{}, :error}
       ]

@@ -92,7 +92,7 @@ defmodule Jido.Instruction do
 
   ## Common Patterns
 
-  ### 1. Workflow Definition
+  ### 1. Exec Definition
   ```elixir
   instructions = [
     MyApp.Actions.ValidateInput,

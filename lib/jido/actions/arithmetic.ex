@@ -3,7 +3,7 @@ defmodule Jido.Actions.Arithmetic do
   Provides basic arithmetic operations as actions. The operations defined here are obviously trivial.
   This module is intended to be used as a reference for how to write your own actions.
 
-  This module defines a set of arithmetic actions that can be used in workflows:
+  This module defines a set of arithmetic actions that can be used in actions:
   - Add: Adds two numbers together
   - Subtract: Subtracts one number from another
   - Multiply: Multiplies two numbers

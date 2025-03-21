@@ -73,7 +73,7 @@ defmodule JidoTest.AgentRunTest do
       {:error, error} = ErrorHandlingAgent.run(planned)
 
       assert error.type == :execution_error
-      assert error.message == "Workflow failed"
+      assert error.message == "Exec failed"
     end
 
     test "tracks callbacks in correct order" do
@@ -96,7 +96,7 @@ defmodule JidoTest.AgentRunTest do
 
       # Error result should be stored
       assert error.type == :execution_error
-      assert error.message == "Workflow failed"
+      assert error.message == "Exec failed"
     end
 
     test "attempts recovery on error" do
@@ -110,7 +110,7 @@ defmodule JidoTest.AgentRunTest do
       assert recovered_agent.state.error_count == 1
       # Last error should be stored
       assert recovered_agent.state.last_error.type == :execution_error
-      assert recovered_agent.state.last_error.message =~ "Workflow failed"
+      assert recovered_agent.state.last_error.message =~ "Exec failed"
     end
 
     test "prevents calling run with wrong agent module" do

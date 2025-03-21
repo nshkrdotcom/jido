@@ -1,56 +1,32 @@
-defmodule Jido.Actions.Workflow do
-  alias Jido.Action
+defmodule Jido.ExecAction do
+  alias Jido.Error
 
-  defmodule Example do
-    @moduledoc false
-    use Action,
-      name: "example",
-      description: "Example action",
-      schema: []
+  require OK
 
-    def run(params, ctx) do
-      sequence = [
-        %Instruction{
-          action: ExampleStepOne,
-          params: %{}
-        },
-        %Instruction{
-          action: ExampleStepTwo,
-          params: %{}
-        },
-        %Instruction{
-          action: ExampleStepThree,
-          params: %{}
-        }
-      ]
+  @action_schema NimbleOptions.new!(
+                     steps: [
+                       type: {:list, {:tuple, [:atom, :atom]}},
+                       required: true,
+                       doc:
+                         "A list of tuples {step_name, action_module} defining the action steps."
+                     ],
+                     on_complete: [
+                       type: :atom,
+                       required: false,
+                       doc:
+                         "Optional callback or action to execute when all steps complete successfully."
+                     ],
+                     on_failure: [
+                       type: :atom,
+                       required: false,
+                       doc: "Optional callback or action to execute when any step fails."
+                     ]
+                   )
 
-      {:ok, %{}, sequence}
-    end
-  end
+  defmacro __using__(opts) do
+    escaped_schema = Macro.escape(@action_config_schema)
 
-  defmodule BranchStep do
-    @moduledoc false
-    use Action,
-      name: "branch_step",
-      description: "Branches the workflow based on a condition",
-      schema: [
-        condition: [type: :boolean, required: true, doc: "Condition to branch on"],
-        true_branch: [
-          type: {:list, :module},
-          required: true,
-          doc: "Actions to run if condition is true"
-        ],
-        false_branch: [
-          type: {:list, :module},
-          required: true,
-          doc: "Actions to run if condition is false"
-        ]
-      ]
-
-    def run(%{condition: condition} = params, ctx) do
-      if condition do
-        {:ok, params}
-      end
+    quote location: :keep do
     end
   end
 end

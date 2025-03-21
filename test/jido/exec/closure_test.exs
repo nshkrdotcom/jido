@@ -1,12 +1,12 @@
-defmodule JidoTest.Workflow.ClosureTest do
+defmodule JidoTest.Exec.ClosureTest do
   use JidoTest.Case, async: false
 
   import ExUnit.CaptureLog
   import Mock
 
   alias Jido.Error
-  alias Jido.Workflow
-  alias Jido.Workflow.Closure
+  alias Jido.Exec
+  alias Jido.Exec.Closure
   alias JidoTest.TestActions.BasicAction
   alias JidoTest.TestActions.ContextAction
   alias JidoTest.TestActions.ErrorAction
@@ -23,12 +23,12 @@ defmodule JidoTest.Workflow.ClosureTest do
     end
 
     test "closure preserves context and options" do
-      with_mock Workflow, run: fn _, _, _, _ -> {:ok, %{mocked: true}} end do
+      with_mock Exec, run: fn _, _, _, _ -> {:ok, %{mocked: true}} end do
         closure = Closure.closure(ContextAction, %{context_key: "value"}, timeout: 5000)
         closure.(%{input: "test"})
 
         assert_called(
-          Workflow.run(ContextAction, %{input: "test"}, %{context_key: "value"}, timeout: 5000)
+          Exec.run(ContextAction, %{input: "test"}, %{context_key: "value"}, timeout: 5000)
         )
       end
     end
@@ -63,20 +63,20 @@ defmodule JidoTest.Workflow.ClosureTest do
         assert is_pid(async_ref.pid)
         assert is_reference(async_ref.ref)
 
-        assert {:ok, %{value: 10}} = Workflow.await(async_ref)
+        assert {:ok, %{value: 10}} = Exec.await(async_ref)
       end)
     end
 
     test "async_closure preserves context and options" do
       capture_log(fn ->
-        with_mock Workflow, run_async: fn _, _, _, _ -> %{ref: make_ref(), pid: self()} end do
+        with_mock Exec, run_async: fn _, _, _, _ -> %{ref: make_ref(), pid: self()} end do
           async_closure =
             Closure.async_closure(ContextAction, %{async_context: true}, timeout: 10_000)
 
           async_closure.(%{input: "async_test"})
 
           assert_called(
-            Workflow.run_async(ContextAction, %{input: "async_test"}, %{async_context: true},
+            Exec.run_async(ContextAction, %{input: "async_test"}, %{async_context: true},
               timeout: 10_000
             )
           )
@@ -90,7 +90,7 @@ defmodule JidoTest.Workflow.ClosureTest do
         async_ref = async_closure.(%{error_type: :runtime})
 
         assert {:error, %Error{type: :execution_error, message: message}} =
-                 Workflow.await(async_ref)
+                 Exec.await(async_ref)
 
         assert message =~ "Runtime error"
       end)
@@ -118,7 +118,7 @@ defmodule JidoTest.Workflow.ClosureTest do
     test "async_closure with empty context and opts" do
       async_closure = Closure.async_closure(BasicAction)
       async_ref = async_closure.(%{})
-      assert {:error, %Error{type: :validation_error}} = Workflow.await(async_ref)
+      assert {:error, %Error{type: :validation_error}} = Exec.await(async_ref)
     end
   end
 end

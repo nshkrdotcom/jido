@@ -14,7 +14,7 @@ defmodule Jido.Error do
   > 1. Consistent error handling: By using `{:ok, result}` or `{:error, reason}` tuples,
   >    we ensure a uniform way of handling success and failure cases throughout the system.
   >
-  > 2. Composability: Monadic workflows can be easily chained together, allowing for
+  > 2. Composability: Monadic actions can be easily chained together, allowing for
   >    cleaner and more maintainable code.
   >
   > 3. Explicit error paths: The use of result tuples makes error cases explicit,
@@ -23,25 +23,25 @@ defmodule Jido.Error do
   > 4. No silent failures: Unlike exceptions, which can be silently caught and ignored,
   >    result tuples require explicit handling of both success and error cases.
   >
-  > 5. Better testability: Monadic workflows are easier to test, as both success and
+  > 5. Better testability: Monadic actions are easier to test, as both success and
   >    error paths can be explicitly verified.
   >
   > By using this approach instead of exceptions, we gain more control over the flow of our
-  > workflows and ensure that errors are handled consistently across the entire system.
+  > actions and ensure that errors are handled consistently across the entire system.
 
   ## Usage
 
-  Use this module to create specific error types when exceptions occur in your Jido workflows.
+  Use this module to create specific error types when exceptions occur in your Jido actions.
   This allows for consistent error handling and reporting throughout the system.
 
   Example:
 
-      defmodule MyWorkflow do
+      defmodule MyExec do
         alias Jido.Error
 
         def run(params) do
           case validate(params) do
-            :ok -> perform_workflow(params)
+            :ok -> perform_action(params)
             {:error, reason} -> Error.validation_error("Invalid parameters")
           end
         end
@@ -56,14 +56,14 @@ defmodule Jido.Error do
   - `:bad_request`: Indicates an invalid request from the client.
   - `:validation_error`: Used when input validation fails.
   - `:config_error`: Indicates a configuration issue.
-  - `:execution_error`: Used when an error occurs during workflow execution.
-  - `:workflow_error`: General workflow-related errors.
+  - `:execution_error`: Used when an error occurs during action execution.
+  - `:action_error`: General action-related errors.
   - `:internal_server_error`: Indicates an unexpected internal error.
-  - `:timeout`: Used when an workflow exceeds its time limit.
-  - `:invalid_async_ref`: Indicates an invalid asynchronous workflow reference.
+  - `:timeout`: Used when an action exceeds its time limit.
+  - `:invalid_async_ref`: Indicates an invalid asynchronous action reference.
   - `:compensation_error`: Indicates an error occurred during compensation.
-  - `:planning_error`: Used when an error occurs during workflow planning.
-  - `:routing_error`: Used when an error occurs during workflow routing.
+  - `:planning_error`: Used when an error occurs during action planning.
+  - `:routing_error`: Used when an error occurs during action routing.
   """
   @type error_type ::
           :invalid_action
@@ -73,7 +73,7 @@ defmodule Jido.Error do
           | :config_error
           | :execution_error
           | :planning_error
-          | :workflow_error
+          | :action_error
           | :internal_server_error
           | :timeout
           | :invalid_async_ref
@@ -120,10 +120,10 @@ defmodule Jido.Error do
         stacktrace: [...]
       }
 
-      iex> Jido.Error.new(:execution_error, "Workflow failed", %{step: "data_processing"})
+      iex> Jido.Error.new(:execution_error, "Exec failed", %{step: "data_processing"})
       %Jido.Error{
         type: :execution_error,
-        message: "Workflow failed",
+        message: "Exec failed",
         details: %{step: "data_processing"},
         stacktrace: [...]
       }
@@ -216,7 +216,7 @@ defmodule Jido.Error do
   @doc """
   Creates a new validation error.
 
-  Use this when input validation fails for an workflow.
+  Use this when input validation fails for an action.
 
   ## Parameters
   - `message`: A string describing the validation error.
@@ -241,7 +241,7 @@ defmodule Jido.Error do
   @doc """
   Creates a new config error.
 
-  Use this when there's an issue with the system or workflow configuration.
+  Use this when there's an issue with the system or action configuration.
 
   ## Parameters
   - `message`: A string describing the configuration error.
@@ -266,7 +266,7 @@ defmodule Jido.Error do
   @doc """
   Creates a new execution error.
 
-  Use this when an error occurs during the execution of an workflow.
+  Use this when an error occurs during the execution of an action.
 
   ## Parameters
   - `message`: A string describing the execution error.
@@ -291,7 +291,7 @@ defmodule Jido.Error do
   @doc """
   Creates a new planning error.
 
-  Use this when an error occurs during workflow planning.
+  Use this when an error occurs during action planning.
 
   ## Parameters
   - `message`: A string describing the planning error.
@@ -300,10 +300,10 @@ defmodule Jido.Error do
 
   ## Example
 
-      iex> Jido.Error.planning_error("Failed to plan workflow", %{step: "goal_analysis"})
+      iex> Jido.Error.planning_error("Failed to plan action", %{step: "goal_analysis"})
       %Jido.Error{
         type: :planning_error,
-        message: "Failed to plan workflow",
+        message: "Failed to plan action",
         details: %{step: "goal_analysis"},
         stacktrace: [...]
       }
@@ -314,28 +314,28 @@ defmodule Jido.Error do
   end
 
   @doc """
-  Creates a new workflow error.
+  Creates a new action error.
 
-  Use this for general workflow-related errors that don't fit into other categories.
+  Use this for general action-related errors that don't fit into other categories.
 
   ## Parameters
-  - `message`: A string describing the workflow error.
+  - `message`: A string describing the action error.
   - `details`: (optional) A map containing additional error details.
   - `stacktrace`: (optional) The stacktrace at the point of error.
 
   ## Example
 
-      iex> Jido.Error.workflow_error("Workflow 'ProcessOrder' failed", %{order_id: 12345})
+      iex> Jido.Error.action_error("Exec 'ProcessOrder' failed", %{order_id: 12345})
       %Jido.Error{
-        type: :workflow_error,
-        message: "Workflow 'ProcessOrder' failed",
+        type: :action_error,
+        message: "Exec 'ProcessOrder' failed",
         details: %{order_id: 12345},
         stacktrace: [...]
       }
   """
-  @spec workflow_error(String.t(), map() | nil, list() | nil) :: t()
-  def workflow_error(message, details \\ nil, stacktrace \\ nil) do
-    new(:workflow_error, message, details, stacktrace)
+  @spec action_error(String.t(), map() | nil, list() | nil) :: t()
+  def action_error(message, details \\ nil, stacktrace \\ nil) do
+    new(:action_error, message, details, stacktrace)
   end
 
   @doc """
@@ -366,7 +366,7 @@ defmodule Jido.Error do
   @doc """
   Creates a new timeout error.
 
-  Use this when an workflow exceeds its allocated time limit.
+  Use this when an action exceeds its allocated time limit.
 
   ## Parameters
   - `message`: A string describing the timeout error.
@@ -375,11 +375,11 @@ defmodule Jido.Error do
 
   ## Example
 
-      iex> Jido.Error.timeout("Workflow timed out after 30 seconds", %{workflow: "FetchUserData"})
+      iex> Jido.Error.timeout("Exec timed out after 30 seconds", %{action: "FetchUserData"})
       %Jido.Error{
         type: :timeout,
-        message: "Workflow timed out after 30 seconds",
-        details: %{workflow: "FetchUserData"},
+        message: "Exec timed out after 30 seconds",
+        details: %{action: "FetchUserData"},
         stacktrace: [...]
       }
   """
@@ -391,7 +391,7 @@ defmodule Jido.Error do
   @doc """
   Creates a new invalid async ref error.
 
-  Use this when an invalid reference to an asynchronous workflow is encountered.
+  Use this when an invalid reference to an asynchronous action is encountered.
 
   ## Parameters
   - `message`: A string describing the invalid async ref error.
@@ -400,10 +400,10 @@ defmodule Jido.Error do
 
   ## Example
 
-      iex> Jido.Error.invalid_async_ref("Invalid or expired async workflow reference")
+      iex> Jido.Error.invalid_async_ref("Invalid or expired async action reference")
       %Jido.Error{
         type: :invalid_async_ref,
-        message: "Invalid or expired async workflow reference",
+        message: "Invalid or expired async action reference",
         details: nil,
         stacktrace: [...]
       }
@@ -416,7 +416,7 @@ defmodule Jido.Error do
   @doc """
   Creates a new routing error.
 
-  Use this when an error occurs during workflow routing.
+  Use this when an error occurs during action routing.
 
   ## Parameters
   - `message`: A string describing the routing error.
@@ -425,11 +425,11 @@ defmodule Jido.Error do
 
   ## Example
 
-      iex> Jido.Error.routing_error("Invalid route configuration", %{route: "user_workflow"})
+      iex> Jido.Error.routing_error("Invalid route configuration", %{route: "user_action"})
       %Jido.Error{
         type: :routing_error,
         message: "Invalid route configuration",
-        details: %{route: "user_workflow"},
+        details: %{route: "user_action"},
         stacktrace: [...]
       }
   """

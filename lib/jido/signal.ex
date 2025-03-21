@@ -107,7 +107,7 @@ defmodule Jido.Signal do
   ```elixir
   Signal.new(%{
     type: "task.assigned",
-    source: "/workflow",
+    source: "/action",
     jido_instructions: [
       ValidateTask,
       {AssignTask, %{worker: "agent_1"}},

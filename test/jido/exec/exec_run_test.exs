@@ -1,4 +1,4 @@
-defmodule JidoTest.WorkflowRunTest do
+defmodule JidoTest.ExecRunTest do
   use JidoTest.Case, async: false
   use Mimic
 
@@ -6,14 +6,14 @@ defmodule JidoTest.WorkflowRunTest do
   import ExUnit.CaptureIO
 
   alias Jido.Error
-  alias Jido.Workflow
+  alias Jido.Exec
   alias JidoTest.TestActions.BasicAction
   alias JidoTest.TestActions.DelayAction
   alias JidoTest.TestActions.ErrorAction
   alias JidoTest.TestActions.IOAction
   alias JidoTest.TestActions.RetryAction
 
-  @attempts_table :workflow_run_test_attempts
+  @attempts_table :action_run_test_attempts
 
   @moduletag :capture_log
 
@@ -43,7 +43,7 @@ defmodule JidoTest.WorkflowRunTest do
 
       log =
         capture_log(fn ->
-          assert {:ok, %{value: 5}} = Workflow.run(BasicAction, %{value: 5})
+          assert {:ok, %{value: 5}} = Exec.run(BasicAction, %{value: 5})
         end)
 
       assert log =~ "Executing JidoTest.TestActions.BasicAction with params: %{value: 5}"
@@ -57,7 +57,7 @@ defmodule JidoTest.WorkflowRunTest do
       log =
         capture_log(fn ->
           assert {:ok, %{}, %Jido.Agent.Directive.Enqueue{}} =
-                   Workflow.run(Jido.Actions.Directives.EnqueueAction, %{
+                   Exec.run(Jido.Actions.Directives.EnqueueAction, %{
                      action: BasicAction,
                      params: %{value: 5}
                    })
@@ -76,7 +76,7 @@ defmodule JidoTest.WorkflowRunTest do
       log =
         capture_log(fn ->
           assert {:error, %Error{}, %Jido.Agent.Directive.Enqueue{}} =
-                   Workflow.run(JidoTest.TestActions.ErrorDirective, %{
+                   Exec.run(JidoTest.TestActions.ErrorDirective, %{
                      action: BasicAction,
                      params: %{value: 5}
                    })
@@ -95,7 +95,7 @@ defmodule JidoTest.WorkflowRunTest do
 
       log =
         capture_log(fn ->
-          assert {:error, %Error{}} = Workflow.run(ErrorAction, %{}, %{}, timeout: 50)
+          assert {:error, %Error{}} = Exec.run(ErrorAction, %{}, %{}, timeout: 50)
         end)
 
       assert log =~ "Executing JidoTest.TestActions.ErrorAction with params: %{}"
@@ -109,7 +109,7 @@ defmodule JidoTest.WorkflowRunTest do
 
       capture_log(fn ->
         result =
-          Workflow.run(
+          Exec.run(
             RetryAction,
             %{max_attempts: 3, failure_type: :error},
             %{attempts_table: attempts_table},
@@ -130,7 +130,7 @@ defmodule JidoTest.WorkflowRunTest do
 
       capture_log(fn ->
         result =
-          Workflow.run(
+          Exec.run(
             RetryAction,
             %{max_attempts: 5, failure_type: :error},
             %{attempts_table: attempts_table},
@@ -146,13 +146,13 @@ defmodule JidoTest.WorkflowRunTest do
     end
 
     test "handles invalid params" do
-      assert {:error, %Error{}} = Workflow.run(BasicAction, %{invalid: "params"})
+      assert {:error, %Error{}} = Exec.run(BasicAction, %{invalid: "params"})
     end
 
     test "handles timeout" do
       capture_log(fn ->
         assert {:error, %Error{message: message}} =
-                 Workflow.run(DelayAction, %{delay: 1000}, %{}, timeout: 50)
+                 Exec.run(DelayAction, %{delay: 1000}, %{}, timeout: 50)
 
         assert message =~ "timed out after 50ms. This could be due"
       end)
@@ -162,7 +162,7 @@ defmodule JidoTest.WorkflowRunTest do
       io =
         capture_io(fn ->
           assert {:ok, %{input: "test", operation: :inspect}} =
-                   Workflow.run(IOAction, %{input: "test", operation: :inspect}, %{},
+                   Exec.run(IOAction, %{input: "test", operation: :inspect}, %{},
                      timeout: 5000
                    )
         end)
@@ -178,40 +178,40 @@ defmodule JidoTest.WorkflowRunTest do
   describe "normalize_params/1" do
     test "normalizes a map" do
       params = %{key: "value"}
-      assert {:ok, ^params} = Workflow.normalize_params(params)
+      assert {:ok, ^params} = Exec.normalize_params(params)
     end
 
     test "normalizes a keyword list" do
       params = [key: "value"]
-      assert {:ok, %{key: "value"}} = Workflow.normalize_params(params)
+      assert {:ok, %{key: "value"}} = Exec.normalize_params(params)
     end
 
     test "normalizes {:ok, map}" do
       params = {:ok, %{key: "value"}}
-      assert {:ok, %{key: "value"}} = Workflow.normalize_params(params)
+      assert {:ok, %{key: "value"}} = Exec.normalize_params(params)
     end
 
     test "normalizes {:ok, keyword list}" do
       params = {:ok, [key: "value"]}
-      assert {:ok, %{key: "value"}} = Workflow.normalize_params(params)
+      assert {:ok, %{key: "value"}} = Exec.normalize_params(params)
     end
 
     test "handles {:error, reason}" do
       params = {:error, "some error"}
 
       assert {:error, %Error{type: :validation_error, message: "some error"}} =
-               Workflow.normalize_params(params)
+               Exec.normalize_params(params)
     end
 
     test "passes through %Error{} with different types" do
       errors = [
         %Error{type: :validation_error, message: "validation failed"},
         %Error{type: :execution_error, message: "execution failed"},
-        %Error{type: :timeout_error, message: "workflow timed out"}
+        %Error{type: :timeout_error, message: "action timed out"}
       ]
 
       for error <- errors do
-        assert {:error, ^error} = Workflow.normalize_params(error)
+        assert {:error, ^error} = Exec.normalize_params(error)
       end
     end
 
@@ -219,26 +219,26 @@ defmodule JidoTest.WorkflowRunTest do
       params = "invalid"
 
       assert {:error, %Error{type: :validation_error, message: "Invalid params type: " <> _}} =
-               Workflow.normalize_params(params)
+               Exec.normalize_params(params)
     end
   end
 
   describe "normalize_context/1" do
     test "normalizes a map" do
       context = %{key: "value"}
-      assert {:ok, ^context} = Workflow.normalize_context(context)
+      assert {:ok, ^context} = Exec.normalize_context(context)
     end
 
     test "normalizes a keyword list" do
       context = [key: "value"]
-      assert {:ok, %{key: "value"}} = Workflow.normalize_context(context)
+      assert {:ok, %{key: "value"}} = Exec.normalize_context(context)
     end
 
     test "returns error for invalid context" do
       context = "invalid"
 
       assert {:error, %Error{type: :validation_error, message: "Invalid context type: " <> _}} =
-               Workflow.normalize_context(context)
+               Exec.normalize_context(context)
     end
   end
 
@@ -249,7 +249,7 @@ defmodule JidoTest.WorkflowRunTest do
     end
 
     test "returns :ok for valid action" do
-      assert :ok = Workflow.validate_action(BasicAction)
+      assert :ok = Exec.validate_action(BasicAction)
     end
 
     test "returns error for action without run/2" do
@@ -257,21 +257,21 @@ defmodule JidoTest.WorkflowRunTest do
               %Error{
                 type: :invalid_action,
                 message:
-                  "Module JidoTest.WorkflowRunTest.NotAAction is not a valid action: missing run/2 function"
-              }} = Workflow.validate_action(NotAAction)
+                  "Module JidoTest.ExecRunTest.NotAAction is not a valid action: missing run/2 function"
+              }} = Exec.validate_action(NotAAction)
     end
   end
 
   describe "validate_params/2" do
     test "returns validated params for valid params" do
-      assert {:ok, %{value: 5}} = Workflow.validate_params(BasicAction, %{value: 5})
+      assert {:ok, %{value: 5}} = Exec.validate_params(BasicAction, %{value: 5})
     end
 
     test "returns error for invalid params" do
       # BasicAction has validate_params/1 defined via use Action in test_actions.ex
-      # The error will be an invalid_action error because we're using function_exported? in Workflow
+      # The error will be an invalid_action error because we're using function_exported? in Exec
       # But this test is just verifying that invalid params return an error
-      {:error, %Error{}} = Workflow.validate_params(BasicAction, %{invalid: "params"})
+      {:error, %Error{}} = Exec.validate_params(BasicAction, %{invalid: "params"})
     end
   end
 end

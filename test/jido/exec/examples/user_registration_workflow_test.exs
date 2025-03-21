@@ -1,8 +1,8 @@
-defmodule JidoTest.Workflow.Examples.UserRegistrationWorkflowTest do
+defmodule JidoTest.Exec.Examples.UserRegistrationExecTest do
   use JidoTest.Case, async: true
 
-  alias Jido.Workflow
-  alias Jido.Workflow.Chain
+  alias Jido.Exec
+  alias Jido.Exec.Chain
   alias JidoTest.TestActions.{FormatUser, EnrichUserData, NotifyUser, FormatEnrichNotifyUserChain}
 
   @valid_user_data %{
@@ -53,22 +53,22 @@ defmodule JidoTest.Workflow.Examples.UserRegistrationWorkflowTest do
     end
   end
 
-  describe "using Workflow.run" do
-    test "FormatUser via Workflow.run" do
-      {:ok, result} = Workflow.run(FormatUser, @valid_user_data)
+  describe "using Exec.run" do
+    test "FormatUser via Exec.run" do
+      {:ok, result} = Exec.run(FormatUser, @valid_user_data)
 
       assert result.formatted_name == "John Doe"
       assert result.email == "john@example.com"
       assert result.is_adult == true
     end
 
-    test "EnrichUserData via Workflow.run" do
+    test "EnrichUserData via Exec.run" do
       input = %{
         formatted_name: "John Doe",
         email: "john@example.com"
       }
 
-      {:ok, result} = Workflow.run(EnrichUserData, input)
+      {:ok, result} = Exec.run(EnrichUserData, input)
 
       hash = :crypto.hash(:md5, input.email) |> Base.encode16(case: :lower)
 
@@ -76,25 +76,25 @@ defmodule JidoTest.Workflow.Examples.UserRegistrationWorkflowTest do
       assert result.avatar_url =~ "https://www.gravatar.com/avatar/#{hash}"
     end
 
-    test "NotifyUser via Workflow.run" do
+    test "NotifyUser via Exec.run" do
       input = %{
         email: "john@example.com",
         username: "john.doe"
       }
 
-      {:ok, result} = Workflow.run(NotifyUser, input)
+      {:ok, result} = Exec.run(NotifyUser, input)
 
       assert result.notification_sent == true
       assert result.notification_type == "welcome_email"
     end
 
-    test "FormatUser via Workflow.run_async" do
-      async_ref = Workflow.run_async(FormatUser, @valid_user_data)
+    test "FormatUser via Exec.run_async" do
+      async_ref = Exec.run_async(FormatUser, @valid_user_data)
       assert is_map(async_ref)
       assert is_pid(async_ref.pid)
       assert is_reference(async_ref.ref)
 
-      {:ok, result} = Workflow.await(async_ref)
+      {:ok, result} = Exec.await(async_ref)
 
       assert result.formatted_name == "John Doe"
       assert result.email == "john@example.com"
@@ -144,7 +144,7 @@ defmodule JidoTest.Workflow.Examples.UserRegistrationWorkflowTest do
       assert result.notification_sent == true
     end
 
-    test "chains with override workflow parameters" do
+    test "chains with override action parameters" do
       {:ok, result} =
         Chain.chain(
           [
@@ -160,7 +160,7 @@ defmodule JidoTest.Workflow.Examples.UserRegistrationWorkflowTest do
       assert result.username == "jane.doe"
     end
 
-    test "chains with custom workflow parameters" do
+    test "chains with custom action parameters" do
       {:ok, result} =
         Chain.chain(
           [
@@ -190,7 +190,7 @@ defmodule JidoTest.Workflow.Examples.UserRegistrationWorkflowTest do
 
     test "chain can be packaged as an action" do
       {:ok, result} =
-        Workflow.run(FormatEnrichNotifyUserChain, %{
+        Exec.run(FormatEnrichNotifyUserChain, %{
           name: "George Washington",
           email: "george@example.com",
           age: 67

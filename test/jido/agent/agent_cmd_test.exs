@@ -131,7 +131,7 @@ defmodule JidoTest.AgentCmdTest do
         )
 
       assert error.type == :execution_error
-      assert error.message == "Workflow failed"
+      assert error.message == "Exec failed"
     end
 
     test "preserves state on action error" do
@@ -147,7 +147,7 @@ defmodule JidoTest.AgentCmdTest do
         )
 
       assert error.type == :execution_error
-      assert error.message == "Workflow failed"
+      assert error.message == "Exec failed"
       # State should be preserved
       assert agent.state.battery_level == 100
     end
@@ -168,7 +168,7 @@ defmodule JidoTest.AgentCmdTest do
       assert recovered.state.error_count == 1
       # Last error should be stored
       assert recovered.state.last_error.type == :execution_error
-      assert recovered.state.last_error.message =~ "Workflow failed"
+      assert recovered.state.last_error.message =~ "Exec failed"
     end
   end
 

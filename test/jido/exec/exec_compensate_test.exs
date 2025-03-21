@@ -1,9 +1,9 @@
-defmodule JidoTest.WorkflowCompensateTest do
+defmodule JidoTest.ExecCompensateTest do
   use JidoTest.Case, async: true
   use Mimic
 
   alias Jido.Error
-  alias Jido.Workflow
+  alias Jido.Exec
   alias JidoTest.TestActions.CompensateAction
 
   @moduletag :capture_log
@@ -20,7 +20,7 @@ defmodule JidoTest.WorkflowCompensateTest do
       }
 
       assert {:error, %Error{} = error} =
-               Workflow.run(CompensateAction, params, %{}, timeout: 50, backoff: 25)
+               Exec.run(CompensateAction, params, %{}, timeout: 50, backoff: 25)
 
       assert error.type == :compensation_error
       assert error.message =~ "Compensation completed for: Intentional failure"
@@ -33,7 +33,7 @@ defmodule JidoTest.WorkflowCompensateTest do
       params = %{should_fail: true, compensation_should_fail: true}
 
       assert {:error, %Error{} = error} =
-               Workflow.run(CompensateAction, params, %{}, timeout: 100, backoff: 25)
+               Exec.run(CompensateAction, params, %{}, timeout: 100, backoff: 25)
 
       assert error.type == :compensation_error
       assert error.message =~ "Compensation failed for: Intentional failure"
@@ -47,7 +47,7 @@ defmodule JidoTest.WorkflowCompensateTest do
       context = %{test_id: "123"}
 
       assert {:error, %Error{} = error} =
-               Workflow.run(CompensateAction, params, context, timeout: 100, backoff: 25)
+               Exec.run(CompensateAction, params, context, timeout: 100, backoff: 25)
 
       assert error.details.compensation_context.test_id == "123"
     end
@@ -56,7 +56,7 @@ defmodule JidoTest.WorkflowCompensateTest do
       params = %{should_fail: true, test_value: "preserved"}
 
       assert {:error, %Error{} = error} =
-               Workflow.run(CompensateAction, params, %{}, timeout: 100, backoff: 25)
+               Exec.run(CompensateAction, params, %{}, timeout: 100, backoff: 25)
 
       assert error.details.test_value == "preserved"
     end
@@ -65,7 +65,7 @@ defmodule JidoTest.WorkflowCompensateTest do
       params = %{should_fail: true, delay: 25}
 
       assert {:error, %Error{} = error} =
-               Workflow.run(CompensateAction, params, %{}, timeout: 100, backoff: 25)
+               Exec.run(CompensateAction, params, %{}, timeout: 100, backoff: 25)
 
       assert error.details.compensated == true
     end
@@ -77,7 +77,7 @@ defmodule JidoTest.WorkflowCompensateTest do
       params = %{should_fail: true, compensation_should_fail: false, delay: 100}
 
       assert {:error, %Error{} = error} =
-               Workflow.run(CompensateAction, params, %{}, timeout: 50, backoff: 25)
+               Exec.run(CompensateAction, params, %{}, timeout: 50, backoff: 25)
 
       assert error.type == :compensation_error
       assert error.message =~ "Compensation failed for: Intentional failure"
@@ -89,7 +89,7 @@ defmodule JidoTest.WorkflowCompensateTest do
       params = %{should_fail: true, delay: 10}
 
       assert {:error, %Error{} = error} =
-               Workflow.run(CompensateAction, params, %{}, timeout: 100, backoff: 25)
+               Exec.run(CompensateAction, params, %{}, timeout: 100, backoff: 25)
 
       assert error.type == :compensation_error
       assert error.details.compensated == true
@@ -103,7 +103,7 @@ defmodule JidoTest.WorkflowCompensateTest do
       expect(:telemetry, :execute, fn _, _, _ -> :ok end)
 
       assert {:error, %Error{} = error} =
-               Workflow.run(CompensateAction, params, %{},
+               Exec.run(CompensateAction, params, %{},
                  telemetry: :full,
                  timeout: 100,
                  backoff: 25
@@ -120,7 +120,7 @@ defmodule JidoTest.WorkflowCompensateTest do
       params = %{should_fail: true}
 
       assert {:error, %Error{} = error} =
-               Workflow.run(CompensateAction, params, %{},
+               Exec.run(CompensateAction, params, %{},
                  max_retries: 2,
                  backoff: 10,
                  timeout: 100
@@ -135,7 +135,7 @@ defmodule JidoTest.WorkflowCompensateTest do
       params = %{should_fail: false}
 
       assert {:ok, result} =
-               Workflow.run(CompensateAction, params, %{},
+               Exec.run(CompensateAction, params, %{},
                  max_retries: 2,
                  backoff: 10,
                  timeout: 100

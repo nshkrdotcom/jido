@@ -1,10 +1,10 @@
-defmodule JidoTest.Workflow.ChainTest do
+defmodule JidoTest.Exec.ChainTest do
   use JidoTest.Case, async: false
 
   import ExUnit.CaptureLog
 
   alias Jido.Error
-  alias Jido.Workflow.Chain
+  alias Jido.Exec.Chain
   alias JidoTest.TestActions.Add
   alias JidoTest.TestActions.ContextAwareMultiply
   alias JidoTest.TestActions.ErrorAction
@@ -14,14 +14,14 @@ defmodule JidoTest.Workflow.ChainTest do
   alias JidoTest.TestActions.WriteFile
 
   describe "chain/3" do
-    test "executes a simple chain of workflows successfully" do
+    test "executes a simple chain of actions successfully" do
       capture_log(fn ->
         result = Chain.chain([Add, Multiply], %{value: 5, amount: 2})
         assert {:ok, %{value: 14, amount: 2}} = result
       end)
     end
 
-    test "supports new syntax with workflow options" do
+    test "supports new syntax with action options" do
       capture_log(fn ->
         result =
           Chain.chain(
@@ -37,43 +37,43 @@ defmodule JidoTest.Workflow.ChainTest do
       end)
     end
 
-    test "executes a chain with mixed workflow formats" do
+    test "executes a chain with mixed action formats" do
       capture_log(fn ->
         result = Chain.chain([Add, {Multiply, [amount: 3]}, Subtract], %{value: 5})
         assert {:ok, %{value: 15, amount: 3}} = result
       end)
     end
 
-    test "executes a chain with map workflow parameters" do
+    test "executes a chain with map action parameters" do
       capture_log(fn ->
         result = Chain.chain([Add, {Multiply, %{amount: 3}}, Subtract], %{value: 5})
         assert {:ok, %{value: 15, amount: 3}} = result
       end)
     end
 
-    test "handles string keys in workflow parameters" do
+    test "handles string keys in action parameters" do
       capture_log(fn ->
         result = Chain.chain([Add, {Multiply, %{"amount" => 3}}, Subtract], %{value: 5})
         assert {:error, %Error{type: :bad_request}} = result
       end)
     end
 
-    test "handles empty map workflow parameters" do
+    test "handles empty map action parameters" do
       capture_log(fn ->
         result = Chain.chain([Add, {Multiply, %{}}, Subtract], %{value: 5, amount: 2})
         assert {:ok, %{value: 12, amount: 2}} = result
       end)
     end
 
-    test "handles nil workflow parameters" do
+    test "handles nil action parameters" do
       capture_log(fn ->
         result = Chain.chain([Add, {Multiply, nil}, Subtract], %{value: 5})
 
         assert {:error,
                 %Error{
                   type: :bad_request,
-                  message: "Invalid chain workflow",
-                  details: %{workflow: {Multiply, nil}}
+                  message: "Invalid chain action",
+                  details: %{action: {Multiply, nil}}
                 }} = result
       end)
     end
@@ -94,14 +94,14 @@ defmodule JidoTest.Workflow.ChainTest do
       end)
     end
 
-    test "handles invalid workflows in the chain" do
+    test "handles invalid actions in the chain" do
       capture_log(fn ->
-        result = Chain.chain([Add, :invalid_workflow, Multiply], %{value: 5})
+        result = Chain.chain([Add, :invalid_action, Multiply], %{value: 5})
 
         assert {:error,
                 %Error{
                   type: :invalid_action,
-                  message: "Failed to compile module :invalid_workflow: :nofile"
+                  message: "Failed to compile module :invalid_action: :nofile"
                 }} =
                  result
       end)
@@ -115,7 +115,7 @@ defmodule JidoTest.Workflow.ChainTest do
       end)
     end
 
-    test "passes context to workflows" do
+    test "passes context to actions" do
       capture_log(fn ->
         context = %{multiplier: 3}
         result = Chain.chain([Add, ContextAwareMultiply], %{value: 5}, context: context)
@@ -123,28 +123,28 @@ defmodule JidoTest.Workflow.ChainTest do
       end)
     end
 
-    test "logs debug messages for each workflow" do
+    test "logs debug messages for each action" do
       log =
         capture_log(fn ->
           Chain.chain([Add, Multiply], %{value: 5}, timeout: 10)
         end)
 
-      # assert log =~ "Executing workflow in chain"
+      # assert log =~ "Executing action in chain"
       assert log =~ "Executing JidoTest.TestActions.Add with params"
       assert log =~ "Executing JidoTest.TestActions.Multiply with params"
     end
 
-    test "logs warnings for failed workflows" do
+    test "logs warnings for failed actions" do
       log =
         capture_log(fn ->
           Chain.chain([Add, ErrorAction], %{value: 5, error_type: :runtime, timeout: 10})
         end)
 
-      assert log =~ "Workflow in chain failed"
+      assert log =~ "Exec in chain failed"
       assert log =~ "Action JidoTest.TestActions.ErrorAction failed"
     end
 
-    test "executes a complex chain of workflows" do
+    test "executes a complex chain of actions" do
       capture_log(fn ->
         result =
           Chain.chain(

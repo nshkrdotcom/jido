@@ -1,11 +1,11 @@
 defmodule Jido.Agent do
   @moduledoc """
-  Defines an Agent within the Jido system - a compile-time defined entity for managing complex workflows
+  Defines an Agent within the Jido system - a compile-time defined entity for managing complex s
   through a sequence of Actions.
 
   ## Overview
 
-  An Agent represents a stateful workflow executor that can plan and execute a series of Actions in a
+  An Agent represents a stateful  executor that can plan and execute a series of Actions in a
   type-safe and composable way. Agents provide a consistent interface for orchestrating complex operations
   while maintaining state validation, error handling, and extensibility through lifecycle hooks.
 
@@ -40,7 +40,7 @@ defmodule Jido.Agent do
       defmodule MyAgent do
         use Jido.Agent,
           name: "my_agent",
-          description: "Performs a complex workflow",
+          description: "Performs a complex ",
           category: "processing",
           tags: ["example", "demo"],
           vsn: "1.0.0",

@@ -1,8 +1,8 @@
 defmodule Jido.Action.Tool do
   @moduledoc """
-  Provides functionality to convert Jido Workflows into tool representations.
+  Provides functionality to convert Jido Execs into tool representations.
 
-  This module allows Jido Workflows to be easily integrated with AI systems
+  This module allows Jido Execs to be easily integrated with AI systems
   like LangChain or Instructor by converting them into a standardized tool format.
   """
 
@@ -16,21 +16,21 @@ defmodule Jido.Action.Tool do
         }
 
   @doc """
-  Converts a Jido Workflow into a tool representation.
+  Converts a Jido Exec into a tool representation.
 
   ## Arguments
 
-    * `workflow` - The module implementing the Jido.Action behavior.
+    * `action` - The module implementing the Jido.Action behavior.
 
   ## Returns
 
-    A map representing the workflow as a tool, compatible with systems like LangChain.
+    A map representing the action as a tool, compatible with systems like LangChain.
 
   ## Examples
 
-      iex> tool = Jido.Action.Tool.to_tool(MyWorkflow)
+      iex> tool = Jido.Action.Tool.to_tool(MyExec)
       %{
-        name: "my_workflow",
+        name: "my_action",
         description: "Performs a specific task",
         function: #Function<...>,
         parameters_schema: %{...}
@@ -41,23 +41,23 @@ defmodule Jido.Action.Tool do
     %{
       name: action.name(),
       description: action.description(),
-      function: &execute_workflow(action, &1, &2),
+      function: &execute_action(action, &1, &2),
       parameters_schema: build_parameters_schema(action.schema())
     }
   end
 
   @doc """
-  Executes an workflow and formats the result for tool output.
+  Executes an action and formats the result for tool output.
 
   This function is typically used as the function value in the tool representation.
   """
-  @spec execute_workflow(module(), map(), map()) :: {:ok, String.t()} | {:error, String.t()}
-  def execute_workflow(action, params, context) do
+  @spec execute_action(module(), map(), map()) :: {:ok, String.t()} | {:error, String.t()}
+  def execute_action(action, params, context) do
     # Convert string keys to atom keys and handle type conversion based on schema
     converted_params = convert_params_using_schema(params, action.schema())
     safe_context = context || %{}
 
-    case Jido.Workflow.run(action, converted_params, safe_context) do
+    case Jido.Exec.run(action, converted_params, safe_context) do
       {:ok, result} ->
         {:ok, Jason.encode!(result)}
 
@@ -104,11 +104,11 @@ defmodule Jido.Action.Tool do
   end
 
   @doc """
-  Builds a parameters schema for the tool based on the workflow's schema.
+  Builds a parameters schema for the tool based on the action's schema.
 
   ## Arguments
 
-    * `schema` - The NimbleOptions schema from the workflow.
+    * `schema` - The NimbleOptions schema from the action.
 
   ## Returns
 

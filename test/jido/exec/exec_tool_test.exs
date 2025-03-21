@@ -6,7 +6,7 @@ defmodule Jido.Action.ToolTest do
   @moduletag :capture_log
 
   describe "to_tool/1" do
-    test "converts a Jido Workflow to a tool representation" do
+    test "converts a Jido Exec to a tool representation" do
       tool = Tool.to_tool(TestActions.BasicAction)
 
       assert tool.name == "basic_action"
@@ -31,12 +31,12 @@ defmodule Jido.Action.ToolTest do
     end
   end
 
-  describe "execute_workflow/3" do
-    # test "executes the workflow and returns JSON-encoded result" do
+  describe "execute_action/3" do
+    # test "executes the action and returns JSON-encoded result" do
     #   params = %{"value" => 42}
     #   context = %{}
 
-    #   assert {:ok, result} = Tool.execute_workflow(TestActions.BasicAction, params, context)
+    #   assert {:ok, result} = Tool.execute_action(TestActions.BasicAction, params, context)
     #   assert Jason.decode!(result) == %{"value" => 42}
     # end
 
@@ -44,7 +44,7 @@ defmodule Jido.Action.ToolTest do
       params = %{"invalid" => "params"}
       context = %{}
 
-      assert {:error, error} = Tool.execute_workflow(TestActions.BasicAction, params, context)
+      assert {:error, error} = Tool.execute_action(TestActions.BasicAction, params, context)
       assert {:ok, %{"error" => _}} = Jason.decode(error)
     end
   end
@@ -111,7 +111,7 @@ defmodule Jido.Action.ToolTest do
   end
 
   describe "build_parameters_schema/1" do
-    test "builds correct schema from workflow schema" do
+    test "builds correct schema from action schema" do
       schema = TestActions.SchemaAction.schema()
       result = Tool.build_parameters_schema(schema)
 

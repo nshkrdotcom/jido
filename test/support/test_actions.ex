@@ -176,7 +176,7 @@ defmodule JidoTest.TestActions do
       throw("Action threw an error")
     end
 
-    def run(_params, _context), do: {:error, "Workflow failed"}
+    def run(_params, _context), do: {:error, "Exec failed"}
   end
 
   defmodule NormalExitAction do
@@ -233,7 +233,7 @@ defmodule JidoTest.TestActions do
         spawn(fn -> Process.sleep(10_000) end)
       end
 
-      {:ok, %{result: "Multi-process workflow completed"}}
+      {:ok, %{result: "Multi-process action completed"}}
     end
   end
 
@@ -248,7 +248,7 @@ defmodule JidoTest.TestActions do
 
       tasks =
         for _ <- 1..count do
-          Task.Supervisor.async_nolink(Jido.Workflow.TaskSupervisor, fn ->
+          Task.Supervisor.async_nolink(Jido.Exec.TaskSupervisor, fn ->
             # Link to task group for cleanup
             if link_to_group? do
               Process.group_leader(self(), task_group)
@@ -285,7 +285,7 @@ defmodule JidoTest.TestActions do
           end)
         end
 
-      {:ok, %{result: "Multi-process workflow completed"}}
+      {:ok, %{result: "Multi-process action completed"}}
     end
 
     def run(_, context), do: run(%{count: 1}, context)
@@ -420,14 +420,14 @@ defmodule JidoTest.TestActions do
     @moduledoc false
     use Action,
       name: "delay_action",
-      description: "Simulates a delay in workflow",
+      description: "Simulates a delay in action",
       schema: [
         delay: [type: :integer, default: 1000, doc: "Delay in milliseconds"]
       ]
 
     def run(%{delay: delay}, _context) do
       Process.sleep(delay)
-      {:ok, %{result: "Async workflow completed"}}
+      {:ok, %{result: "Async action completed"}}
     end
   end
 
@@ -435,7 +435,7 @@ defmodule JidoTest.TestActions do
     @moduledoc false
     use Action,
       name: "context_aware_action",
-      description: "Uses context in its workflow",
+      description: "Uses context in its action",
       schema: [
         input: [type: :string, required: true]
       ]
@@ -469,11 +469,11 @@ defmodule JidoTest.TestActions do
 
   defmodule RetryAction do
     @moduledoc """
-    Simulates an workflow with configurable retry behavior.
+    Simulates an action with configurable retry behavior.
     """
     use Action,
       name: "retry_action",
-      description: "Simulates an workflow with configurable retry behavior",
+      description: "Simulates an action with configurable retry behavior",
       schema: [
         max_attempts: [type: :integer, default: 3],
         failure_type: [type: {:in, [:error, :exception]}, default: :error]
@@ -510,9 +510,9 @@ defmodule JidoTest.TestActions do
         if :persistent_term.get({__MODULE__, :cancel}, false), do: throw(:cancelled)
       end)
 
-      success("Workflow completed")
+      success("Exec completed")
     catch
-      :throw, :cancelled -> failure("Workflow cancelled")
+      :throw, :cancelled -> failure("Exec cancelled")
     after
       :persistent_term.erase({__MODULE__, :cancel})
     end
@@ -524,17 +524,17 @@ defmodule JidoTest.TestActions do
       name: "rate_limited_action",
       description: "Demonstrates rate limiting functionality",
       schema: [
-        workflow: [type: :string, required: true]
+        action: [type: :string, required: true]
       ]
 
     @max_requests 5
     # 1 minute in milliseconds
     @time_window 60_000
 
-    def run(%{workflow: workflow}, _context) do
+    def run(%{action: action}, _context) do
       case check_rate_limit() do
         :ok ->
-          {:ok, %{result: "Workflow '#{workflow}' executed successfully"}}
+          {:ok, %{result: "Exec '#{action}' executed successfully"}}
 
         :error ->
           {:error, "Rate limit exceeded. Please try again later."}
@@ -852,7 +852,7 @@ defmodule JidoTest.TestActions do
       ]
 
     def run(params, _context) do
-      Jido.Workflow.Chain.chain(
+      Jido.Exec.Chain.chain(
         [
           JidoTest.TestActions.FormatUser,
           JidoTest.TestActions.EnrichUserData,

@@ -4,8 +4,8 @@ defmodule Jido.Application do
 
   def start(_type, _args) do
     children = [
-      # Workflow Async Actions Task Supervisor
-      {Task.Supervisor, name: Jido.Workflow.TaskSupervisor},
+      # Exec Async Actions Task Supervisor
+      {Task.Supervisor, name: Jido.Exec.TaskSupervisor},
 
       # Default global process registry
       {Registry, keys: :unique, name: Jido.Registry},

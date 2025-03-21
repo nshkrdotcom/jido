@@ -1,6 +1,6 @@
-defmodule Jido.Workflow do
+defmodule Jido.Exec do
   @moduledoc """
-  Workflow provides a robust set of methods for executing Actions (`Jido.Action`).
+  Exec provides a robust set of methods for executing Actions (`Jido.Action`).
 
   This module offers functionality to:
   - Run actions synchronously or asynchronously
@@ -9,32 +9,32 @@ defmodule Jido.Workflow do
   - Normalize and validate input parameters and context
   - Emit telemetry events for monitoring and debugging
 
-  Workflows are defined as modules (Actions) that implement specific callbacks, allowing for
-  a standardized way of defining and executing complex workflows across a distributed system.
+  Execs are defined as modules (Actions) that implement specific callbacks, allowing for
+  a standardized way of defining and executing complex actions across a distributed system.
 
   ## Features
 
-  - Synchronous and asynchronous workflow execution
+  - Synchronous and asynchronous action execution
   - Automatic retries with exponential backoff
-  - Timeout handling for long-running workflows
+  - Timeout handling for long-running actions
   - Parameter and context normalization
   - Comprehensive error handling and reporting
   - Telemetry integration for monitoring and tracing
-  - Cancellation of running workflows
+  - Cancellation of running actions
 
   ## Usage
 
-  Workflows are executed using the `run/4` or `run_async/4` functions:
+  Execs are executed using the `run/4` or `run_async/4` functions:
 
-      Jido.Workflow.run(MyAction, %{param1: "value"}, %{context_key: "context_value"})
+      Jido.Exec.run(MyAction, %{param1: "value"}, %{context_key: "context_value"})
 
   See `Jido.Action` for how to define an Action.
 
   For asynchronous execution:
 
-      async_ref = Jido.Workflow.run_async(MyAction, params, context)
+      async_ref = Jido.Exec.run_async(MyAction, params, context)
       # ... do other work ...
-      result = Jido.Workflow.await(async_ref)
+      result = Jido.Exec.await(async_ref)
 
   """
 
@@ -81,20 +81,20 @@ defmodule Jido.Workflow do
 
   ## Examples
 
-      iex> Jido.Workflow.run(MyAction, %{input: "value"}, %{user_id: 123})
+      iex> Jido.Exec.run(MyAction, %{input: "value"}, %{user_id: 123})
       {:ok, %{result: "processed value"}}
 
-      iex> Jido.Workflow.run(MyAction, %{invalid: "input"}, %{}, timeout: 1000)
+      iex> Jido.Exec.run(MyAction, %{invalid: "input"}, %{}, timeout: 1000)
       {:error, %Jido.Error{type: :validation_error, message: "Invalid input"}}
 
-      iex> Jido.Workflow.run(MyAction, %{input: "value"}, %{}, log_level: :debug)
+      iex> Jido.Exec.run(MyAction, %{input: "value"}, %{}, log_level: :debug)
       {:ok, %{result: "processed value"}}
   """
   @spec run(action(), params(), context(), run_opts()) :: {:ok, map()} | {:error, Error.t()}
   def run(action, params \\ %{}, context \\ %{}, opts \\ [])
 
   def run(action, params, context, opts) when is_atom(action) and is_list(opts) do
-    dbug("Starting workflow run", action: action, params: params, context: context, opts: opts)
+    dbug("Starting action run", action: action, params: params, context: context, opts: opts)
     log_level = Keyword.get(opts, :log_level, :info)
 
     with {:ok, normalized_params} <- normalize_params(params),
@@ -116,19 +116,19 @@ defmodule Jido.Workflow do
       do_run_with_retry(action, validated_params, normalized_context, opts)
     else
       {:error, reason} ->
-        dbug("Error in workflow setup", error: reason)
+        dbug("Error in action setup", error: reason)
         cond_log(log_level, :debug, "Action Execution failed: #{inspect(reason)}")
         OK.failure(reason)
 
       {:error, reason, other} ->
-        dbug("Error with additional info in workflow setup", error: reason, other: other)
+        dbug("Error with additional info in action setup", error: reason, other: other)
         cond_log(log_level, :debug, "Action Execution failed with directive: #{inspect(reason)}")
         {:error, reason, other}
     end
   rescue
     e in [FunctionClauseError, BadArityError, BadFunctionError] ->
       log_level = Keyword.get(opts, :log_level, :info)
-      dbug("Function error in workflow", error: e)
+      dbug("Function error in action", error: e)
 
       cond_log(
         log_level,
@@ -140,7 +140,7 @@ defmodule Jido.Workflow do
 
     e ->
       log_level = Keyword.get(opts, :log_level, :info)
-      dbug("Unexpected error in workflow", error: e)
+      dbug("Unexpected error in action", error: e)
       cond_log(log_level, :error, "Unexpected error in action: #{Exception.message(e)}")
 
       OK.failure(
@@ -149,7 +149,7 @@ defmodule Jido.Workflow do
   catch
     kind, reason ->
       log_level = Keyword.get(opts, :log_level, :info)
-      dbug("Caught error in workflow", kind: kind, reason: reason)
+      dbug("Caught error in action", kind: kind, reason: reason)
 
       cond_log(
         log_level,
@@ -180,10 +180,10 @@ defmodule Jido.Workflow do
   Executes a Action asynchronously with the given parameters and context.
 
   This function immediately returns a reference that can be used to await the result
-  or cancel the workflow.
+  or cancel the action.
 
   **Note**: This approach integrates with OTP by spawning tasks under a `Task.Supervisor`.
-  Make sure `{Task.Supervisor, name: Jido.Workflow.TaskSupervisor}` is part of your supervision tree.
+  Make sure `{Task.Supervisor, name: Jido.Exec.TaskSupervisor}` is part of your supervision tree.
 
   ## Parameters
 
@@ -195,27 +195,27 @@ defmodule Jido.Workflow do
   ## Returns
 
   An `async_ref` map containing:
-  - `:ref` - A unique reference for this async workflow.
+  - `:ref` - A unique reference for this async action.
   - `:pid` - The PID of the process executing the Action.
 
   ## Examples
 
-      iex> async_ref = Jido.Workflow.run_async(MyAction, %{input: "value"}, %{user_id: 123})
+      iex> async_ref = Jido.Exec.run_async(MyAction, %{input: "value"}, %{user_id: 123})
       %{ref: #Reference<0.1234.5678>, pid: #PID<0.234.0>}
 
-      iex> result = Jido.Workflow.await(async_ref)
+      iex> result = Jido.Exec.await(async_ref)
       {:ok, %{result: "processed value"}}
   """
   @spec run_async(action(), params(), context(), run_opts()) :: async_ref()
   def run_async(action, params \\ %{}, context \\ %{}, opts \\ []) do
-    dbug("Starting async workflow", action: action, params: params, context: context, opts: opts)
+    dbug("Starting async action", action: action, params: params, context: context, opts: opts)
     ref = make_ref()
     parent = self()
 
     # Start the task under the TaskSupervisor.
     # If the supervisor is not running, this will raise an error.
     {:ok, pid} =
-      Task.Supervisor.start_child(Jido.Workflow.TaskSupervisor, fn ->
+      Task.Supervisor.start_child(Jido.Exec.TaskSupervisor, fn ->
         result = run(action, params, context, opts)
         send(parent, {:action_async_result, ref, result})
         result
@@ -224,7 +224,7 @@ defmodule Jido.Workflow do
     # We monitor the newly created Task so we can handle :DOWN messages in `await`.
     Process.monitor(pid)
 
-    dbug("Async workflow started", ref: ref, pid: pid)
+    dbug("Async action started", ref: ref, pid: pid)
     %{ref: ref, pid: pid}
   end
 
@@ -239,21 +239,21 @@ defmodule Jido.Workflow do
   ## Returns
 
   - `{:ok, result}` if the Action executes successfully.
-  - `{:error, reason}` if an error occurs during execution or if the workflow times out.
+  - `{:error, reason}` if an error occurs during execution or if the action times out.
 
   ## Examples
 
-      iex> async_ref = Jido.Workflow.run_async(MyAction, %{input: "value"})
-      iex> Jido.Workflow.await(async_ref, 10_000)
+      iex> async_ref = Jido.Exec.run_async(MyAction, %{input: "value"})
+      iex> Jido.Exec.await(async_ref, 10_000)
       {:ok, %{result: "processed value"}}
 
-      iex> async_ref = Jido.Workflow.run_async(SlowAction, %{input: "value"})
-      iex> Jido.Workflow.await(async_ref, 100)
-      {:error, %Jido.Error{type: :timeout, message: "Async workflow timed out after 100ms"}}
+      iex> async_ref = Jido.Exec.run_async(SlowAction, %{input: "value"})
+      iex> Jido.Exec.await(async_ref, 100)
+      {:error, %Jido.Error{type: :timeout, message: "Async action timed out after 100ms"}}
   """
   @spec await(async_ref(), timeout()) :: {:ok, map()} | {:error, Error.t()}
   def await(%{ref: ref, pid: pid}, timeout \\ 5000) do
-    dbug("Awaiting async workflow result", ref: ref, pid: pid, timeout: timeout)
+    dbug("Awaiting async action result", ref: ref, pid: pid, timeout: timeout)
 
     receive do
       {:action_async_result, ^ref, result} ->
@@ -275,10 +275,10 @@ defmodule Jido.Workflow do
 
       {:DOWN, _monitor_ref, :process, ^pid, reason} ->
         dbug("Process crashed", reason: reason)
-        {:error, Error.execution_error("Server error in async workflow: #{inspect(reason)}")}
+        {:error, Error.execution_error("Server error in async action: #{inspect(reason)}")}
     after
       timeout ->
-        dbug("Async workflow timed out", timeout: timeout)
+        dbug("Async action timed out", timeout: timeout)
         Process.exit(pid, :kill)
 
         receive do
@@ -287,7 +287,7 @@ defmodule Jido.Workflow do
           0 -> :ok
         end
 
-        {:error, Error.timeout("Async workflow timed out after #{timeout}ms")}
+        {:error, Error.timeout("Async action timed out after #{timeout}ms")}
     end
   end
 
@@ -305,11 +305,11 @@ defmodule Jido.Workflow do
 
   ## Examples
 
-      iex> async_ref = Jido.Workflow.run_async(LongRunningAction, %{input: "value"})
-      iex> Jido.Workflow.cancel(async_ref)
+      iex> async_ref = Jido.Exec.run_async(LongRunningAction, %{input: "value"})
+      iex> Jido.Exec.cancel(async_ref)
       :ok
 
-      iex> Jido.Workflow.cancel("invalid")
+      iex> Jido.Exec.cancel("invalid")
       {:error, %Jido.Error{type: :invalid_async_ref, message: "Invalid async ref for cancellation"}}
   """
   @spec cancel(async_ref() | pid()) :: :ok | {:error, Error.t()}
@@ -317,7 +317,7 @@ defmodule Jido.Workflow do
   def cancel(%{pid: pid}), do: cancel(pid)
 
   def cancel(pid) when is_pid(pid) do
-    dbug("Cancelling workflow", pid: pid)
+    dbug("Cancelling action", pid: pid)
     Process.exit(pid, :shutdown)
     :ok
   end
@@ -597,7 +597,7 @@ defmodule Jido.Workflow do
 
     @spec emit_telemetry_event(atom(), map(), atom()) :: :ok
     defp emit_telemetry_event(event, metadata, telemetry) when telemetry in [:full, :minimal] do
-      event_name = [:jido, :workflow, event]
+      event_name = [:jido, :action, event]
       measurements = %{system_time: System.system_time()}
 
       # Logger.debug("Action #{metadata.action} #{event}", metadata)
@@ -747,7 +747,7 @@ defmodule Jido.Workflow do
       # Create a temporary task group for this execution
       {:ok, task_group} =
         Task.Supervisor.start_child(
-          Jido.Workflow.TaskSupervisor,
+          Jido.Exec.TaskSupervisor,
           fn ->
             Process.flag(:trap_exit, true)
 
@@ -847,7 +847,7 @@ Debug info:
 
       Process.exit(task_group, :kill)
 
-      Task.Supervisor.children(Jido.Workflow.TaskSupervisor)
+      Task.Supervisor.children(Jido.Exec.TaskSupervisor)
       |> Enum.filter(fn pid ->
         case Process.info(pid, :group_leader) do
           {:group_leader, ^task_group} -> true

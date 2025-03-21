@@ -10,7 +10,7 @@ defmodule JidoTest.ErrorTest do
             :validation_error,
             :config_error,
             :execution_error,
-            :workflow_error,
+            :action_error,
             :internal_server_error,
             :timeout
           ] do
@@ -31,7 +31,7 @@ defmodule JidoTest.ErrorTest do
             :validation_error,
             :config_error,
             :execution_error,
-            :workflow_error,
+            :action_error,
             :internal_server_error,
             :timeout
           ] do
@@ -48,7 +48,7 @@ defmodule JidoTest.ErrorTest do
             :validation_error,
             :config_error,
             :execution_error,
-            :workflow_error,
+            :action_error,
             :internal_server_error,
             :timeout
           ] do

@@ -1,70 +1,70 @@
-defmodule JidoTest.Workflow.ChainInterruptTest do
+defmodule JidoTest.Exec.ChainInterruptTest do
   use JidoTest.Case, async: true
   import ExUnit.CaptureLog
 
-  alias Jido.Workflow.Chain
+  alias Jido.Exec.Chain
   alias JidoTest.TestActions.Add
   alias JidoTest.TestActions.Multiply
-  alias JidoTest.TestActions.SlowWorkflow
+  alias JidoTest.TestActions.SlowExec
 
   @moduletag :capture_log
 
   describe "chain/3 with interrupt" do
-    test "interrupts chain after first workflow" do
-      workflows = [Add, SlowWorkflow, Multiply]
+    test "interrupts chain after first action" do
+      actions = [Add, SlowExec, Multiply]
       initial_params = %{value: 5, amount: 2}
 
-      # Interrupt after first workflow
+      # Interrupt after first action
       interrupt_after_first = fn ->
-        count = Process.get(:workflow_count, 0)
-        Process.put(:workflow_count, count + 1)
+        count = Process.get(:action_count, 0)
+        Process.put(:action_count, count + 1)
         count >= 1
       end
 
-      result = Chain.chain(workflows, initial_params, interrupt_check: interrupt_after_first)
+      result = Chain.chain(actions, initial_params, interrupt_check: interrupt_after_first)
 
       assert {:interrupted, partial_result} = result
-      # Add workflow completed
+      # Add action completed
       assert partial_result.value == 7
-      refute Map.has_key?(partial_result, :slow_workflow_complete)
+      refute Map.has_key?(partial_result, :slow_action_complete)
     end
 
     test "completes chain when interrupt check returns false" do
-      workflows = [Add, Multiply]
+      actions = [Add, Multiply]
       initial_params = %{value: 5, amount: 2}
 
-      result = Chain.chain(workflows, initial_params, interrupt_check: fn -> false end)
+      result = Chain.chain(actions, initial_params, interrupt_check: fn -> false end)
 
       assert {:ok, final_result} = result
-      # Both workflows completed
+      # Both actions completed
       assert final_result.value == 14
     end
 
     test "interrupts immediately if interrupt check starts true" do
-      workflows = [Add, Multiply]
+      actions = [Add, Multiply]
       initial_params = %{value: 5, amount: 2}
 
-      result = Chain.chain(workflows, initial_params, interrupt_check: fn -> true end)
+      result = Chain.chain(actions, initial_params, interrupt_check: fn -> true end)
 
       assert {:interrupted, partial_result} = result
-      # No workflows completed
+      # No actions completed
       assert partial_result == initial_params
     end
 
     test "logs interrupt event" do
-      workflows = [Add, SlowWorkflow]
+      actions = [Add, SlowExec]
       initial_params = %{value: 5, amount: 2}
 
       log =
         capture_log([level: :info], fn ->
-          Chain.chain(workflows, initial_params, interrupt_check: fn -> true end)
+          Chain.chain(actions, initial_params, interrupt_check: fn -> true end)
         end)
 
-      assert log =~ "Chain interrupted before workflow"
+      assert log =~ "Chain interrupted before action"
     end
 
     test "handles async execution with interruption" do
-      workflows = [
+      actions = [
         JidoTest.TestActions.Add,
         JidoTest.TestActions.DelayAction,
         JidoTest.TestActions.Multiply
@@ -78,12 +78,12 @@ defmodule JidoTest.Workflow.ChainInterruptTest do
       interrupt_check = fn -> Agent.get(interrupt_agent, & &1) end
 
       task =
-        Chain.chain(workflows, initial_params,
+        Chain.chain(actions, initial_params,
           async: true,
           interrupt_check: interrupt_check
         )
 
-      # Allow first workflow to complete
+      # Allow first action to complete
       Process.sleep(50)
       Agent.update(interrupt_agent, fn _ -> true end)
 
@@ -91,12 +91,12 @@ defmodule JidoTest.Workflow.ChainInterruptTest do
       Agent.stop(interrupt_agent)
 
       assert {:interrupted, partial_result} = result
-      # Add workflow completed
+      # Add action completed
       assert partial_result.value == 7
     end
 
     test "preserves error handling when interrupted" do
-      workflows = [
+      actions = [
         JidoTest.TestActions.BasicAction,
         JidoTest.TestActions.ErrorAction,
         JidoTest.TestActions.BasicAction
@@ -106,16 +106,16 @@ defmodule JidoTest.Workflow.ChainInterruptTest do
 
       log =
         capture_log([level: :warning], fn ->
-          result = Chain.chain(workflows, initial_params, interrupt_check: fn -> false end)
+          result = Chain.chain(actions, initial_params, interrupt_check: fn -> false end)
           assert {:error, error} = result
           assert error.type == :execution_error
           assert error.message == "Validation error"
         end)
 
-      assert log =~ "Workflow in chain failed"
+      assert log =~ "Exec in chain failed"
     end
 
-    test "handles empty workflow list with interrupt check" do
+    test "handles empty action list with interrupt check" do
       result = Chain.chain([], %{value: 5}, interrupt_check: fn -> true end)
       assert {:ok, %{value: 5}} = result
     end

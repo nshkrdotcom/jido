@@ -1,16 +1,16 @@
-defmodule Jido.WorkflowTaskTest do
+defmodule Jido.ExecTaskTest do
   use JidoTest.Case, async: false
 
   # Import Private to access private functions for testing
   use Private
   alias JidoTest.TestActions.SpawnerAction
   alias JidoTest.TestActions.TaskAction
-  alias Jido.Workflow
+  alias Jido.Exec
   @moduletag :capture_log
   describe "spawning multiple processes" do
     test "handles action spawning multiple processes" do
-      result = Workflow.execute_action_with_timeout(SpawnerAction, %{count: 10}, %{}, 1000)
-      assert {:ok, %{result: "Multi-process workflow completed"}} = result
+      result = Exec.execute_action_with_timeout(SpawnerAction, %{count: 10}, %{}, 1000)
+      assert {:ok, %{result: "Multi-process action completed"}} = result
       # Ensure no lingering processes
       :timer.sleep(150)
       process_list = Process.list()
@@ -20,7 +20,7 @@ defmodule Jido.WorkflowTaskTest do
 
     test "handles naked task action spawning multiple processes" do
       result =
-        Workflow.execute_action_with_timeout(
+        Exec.execute_action_with_timeout(
           NakedTaskAction,
           %{count: 2},
           %{},
@@ -37,7 +37,7 @@ defmodule Jido.WorkflowTaskTest do
 
       # Start a long-running task that will be linked to the task group
       result =
-        Workflow.execute_action_with_timeout(
+        Exec.execute_action_with_timeout(
           TaskAction,
           # Long delay to ensure task is still running
           %{count: 1, delay: 5000},
@@ -62,7 +62,7 @@ defmodule Jido.WorkflowTaskTest do
 
       # Start multiple long-running tasks linked to task group
       result =
-        Workflow.execute_action_with_timeout(
+        Exec.execute_action_with_timeout(
           TaskAction,
           # Long delay
           %{count: 5, delay: 5000},
@@ -87,7 +87,7 @@ defmodule Jido.WorkflowTaskTest do
       # Create a task group that will stay alive until we kill it
       {:ok, task_group} =
         Task.Supervisor.start_child(
-          Jido.Workflow.TaskSupervisor,
+          Jido.Exec.TaskSupervisor,
           fn ->
             Process.flag(:trap_exit, true)
 
@@ -102,7 +102,7 @@ defmodule Jido.WorkflowTaskTest do
         for _ <- 1..3 do
           {:ok, pid} =
             Task.Supervisor.start_child(
-              Jido.Workflow.TaskSupervisor,
+              Jido.Exec.TaskSupervisor,
               fn ->
                 Process.group_leader(self(), task_group)
                 # Keep process alive until killed
@@ -118,7 +118,7 @@ defmodule Jido.WorkflowTaskTest do
       assert Enum.all?(child_pids, &Process.alive?/1)
 
       # Call cleanup_task_group
-      Workflow.cleanup_task_group(task_group)
+      Exec.cleanup_task_group(task_group)
 
       # Give processes time to be killed
       Process.sleep(200)
@@ -132,7 +132,7 @@ defmodule Jido.WorkflowTaskTest do
       # Create and immediately kill a task group
       {:ok, task_group} =
         Task.Supervisor.start_child(
-          Jido.Workflow.TaskSupervisor,
+          Jido.Exec.TaskSupervisor,
           fn ->
             Process.flag(:trap_exit, true)
 
@@ -146,14 +146,14 @@ defmodule Jido.WorkflowTaskTest do
       Process.sleep(100)
 
       # Should not raise when cleaning up already dead task group
-      Workflow.cleanup_task_group(task_group)
+      Exec.cleanup_task_group(task_group)
     end
 
     test "kills only processes in the task group" do
       # Create a task group
       {:ok, task_group} =
         Task.Supervisor.start_child(
-          Jido.Workflow.TaskSupervisor,
+          Jido.Exec.TaskSupervisor,
           fn ->
             Process.flag(:trap_exit, true)
 
@@ -166,7 +166,7 @@ defmodule Jido.WorkflowTaskTest do
       # Create a process in the task group
       {:ok, group_pid} =
         Task.Supervisor.start_child(
-          Jido.Workflow.TaskSupervisor,
+          Jido.Exec.TaskSupervisor,
           fn ->
             Process.group_leader(self(), task_group)
             Process.sleep(:infinity)
@@ -176,7 +176,7 @@ defmodule Jido.WorkflowTaskTest do
       # Create a process outside the task group
       {:ok, other_pid} =
         Task.Supervisor.start_child(
-          Jido.Workflow.TaskSupervisor,
+          Jido.Exec.TaskSupervisor,
           fn ->
             Process.sleep(:infinity)
           end
@@ -187,7 +187,7 @@ defmodule Jido.WorkflowTaskTest do
       assert Process.alive?(other_pid)
 
       # Call cleanup_task_group
-      Workflow.cleanup_task_group(task_group)
+      Exec.cleanup_task_group(task_group)
 
       Process.sleep(200)
 

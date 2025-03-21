@@ -1,4 +1,4 @@
-defmodule JidoTest.Workflow.ActionTest do
+defmodule JidoTest.Exec.ActionTest do
   use JidoTest.Case, async: true
   use ExUnitProperties
 
@@ -190,7 +190,7 @@ defmodule JidoTest.Workflow.ActionTest do
   end
 
   describe "edge cases" do
-    test "handles very large numbers in calculator workflows" do
+    test "handles very large numbers in calculator actions" do
       large_number = 1_000_000_000_000_000_000_000
       assert {:ok, result} = Add.run(%{value: large_number, amount: 1}, %{})
       assert result.value == large_number + 1
@@ -199,16 +199,16 @@ defmodule JidoTest.Workflow.ActionTest do
 
   describe "advanced actions" do
     test "long running action" do
-      assert {:ok, "Workflow completed"} = LongRunningAction.run(%{}, %{})
+      assert {:ok, "Exec completed"} = LongRunningAction.run(%{}, %{})
     end
 
     test "rate limited action" do
       Enum.each(1..5, fn _ ->
-        assert {:ok, _} = RateLimitedAction.run(%{workflow: "test"}, %{})
+        assert {:ok, _} = RateLimitedAction.run(%{action: "test"}, %{})
       end)
 
       assert {:error, "Rate limit exceeded. Please try again later."} =
-               RateLimitedAction.run(%{workflow: "test"}, %{})
+               RateLimitedAction.run(%{action: "test"}, %{})
     end
 
     test "streaming action" do

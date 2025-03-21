@@ -1,17 +1,17 @@
-defmodule JidoTest.WorkflowDoRunTest do
+defmodule JidoTest.ExecDoRunTest do
   use JidoTest.Case, async: false
   use Mimic
 
   import ExUnit.CaptureLog
 
-  alias Jido.Workflow
+  alias Jido.Exec
   alias JidoTest.TestActions.BasicAction
   alias JidoTest.TestActions.ErrorAction
   alias JidoTest.TestActions.RetryAction
 
-  @attempts_table :workflow_do_run_test_attempts
+  @attempts_table :action_do_run_test_attempts
 
-  @attempts_table :workflow_do_run_test_attempts
+  @attempts_table :action_do_run_test_attempts
 
   setup :set_mimic_global
 
@@ -40,7 +40,7 @@ defmodule JidoTest.WorkflowDoRunTest do
       log =
         capture_log(fn ->
           assert {:ok, %{value: 5}} =
-                   Workflow.do_run(BasicAction, %{value: 5}, %{},
+                   Exec.do_run(BasicAction, %{value: 5}, %{},
                      telemetry: :full,
                      log_level: :debug
                    )
@@ -58,7 +58,7 @@ defmodule JidoTest.WorkflowDoRunTest do
       log =
         capture_log(fn ->
           assert {:ok, %{value: 5}} =
-                   Workflow.do_run(BasicAction, %{value: 5}, %{},
+                   Exec.do_run(BasicAction, %{value: 5}, %{},
                      telemetry: :minimal,
                      log_level: :debug
                    )
@@ -75,7 +75,7 @@ defmodule JidoTest.WorkflowDoRunTest do
       log =
         capture_log(fn ->
           assert {:ok, %{value: 5}} =
-                   Workflow.do_run(BasicAction, %{value: 5}, %{},
+                   Exec.do_run(BasicAction, %{value: 5}, %{},
                      telemetry: :silent,
                      timeout: 0
                    )
@@ -92,7 +92,7 @@ defmodule JidoTest.WorkflowDoRunTest do
       log =
         capture_log(fn ->
           assert {:error, _} =
-                   Workflow.do_run(ErrorAction, %{}, %{}, telemetry: :full, log_level: :debug)
+                   Exec.do_run(ErrorAction, %{}, %{}, telemetry: :full, log_level: :debug)
         end)
 
       assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
@@ -104,7 +104,7 @@ defmodule JidoTest.WorkflowDoRunTest do
   describe "get_metadata/4" do
     test "returns full metadata" do
       result = {:ok, %{result: 10}}
-      metadata = Workflow.get_metadata(BasicAction, result, 1000, :full)
+      metadata = Exec.get_metadata(BasicAction, result, 1000, :full)
 
       assert metadata.action == BasicAction
       assert metadata.result == result
@@ -117,7 +117,7 @@ defmodule JidoTest.WorkflowDoRunTest do
 
     test "returns minimal metadata" do
       result = {:ok, %{result: 10}}
-      metadata = Workflow.get_metadata(BasicAction, result, 1000, :minimal)
+      metadata = Exec.get_metadata(BasicAction, result, 1000, :minimal)
 
       assert metadata == %{
                action: BasicAction,
@@ -129,7 +129,7 @@ defmodule JidoTest.WorkflowDoRunTest do
 
   describe "get_process_info/0" do
     test "returns process info" do
-      info = Workflow.get_process_info()
+      info = Exec.get_process_info()
 
       assert is_map(info)
       assert Map.has_key?(info, :reductions)
@@ -143,7 +143,7 @@ defmodule JidoTest.WorkflowDoRunTest do
     test "emits telemetry event for full mode" do
       expect(:telemetry, :execute, fn _, _, _ -> :ok end)
 
-      Workflow.emit_telemetry_event(
+      Exec.emit_telemetry_event(
         :test_event,
         %{action: BasicAction, test: "data"},
         :full
@@ -155,7 +155,7 @@ defmodule JidoTest.WorkflowDoRunTest do
     test "emits telemetry event for minimal mode" do
       expect(:telemetry, :execute, fn _, _, _ -> :ok end)
 
-      Workflow.emit_telemetry_event(
+      Exec.emit_telemetry_event(
         :test_event,
         %{action: BasicAction, test: "data"},
         :minimal
@@ -169,7 +169,7 @@ defmodule JidoTest.WorkflowDoRunTest do
 
       log =
         capture_log(fn ->
-          Workflow.emit_telemetry_event(
+          Exec.emit_telemetry_event(
             :test_event,
             %{action: BasicAction, test: "data"},
             :silent
@@ -188,7 +188,7 @@ defmodule JidoTest.WorkflowDoRunTest do
 
       capture_log(fn ->
         assert {:ok, %{value: 5}} =
-                 Workflow.do_run_with_retry(BasicAction, %{value: 5}, %{}, [])
+                 Exec.do_run_with_retry(BasicAction, %{value: 5}, %{}, [])
       end)
 
       verify!()
@@ -200,7 +200,7 @@ defmodule JidoTest.WorkflowDoRunTest do
 
       capture_log(fn ->
         result =
-          Workflow.do_run_with_retry(
+          Exec.do_run_with_retry(
             RetryAction,
             %{max_attempts: 3, failure_type: :error},
             %{attempts_table: attempts_table},
@@ -221,7 +221,7 @@ defmodule JidoTest.WorkflowDoRunTest do
 
       capture_log(fn ->
         result =
-          Workflow.do_run_with_retry(
+          Exec.do_run_with_retry(
             RetryAction,
             %{max_attempts: 3, failure_type: :exception},
             %{attempts_table: attempts_table},
@@ -242,7 +242,7 @@ defmodule JidoTest.WorkflowDoRunTest do
 
       capture_log(fn ->
         result =
-          Workflow.do_run_with_retry(
+          Exec.do_run_with_retry(
             RetryAction,
             %{max_attempts: 5, failure_type: :error},
             %{attempts_table: attempts_table},

@@ -15,7 +15,7 @@ defmodule Jido.Actions.Simplebot do
   defmodule Move do
     @moduledoc false
     use Action,
-      name: "move_workflow",
+      name: "move_action",
       description: "Moves the robot to a specified location",
       schema: [
         destination: [type: :atom, required: true, doc: "The destination location"]
@@ -35,7 +35,7 @@ defmodule Jido.Actions.Simplebot do
   defmodule Idle do
     @moduledoc false
     use Action,
-      name: "idle_workflow",
+      name: "idle_action",
       description: "Simulates the robot doing nothing"
 
     @spec run(map(), map()) :: {:ok, map()}
@@ -50,7 +50,7 @@ defmodule Jido.Actions.Simplebot do
   defmodule DoWork do
     @moduledoc false
     use Action,
-      name: "do_work_workflow",
+      name: "do_work_action",
       description: "Simulates the robot performing work tasks"
 
     @spec run(map(), map()) :: {:ok, map()}
@@ -68,7 +68,7 @@ defmodule Jido.Actions.Simplebot do
   defmodule Report do
     @moduledoc false
     use Action,
-      name: "report_workflow",
+      name: "report_action",
       description: "Simulates the robot reporting its status"
 
     @spec run(map(), map()) :: {:ok, map()}

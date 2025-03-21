@@ -1,6 +1,6 @@
 defmodule Jido.Actions.Basic do
   @moduledoc """
-  A collection of basic actions for common workflows.
+  A collection of basic actions for common actions.
 
   This module provides a set of simple, reusable actions:
   - Sleep: Pauses execution for a specified duration
@@ -18,7 +18,7 @@ defmodule Jido.Actions.Basic do
   defmodule Sleep do
     @moduledoc false
     use Action,
-      name: "sleep_workflow",
+      name: "sleep_action",
       description: "Sleeps for a specified duration",
       schema: [
         duration_ms: [
@@ -38,7 +38,7 @@ defmodule Jido.Actions.Basic do
   defmodule Log do
     @moduledoc false
     use Action,
-      name: "log_workflow",
+      name: "log_action",
       description: "Logs a message with a specified level",
       schema: [
         level: [type: {:in, [:debug, :info, :warning, :error]}, default: :info, doc: "Log level"],
@@ -63,7 +63,7 @@ defmodule Jido.Actions.Basic do
   defmodule Todo do
     @moduledoc false
     use Action,
-      name: "todo_workflow",
+      name: "todo_action",
       description: "A placeholder for a todo item",
       schema: [
         todo: [type: :string, required: true, doc: "Todo item description"]
@@ -81,7 +81,7 @@ defmodule Jido.Actions.Basic do
   defmodule RandomSleep do
     @moduledoc false
     use Action,
-      name: "random_sleep_workflow",
+      name: "random_sleep_action",
       description: "Introduces a random sleep within a specified range",
       schema: [
         min_ms: [
@@ -107,7 +107,7 @@ defmodule Jido.Actions.Basic do
   defmodule Increment do
     @moduledoc false
     use Action,
-      name: "increment_workflow",
+      name: "increment_action",
       description: "Increments a value by 1",
       schema: [
         value: [type: :integer, required: true, doc: "Value to increment"]
@@ -122,7 +122,7 @@ defmodule Jido.Actions.Basic do
   defmodule Decrement do
     @moduledoc false
     use Action,
-      name: "decrement_workflow",
+      name: "decrement_action",
       description: "Decrements a value by 1",
       schema: [
         value: [type: :integer, required: true, doc: "Value to decrement"]
@@ -137,7 +137,7 @@ defmodule Jido.Actions.Basic do
   defmodule Noop do
     @moduledoc false
     use Action,
-      name: "noop_workflow",
+      name: "noop_action",
       description: "No operation, returns input unchanged",
       schema: []
 
@@ -150,7 +150,7 @@ defmodule Jido.Actions.Basic do
   defmodule Inspect do
     @moduledoc false
     use Action,
-      name: "inspect_workflow",
+      name: "inspect_action",
       description: "Inspects a value",
       schema: [
         value: [type: :any, required: true, doc: "Value to inspect"]
@@ -167,7 +167,7 @@ defmodule Jido.Actions.Basic do
   defmodule Today do
     @moduledoc false
     use Action,
-      name: "today_workflow",
+      name: "today",
       description: "Returns today's date in specified format",
       schema: [
         format: [

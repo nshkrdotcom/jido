@@ -3,7 +3,7 @@ defmodule Jido.Action do
   Defines a discrete, composable unit of functionality within the Jido system.
 
   Each Action represents a delayed computation that can be composed with others
-  to build complex workflows and workflows. Actions are defined at compile-time
+  to build complex workflows. Actions are defined at compile-time
   and provide a consistent interface for validating inputs, executing workflows,
   and handling results.
 
@@ -22,7 +22,7 @@ defmodule Jido.Action do
       defmodule MyAction do
         use Jido.Action,
           name: "my_action",
-          description: "Performs a specific workflow",
+          description: "Performs my action",
           category: "processing",
           tags: ["example", "demo"],
           vsn: "1.0.0",
@@ -130,15 +130,15 @@ defmodule Jido.Action do
       end
 
   For testing Actions in a more complete runtime environment, including signal routing, state
-  management, and error handling, use `Jido.Workflow`. This provides a full test harness for
-  validating Action behavior within workflows:
+  management, and error handling, use `Jido.Exec`. This provides a full test harness for
+  validating Action behavior within s:
 
-      test "weather action in workflow" do
-        {:ok, result} = Workflow.run(WeatherAction, %{location: "Seattle"})
+      test "weather action in " do
+        {:ok, result} = Exec.run(WeatherAction, %{location: "Seattle"})
         assert result.weather_data.temperature > 0
       end
 
-  See `Jido.Workflow` documentation for more details on workflow-based testing.
+  See `Jido.Exec` documentation for more details on action-based testing.
 
   ## Parameter Validation
 
@@ -223,7 +223,7 @@ defmodule Jido.Action do
       defmodule MyAction do
         use Jido.Action,
           name: "my_action",
-          description: "Performs a specific workflow",
+          description: "Performs a specific ",
           schema: [
             input: [type: :string, required: true]
           ]
@@ -369,12 +369,12 @@ defmodule Jido.Action do
   ## Parameters
 
   - `params`: A map of validated input parameters.
-  - `context`: A map containing any additional context for the workflow.
+  - `context`: A map containing any additional context for the .
 
   ## Returns
 
-  - `{:ok, result}` where `result` is a map containing the workflow's output.
-  - `{:error, reason}` where `reason` describes why the workflow failed.
+  - `{:ok, result}` where `result` is a map containing the 's output.
+  - `{:error, reason}` where `reason` describes why the  failed.
   """
   @callback run(params :: map(), context :: map()) ::
               {:ok, map()} | {:error, any()}

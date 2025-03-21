@@ -1,6 +1,6 @@
 defmodule JidoTest.WorkflowCompensateTest do
   use JidoTest.Case, async: true
-  import ExUnit.CaptureLog
+  use Mimic
 
   alias Jido.Error
   alias Jido.Workflow
@@ -8,12 +8,7 @@ defmodule JidoTest.WorkflowCompensateTest do
 
   @moduletag :capture_log
 
-  setup do
-    # Ensure debug logs are captured
-    :ok = Logger.configure(level: :debug)
-    on_exit(fn -> Logger.configure(level: :warning) end)
-    :ok
-  end
+  setup :set_mimic_global
 
   describe "do_run with compensation" do
     test "triggers compensation on action failure" do
@@ -105,21 +100,18 @@ defmodule JidoTest.WorkflowCompensateTest do
     @tag :flaky
     test "emits telemetry events for compensation flow" do
       params = %{should_fail: true}
+      expect(:telemetry, :execute, fn _, _, _ -> :ok end)
 
-      log =
-        capture_log(fn ->
-          assert {:error, %Error{} = error} =
-                   Workflow.run(CompensateAction, params, %{},
-                     telemetry: :full,
-                     timeout: 100,
-                     backoff: 25
-                   )
+      assert {:error, %Error{} = error} =
+               Workflow.run(CompensateAction, params, %{},
+                 telemetry: :full,
+                 timeout: 100,
+                 backoff: 25
+               )
 
-          assert error.details.compensated == true
-        end)
+      assert error.details.compensated == true
 
-      assert log =~ "Action Elixir.JidoTest.TestActions.CompensateAction start"
-      assert log =~ "Action Elixir.JidoTest.TestActions.CompensateAction error"
+      verify!()
     end
   end
 

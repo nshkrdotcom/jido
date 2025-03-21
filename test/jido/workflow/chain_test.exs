@@ -13,17 +13,6 @@ defmodule JidoTest.Workflow.ChainTest do
   alias JidoTest.TestActions.Subtract
   alias JidoTest.TestActions.WriteFile
 
-  setup_all do
-    original_level = Logger.level()
-    Logger.configure(level: :debug)
-
-    on_exit(fn ->
-      Logger.configure(level: original_level)
-    end)
-
-    :ok
-  end
-
   describe "chain/3" do
     test "executes a simple chain of workflows successfully" do
       capture_log(fn ->
@@ -141,8 +130,8 @@ defmodule JidoTest.Workflow.ChainTest do
         end)
 
       # assert log =~ "Executing workflow in chain"
-      assert log =~ "Action Elixir.JidoTest.TestActions.Add complete"
-      assert log =~ "Action Elixir.JidoTest.TestActions.Multiply complete"
+      assert log =~ "Executing JidoTest.TestActions.Add with params"
+      assert log =~ "Executing JidoTest.TestActions.Multiply with params"
     end
 
     test "logs warnings for failed workflows" do
@@ -152,7 +141,7 @@ defmodule JidoTest.Workflow.ChainTest do
         end)
 
       assert log =~ "Workflow in chain failed"
-      assert log =~ "Action Elixir.JidoTest.TestActions.ErrorAction error"
+      assert log =~ "Action JidoTest.TestActions.ErrorAction failed"
     end
 
     test "executes a complex chain of workflows" do

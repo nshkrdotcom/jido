@@ -47,6 +47,8 @@ defmodule Jido.Workflow do
   require Logger
   require OK
 
+  import Jido.Util, only: [cond_log: 3]
+
   @default_timeout 5000
   @default_max_retries 1
   @initial_backoff 250
@@ -69,6 +71,8 @@ defmodule Jido.Workflow do
     - `:timeout` - Maximum time (in ms) allowed for the Action to complete (default: #{@default_timeout}).
     - `:max_retries` - Maximum number of retry attempts (default: #{@default_max_retries}).
     - `:backoff` - Initial backoff time in milliseconds, doubles with each retry (default: #{@initial_backoff}).
+    - `:log_level` - Override the global Logger level for this specific action. Accepts #{inspect(Logger.levels())}.
+
 
   ## Returns
 
@@ -82,12 +86,16 @@ defmodule Jido.Workflow do
 
       iex> Jido.Workflow.run(MyAction, %{invalid: "input"}, %{}, timeout: 1000)
       {:error, %Jido.Error{type: :validation_error, message: "Invalid input"}}
+
+      iex> Jido.Workflow.run(MyAction, %{input: "value"}, %{}, log_level: :debug)
+      {:ok, %{result: "processed value"}}
   """
   @spec run(action(), params(), context(), run_opts()) :: {:ok, map()} | {:error, Error.t()}
   def run(action, params \\ %{}, context \\ %{}, opts \\ [])
 
   def run(action, params, context, opts) when is_atom(action) and is_list(opts) do
     dbug("Starting workflow run", action: action, params: params, context: context, opts: opts)
+    log_level = Keyword.get(opts, :log_level, :info)
 
     with {:ok, normalized_params} <- normalize_params(params),
          {:ok, normalized_context} <- normalize_context(context),
@@ -99,30 +107,56 @@ defmodule Jido.Workflow do
         validated_params: validated_params
       )
 
+      cond_log(
+        log_level,
+        :notice,
+        "Executing #{inspect(action)} with params: #{inspect(validated_params)} and context: #{inspect(normalized_context)}"
+      )
+
       do_run_with_retry(action, validated_params, normalized_context, opts)
     else
       {:error, reason} ->
         dbug("Error in workflow setup", error: reason)
+        cond_log(log_level, :debug, "Action Execution failed: #{inspect(reason)}")
         OK.failure(reason)
 
       {:error, reason, other} ->
         dbug("Error with additional info in workflow setup", error: reason, other: other)
+        cond_log(log_level, :debug, "Action Execution failed with directive: #{inspect(reason)}")
         {:error, reason, other}
     end
   rescue
     e in [FunctionClauseError, BadArityError, BadFunctionError] ->
+      log_level = Keyword.get(opts, :log_level, :info)
       dbug("Function error in workflow", error: e)
+
+      cond_log(
+        log_level,
+        :warning,
+        "Function invocation error in action: #{Exception.message(e)}"
+      )
+
       OK.failure(Error.invalid_action("Invalid action module: #{Exception.message(e)}"))
 
     e ->
+      log_level = Keyword.get(opts, :log_level, :info)
       dbug("Unexpected error in workflow", error: e)
+      cond_log(log_level, :error, "Unexpected error in action: #{Exception.message(e)}")
 
       OK.failure(
         Error.internal_server_error("An unexpected error occurred: #{Exception.message(e)}")
       )
   catch
     kind, reason ->
+      log_level = Keyword.get(opts, :log_level, :info)
       dbug("Caught error in workflow", kind: kind, reason: reason)
+
+      cond_log(
+        log_level,
+        :warning,
+        "Caught unexpected throw/exit in action: #{Exception.message(reason)}"
+      )
+
       OK.failure(Error.internal_server_error("Caught #{kind}: #{inspect(reason)}"))
   end
 
@@ -419,6 +453,12 @@ defmodule Jido.Workflow do
       if retry_count < max_retries do
         backoff = calculate_backoff(retry_count, backoff)
 
+        cond_log(
+          Keyword.get(opts, :log_level, :info),
+          :info,
+          "Retrying #{inspect(action)} (attempt #{retry_count + 1}/#{max_retries}) after #{backoff}ms backoff"
+        )
+
         dbug("Retrying after backoff",
           action: action,
           retry_count: retry_count,
@@ -466,7 +506,7 @@ defmodule Jido.Workflow do
             start_time = System.monotonic_time(:microsecond)
             start_span(action, params, context, telemetry)
 
-            result = execute_action_with_timeout(action, params, context, timeout)
+            result = execute_action_with_timeout(action, params, context, timeout, opts)
 
             end_time = System.monotonic_time(:microsecond)
             duration_us = end_time - start_time
@@ -560,7 +600,7 @@ defmodule Jido.Workflow do
       event_name = [:jido, :workflow, event]
       measurements = %{system_time: System.system_time()}
 
-      Logger.debug("Action #{metadata.action} #{event}", metadata)
+      # Logger.debug("Action #{metadata.action} #{event}", metadata)
       :telemetry.execute(event_name, measurements, metadata)
     end
 
@@ -691,13 +731,13 @@ defmodule Jido.Workflow do
 
     @spec execute_action_with_timeout(action(), params(), context(), non_neg_integer()) ::
             {:ok, map()} | {:error, Error.t()}
-    defp execute_action_with_timeout(action, params, context, timeout)
+    defp execute_action_with_timeout(action, params, context, timeout, opts \\ [])
 
-    defp execute_action_with_timeout(action, params, context, 0) do
-      execute_action(action, params, context)
+    defp execute_action_with_timeout(action, params, context, 0, opts) do
+      execute_action(action, params, context, opts)
     end
 
-    defp execute_action_with_timeout(action, params, context, timeout)
+    defp execute_action_with_timeout(action, params, context, timeout, opts)
          when is_integer(timeout) and timeout > 0 do
       parent = self()
       ref = make_ref()
@@ -731,7 +771,7 @@ defmodule Jido.Workflow do
           result =
             try do
               dbug("Executing action in task", action: action, pid: self())
-              result = execute_action(action, params, enhanced_context)
+              result = execute_action(action, params, enhanced_context, opts)
               dbug("Action execution completed", action: action, result: result)
               result
             catch
@@ -798,8 +838,8 @@ Debug info:
       result
     end
 
-    defp execute_action_with_timeout(action, params, context, _timeout) do
-      execute_action_with_timeout(action, params, context, @default_timeout)
+    defp execute_action_with_timeout(action, params, context, _timeout, opts) do
+      execute_action_with_timeout(action, params, context, @default_timeout, opts)
     end
 
     defp cleanup_task_group(task_group) do
@@ -817,40 +857,73 @@ Debug info:
       |> Enum.each(&Process.exit(&1, :kill))
     end
 
-    @spec execute_action(action(), params(), context()) :: {:ok, map()} | {:error, Error.t()}
-    defp execute_action(action, params, context) do
+    @spec execute_action(action(), params(), context(), run_opts()) ::
+            {:ok, map()} | {:error, Error.t()}
+    defp execute_action(action, params, context, opts) do
+      log_level = Keyword.get(opts, :log_level, :info)
       dbug("Executing action", action: action, params: params, context: context)
+
+      cond_log(
+        log_level,
+        :debug,
+        "Starting execution of #{inspect(action)}, params: #{inspect(params)}, context: #{inspect(context)}"
+      )
 
       case action.run(params, context) do
         {:ok, result, other} ->
           dbug("Action succeeded with additional info", result: result, other: other)
+
+          cond_log(
+            log_level,
+            :debug,
+            "Finished execution of #{inspect(action)}, result: #{inspect(result)}, directive: #{inspect(other)}"
+          )
+
           {:ok, result, other}
 
         OK.success(result) ->
           dbug("Action succeeded", result: result)
+
+          cond_log(
+            log_level,
+            :debug,
+            "Finished execution of #{inspect(action)}, result: #{inspect(result)}"
+          )
+
           OK.success(result)
 
         {:error, reason, other} ->
           dbug("Action failed with additional info", error: reason, other: other)
-          Logger.debug("Error in execute_action: #{inspect(reason)}")
+          cond_log(log_level, :error, "Action #{inspect(action)} failed: #{inspect(reason)}")
           {:error, reason, other}
 
         OK.failure(%Error{} = error) ->
           dbug("Action failed with error struct", error: error)
+          cond_log(log_level, :error, "Action #{inspect(action)} failed: #{inspect(error)}")
           OK.failure(error)
 
         OK.failure(reason) ->
           dbug("Action failed with reason", reason: reason)
+          cond_log(log_level, :error, "Action #{inspect(action)} failed: #{inspect(reason)}")
           OK.failure(Error.execution_error(reason))
 
         result ->
           dbug("Action returned unexpected result", result: result)
+
+          cond_log(
+            log_level,
+            :debug,
+            "Finished execution of #{inspect(action)}, result: #{inspect(result)}"
+          )
+
           OK.success(result)
       end
     rescue
       e in RuntimeError ->
         dbug("Runtime error in action", error: e)
         stacktrace = __STACKTRACE__
+        log_level = Keyword.get(opts, :log_level, :info)
+        cond_log(log_level, :error, "Action #{inspect(action)} failed: #{inspect(e)}")
 
         OK.failure(
           Error.execution_error(
@@ -863,6 +936,8 @@ Debug info:
       e in ArgumentError ->
         dbug("Argument error in action", error: e)
         stacktrace = __STACKTRACE__
+        log_level = Keyword.get(opts, :log_level, :info)
+        cond_log(log_level, :error, "Action #{inspect(action)} failed: #{inspect(e)}")
 
         OK.failure(
           Error.execution_error(
@@ -874,6 +949,8 @@ Debug info:
 
       e ->
         stacktrace = __STACKTRACE__
+        log_level = Keyword.get(opts, :log_level, :info)
+        cond_log(log_level, :error, "Action #{inspect(action)} failed: #{inspect(e)}")
 
         OK.failure(
           Error.execution_error(

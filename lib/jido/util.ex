@@ -21,6 +21,7 @@ defmodule Jido.Util do
   alias Jido.Error
 
   require OK
+  require Logger
 
   @name_regex ~r/^[a-zA-Z][a-zA-Z0-9_]*$/
 
@@ -269,6 +270,54 @@ defmodule Jido.Util do
     case Registry.lookup(registry, name) do
       [{pid, _}] -> {:ok, pid}
       [] -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Conditionally logs a message based on comparing threshold and message log levels.
+
+  This function provides a way to conditionally log messages by comparing a threshold level
+  against the message's intended log level. The message will only be logged if the threshold
+  level is less than or equal to the message level.
+
+  ## Parameters
+
+  - `threshold_level`: The minimum log level threshold (e.g. :debug, :info, etc)
+  - `message_level`: The log level for this specific message
+  - `message`: The message to potentially log
+  - `opts`: Additional options passed to Logger.log/3
+
+  ## Returns
+
+  - `:ok` in all cases
+
+  ## Examples
+
+      # Will log since :info >= :info
+      iex> cond_log(:info, :info, "test message")
+      :ok
+
+      # Won't log since :info > :debug
+      iex> cond_log(:info, :debug, "test message")
+      :ok
+
+      # Will log since :debug <= :info
+      iex> cond_log(:debug, :info, "test message")
+      :ok
+  """
+  def cond_log(threshold_level, message_level, message, opts \\ []) do
+    valid_levels = Logger.levels()
+
+    cond do
+      threshold_level not in valid_levels or message_level not in valid_levels ->
+        # Don't log
+        :ok
+
+      Logger.compare_levels(threshold_level, message_level) in [:lt, :eq] ->
+        Logger.log(message_level, message, opts)
+
+      true ->
+        :ok
     end
   end
 end

@@ -1,21 +1,10 @@
 defmodule JidoTest.Actions.BasicActionsTest do
-  use JidoTest.Case, async: true
+  use JidoTest.Case, async: false
   require Logger
   alias Jido.Actions.Basic
+  import ExUnit.CaptureLog
 
   @moduletag :capture_log
-
-  setup do
-    # Save original log level
-    original_level = Logger.level()
-
-    on_exit(fn ->
-      # Restore original log level
-      Logger.configure(level: original_level)
-    end)
-
-    {:ok, %{original_log_level: original_level}}
-  end
 
   describe "Sleep" do
     test "sleeps for the specified duration" do
@@ -34,19 +23,7 @@ defmodule JidoTest.Actions.BasicActionsTest do
   end
 
   describe "Todo" do
-    import ExUnit.CaptureLog
-
-    setup do
-      # Ensure clean log state for each test
-      Logger.flush()
-      :ok
-    end
-
-    @tag :flaky
     test "logs todo message" do
-      # Set log level to debug to capture everything
-      Logger.configure(level: :debug)
-
       log =
         capture_log([level: :debug], fn ->
           assert {:ok, %{todo: "Implement feature"}} =

@@ -10,8 +10,7 @@ defmodule Jido.Actions.Basic do
   - Increment: Increments a value by 1
   - Decrement: Decrements a value by 1
   - Noop: No operation, returns input unchanged
-
-  Each action is implemented as a separate submodule and follows the Jido.Action behavior.
+  - Today: Returns the current date in specified format
   """
 
   alias Jido.Action
@@ -162,6 +161,34 @@ defmodule Jido.Actions.Basic do
       # credo:disable-for-next-line Credo.Check.Warning.IoInspect
       IO.inspect(value, label: "Inspect action output")
       {:ok, params}
+    end
+  end
+
+  defmodule Today do
+    @moduledoc false
+    use Action,
+      name: "today_workflow",
+      description: "Returns today's date in specified format",
+      schema: [
+        format: [
+          type: {:in, [:iso8601, :basic, :human]},
+          default: :iso8601,
+          doc: "Format for the date output (:iso8601, :basic, or :human)"
+        ]
+      ]
+
+    @spec run(map(), map()) :: {:ok, map()}
+    def run(%{format: format} = params, _ctx) do
+      today = Date.utc_today()
+
+      formatted_date =
+        case format do
+          :iso8601 -> Date.to_iso8601(today)
+          :basic -> "#{today.year}-#{today.month}-#{today.day}"
+          :human -> Calendar.strftime(today, "%B %d, %Y")
+        end
+
+      {:ok, Map.put(params, :date, formatted_date)}
     end
   end
 end

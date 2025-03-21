@@ -7,20 +7,10 @@ defmodule Jido.Agent.Server.Output do
   alias Jido.Signal
   alias Jido.Signal.Dispatch
   alias Jido.Agent.Server.State, as: ServerState
+  alias Jido.Util
 
   @type log_level ::
           :debug | :info | :notice | :warning | :error | :critical | :alert | :emergency
-
-  @log_level_priorities %{
-    debug: 0,
-    info: 1,
-    notice: 2,
-    warning: 3,
-    error: 4,
-    critical: 5,
-    alert: 6,
-    emergency: 7
-  }
 
   @signal_log_levels %{
     categories: %{
@@ -64,16 +54,11 @@ defmodule Jido.Agent.Server.Output do
   @spec log(ServerState.t(), log_level(), String.t(), keyword()) ::
           :ok | {:ignored, :level_too_low}
   def log(%ServerState{} = state, level, message, metadata \\ []) when is_atom(level) do
-    if should_emit?(state.log_level, level) do
-      # Add agent context to metadata
-      metadata = add_agent_metadata(state, metadata)
+    # Add agent context to metadata
+    metadata = add_agent_metadata(state, metadata)
 
-      # Log directly with the appropriate Logger function
-      do_log(level, message, metadata)
-      :ok
-    else
-      {:ignored, :level_too_low}
-    end
+    # Use Jido.Util.cond_log to conditionally log based on threshold level
+    Util.cond_log(state.log_level, level, message, metadata)
   end
 
   @doc """
@@ -115,15 +100,6 @@ defmodule Jido.Agent.Server.Output do
 
   # Private helper functions
 
-  # Determine if a message should be emitted based on state's log level and message level
-  defp should_emit?(state_level, message_level) do
-    # Default to :info threshold
-    state_priority = @log_level_priorities[state_level] || 1
-    message_priority = @log_level_priorities[message_level] || 1
-
-    message_priority >= state_priority
-  end
-
   # Add agent metadata to the log metadata
   defp add_agent_metadata(%ServerState{} = state, metadata) do
     if state.agent && state.agent.id do
@@ -161,19 +137,4 @@ defmodule Jido.Agent.Server.Output do
   end
 
   defp add_level_to_dispatch(other, _level), do: other
-
-  # Log with the specific severity level
-  defp do_log(level, message, metadata) do
-    case level do
-      :debug -> Logger.debug(message, metadata)
-      :info -> Logger.info(message, metadata)
-      :notice -> Logger.notice(message, metadata)
-      :warning -> Logger.warning(message, metadata)
-      :error -> Logger.error(message, metadata)
-      :critical -> Logger.critical(message, metadata)
-      :alert -> Logger.alert(message, metadata)
-      :emergency -> Logger.emergency(message, metadata)
-      _ -> Logger.info(message, metadata)
-    end
-  end
 end

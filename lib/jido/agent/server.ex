@@ -123,7 +123,8 @@ defmodule Jido.Agent.Server do
   """
   @spec call(pid() | atom() | {atom(), node()}, Signal.t() | Instruction.t(), timeout()) ::
           {:ok, Signal.t()} | {:error, term()}
-          def call(agent, signal_or_instruction, timeout \\ 5000)
+  def call(agent, signal_or_instruction, timeout \\ 5000)
+
   def call(agent, %Signal{} = signal, timeout) do
     dbug("Calling agent with signal", agent: agent, signal: signal)
 

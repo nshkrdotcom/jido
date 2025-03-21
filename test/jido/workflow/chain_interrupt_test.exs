@@ -9,13 +9,6 @@ defmodule JidoTest.Workflow.ChainInterruptTest do
 
   @moduletag :capture_log
 
-  setup do
-    # Ensure info logs are captured
-    :ok = Logger.configure(level: :info)
-    on_exit(fn -> Logger.configure(level: :warning) end)
-    :ok
-  end
-
   describe "chain/3 with interrupt" do
     test "interrupts chain after first workflow" do
       workflows = [Add, SlowWorkflow, Multiply]

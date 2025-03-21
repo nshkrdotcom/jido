@@ -11,17 +11,9 @@ defmodule Jido.Agent.ServerTest do
   @moduletag :capture_log
 
   setup do
-    # Store original log level
-    original_level = Logger.level()
-    Logger.configure(level: :debug)
-
     # Start a unique test registry for each test
     registry_name = :"TestRegistry_#{System.unique_integer([:positive, :monotonic])}"
     {:ok, _} = Registry.start_link(keys: :unique, name: registry_name)
-
-    on_exit(fn ->
-      Logger.configure(level: original_level)
-    end)
 
     %{registry: registry_name}
   end

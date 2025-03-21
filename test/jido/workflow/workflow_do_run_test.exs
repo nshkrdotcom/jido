@@ -16,14 +16,13 @@ defmodule JidoTest.WorkflowDoRunTest do
   setup :set_mimic_global
 
   setup do
-    original_level = Logger.level()
-    Logger.configure(level: :debug)
+    Logger.put_process_level(self(), :debug)
 
     :ets.new(@attempts_table, [:set, :public, :named_table])
     :ets.insert(@attempts_table, {:attempts, 0})
 
     on_exit(fn ->
-      Logger.configure(level: original_level)
+      Logger.delete_process_level(self())
 
       if :ets.info(@attempts_table) != :undefined do
         :ets.delete(@attempts_table)
@@ -41,11 +40,14 @@ defmodule JidoTest.WorkflowDoRunTest do
       log =
         capture_log(fn ->
           assert {:ok, %{value: 5}} =
-                   Workflow.do_run(BasicAction, %{value: 5}, %{}, telemetry: :full)
+                   Workflow.do_run(BasicAction, %{value: 5}, %{},
+                     telemetry: :full,
+                     log_level: :debug
+                   )
         end)
 
-      assert log =~ "Action Elixir.JidoTest.TestActions.BasicAction start"
-      assert log =~ "Action Elixir.JidoTest.TestActions.BasicAction complete"
+      assert log =~ "Starting execution of JidoTest.TestActions.BasicAction"
+      assert log =~ "Finished execution of JidoTest.TestActions.BasicAction"
       verify!()
     end
 
@@ -56,11 +58,14 @@ defmodule JidoTest.WorkflowDoRunTest do
       log =
         capture_log(fn ->
           assert {:ok, %{value: 5}} =
-                   Workflow.do_run(BasicAction, %{value: 5}, %{}, telemetry: :minimal)
+                   Workflow.do_run(BasicAction, %{value: 5}, %{},
+                     telemetry: :minimal,
+                     log_level: :debug
+                   )
         end)
 
-      assert log =~ "Action Elixir.JidoTest.TestActions.BasicAction start"
-      assert log =~ "Action Elixir.JidoTest.TestActions.BasicAction complete"
+      assert log =~ "Starting execution of JidoTest.TestActions.BasicAction"
+      assert log =~ "Finished execution of JidoTest.TestActions.BasicAction"
       verify!()
     end
 
@@ -86,11 +91,12 @@ defmodule JidoTest.WorkflowDoRunTest do
 
       log =
         capture_log(fn ->
-          assert {:error, _} = Workflow.do_run(ErrorAction, %{}, %{}, telemetry: :full)
+          assert {:error, _} =
+                   Workflow.do_run(ErrorAction, %{}, %{}, telemetry: :full, log_level: :debug)
         end)
 
-      assert log =~ "Action Elixir.JidoTest.TestActions.ErrorAction start"
-      assert log =~ "Action Elixir.JidoTest.TestActions.ErrorAction error"
+      assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
+      assert log =~ "Action JidoTest.TestActions.ErrorAction failed"
       verify!()
     end
   end
@@ -137,32 +143,24 @@ defmodule JidoTest.WorkflowDoRunTest do
     test "emits telemetry event for full mode" do
       expect(:telemetry, :execute, fn _, _, _ -> :ok end)
 
-      log =
-        capture_log(fn ->
-          Workflow.emit_telemetry_event(
-            :test_event,
-            %{action: BasicAction, test: "data"},
-            :full
-          )
-        end)
+      Workflow.emit_telemetry_event(
+        :test_event,
+        %{action: BasicAction, test: "data"},
+        :full
+      )
 
-      assert log =~ "Action Elixir.JidoTest.TestActions.BasicAction test_event"
       verify!()
     end
 
     test "emits telemetry event for minimal mode" do
       expect(:telemetry, :execute, fn _, _, _ -> :ok end)
 
-      log =
-        capture_log(fn ->
-          Workflow.emit_telemetry_event(
-            :test_event,
-            %{action: BasicAction, test: "data"},
-            :minimal
-          )
-        end)
+      Workflow.emit_telemetry_event(
+        :test_event,
+        %{action: BasicAction, test: "data"},
+        :minimal
+      )
 
-      assert log =~ "Action Elixir.JidoTest.TestActions.BasicAction test_event"
       verify!()
     end
 

@@ -17,67 +17,157 @@ defmodule JidoTest.WorkflowExecuteTest do
 
   @moduletag :capture_log
 
+  setup do
+    Logger.put_process_level(self(), :debug)
+  end
+
   describe "execute_action/3" do
     test "successfully executes a Action" do
-      assert {:ok, %{value: 5}} = Workflow.execute_action(BasicAction, %{value: 5}, %{})
+      log =
+        capture_log(fn ->
+          assert {:ok, %{value: 5}} =
+                   Workflow.execute_action(BasicAction, %{value: 5}, %{}, log_level: :debug)
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.BasicAction"
+      assert log =~ "Finished execution of JidoTest.TestActions.BasicAction"
     end
 
     test "successfully executes a Action with context" do
-      assert {:ok, %{result: "5 processed with context: %{context: \"test\"}"}} =
-               Workflow.execute_action(ContextAction, %{input: 5}, %{context: "test"})
+      log =
+        capture_log(fn ->
+          assert {:ok, %{result: "5 processed with context: %{context: \"test\"}"}} =
+                   Workflow.execute_action(ContextAction, %{input: 5}, %{context: "test"},
+                     log_level: :debug
+                   )
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.ContextAction"
+      assert log =~ "Finished execution of JidoTest.TestActions.ContextAction"
     end
 
     test "successfully executes a Action with no params" do
-      assert {:ok, %{result: "No params"}} = Workflow.execute_action(NoParamsAction, %{}, %{})
+      log =
+        capture_log(fn ->
+          assert {:ok, %{result: "No params"}} =
+                   Workflow.execute_action(NoParamsAction, %{}, %{}, log_level: :debug)
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.NoParamsAction"
+      assert log =~ "Finished execution of JidoTest.TestActions.NoParamsAction"
     end
 
     test "successfully executes a Action with raw result" do
-      assert {:ok, %{value: 5}} = Workflow.execute_action(RawResultAction, %{value: 5}, %{})
+      log =
+        capture_log(fn ->
+          assert {:ok, %{value: 5}} =
+                   Workflow.execute_action(RawResultAction, %{value: 5}, %{}, log_level: :debug)
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.RawResultAction"
+      assert log =~ "Finished execution of JidoTest.TestActions.RawResultAction"
     end
 
     test "handles Action execution error" do
-      assert {:error, %Error{type: :execution_error}} =
-               Workflow.execute_action(ErrorAction, %{error_type: :validation}, %{})
+      log =
+        capture_log(fn ->
+          assert {:error, %Error{type: :execution_error}} =
+                   Workflow.execute_action(ErrorAction, %{error_type: :validation}, %{},
+                     log_level: :debug
+                   )
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
+      assert log =~ "Action JidoTest.TestActions.ErrorAction failed"
     end
 
     test "handles runtime errors" do
-      assert {:error, %Error{type: :execution_error, message: message}} =
-               Workflow.execute_action(ErrorAction, %{error_type: :runtime}, %{})
+      log =
+        capture_log(fn ->
+          assert {:error, %Error{type: :execution_error, message: message}} =
+                   Workflow.execute_action(ErrorAction, %{error_type: :runtime}, %{},
+                     log_level: :debug
+                   )
 
-      assert message =~ "Runtime error"
+          assert message =~ "Runtime error"
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
+      assert log =~ "Action JidoTest.TestActions.ErrorAction failed"
     end
 
     test "handles argument errors" do
-      assert {:error, %Error{type: :execution_error}} =
-               Workflow.execute_action(ErrorAction, %{error_type: :argument}, %{})
+      log =
+        capture_log(fn ->
+          assert {:error, %Error{type: :execution_error}} =
+                   Workflow.execute_action(ErrorAction, %{error_type: :argument}, %{},
+                     log_level: :debug
+                   )
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
+      assert log =~ "Action JidoTest.TestActions.ErrorAction failed"
     end
 
     test "handles unexpected errors" do
-      assert {:error, %Error{type: :execution_error, message: message}} =
-               Workflow.execute_action(ErrorAction, %{error_type: :custom}, %{})
+      log =
+        capture_log(fn ->
+          assert {:error, %Error{type: :execution_error, message: message}} =
+                   Workflow.execute_action(ErrorAction, %{error_type: :custom}, %{},
+                     log_level: :debug
+                   )
 
-      assert message =~ "Server error in JidoTest.TestActions.ErrorAction: Custom error"
+          assert message =~ "Server error in JidoTest.TestActions.ErrorAction: Custom error"
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
+      assert log =~ "Action JidoTest.TestActions.ErrorAction failed"
     end
   end
 
   describe "execute_action_with_timeout/4" do
     test "successfully executes a Action with no params" do
-      assert {:ok, %{result: "No params"}} =
-               Workflow.execute_action_with_timeout(NoParamsAction, %{}, %{}, 0)
+      log =
+        capture_log(fn ->
+          assert {:ok, %{result: "No params"}} =
+                   Workflow.execute_action_with_timeout(NoParamsAction, %{}, %{}, 0,
+                     log_level: :debug
+                   )
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.NoParamsAction"
+      assert log =~ "Finished execution of JidoTest.TestActions.NoParamsAction"
     end
 
     test "executes quick action within timeout" do
-      assert {:ok, %{value: 5}} ==
-               Workflow.execute_action_with_timeout(BasicAction, %{value: 5}, %{}, 1000)
+      log =
+        capture_log(fn ->
+          assert {:ok, %{value: 5}} ==
+                   Workflow.execute_action_with_timeout(BasicAction, %{value: 5}, %{}, 1000,
+                     log_level: :debug
+                   )
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.BasicAction"
+      assert log =~ "Finished execution of JidoTest.TestActions.BasicAction"
     end
 
     test "executes without forking a Task when timeout is zero" do
       initial_process_count = length(Process.list())
 
-      result = Workflow.execute_action_with_timeout(BasicAction, %{value: 5}, %{}, 0)
+      log =
+        capture_log(fn ->
+          result =
+            Workflow.execute_action_with_timeout(BasicAction, %{value: 5}, %{}, 0,
+              log_level: :debug
+            )
 
-      # Verify the result is correct
-      assert {:ok, %{value: 5}} = result
+          # Verify the result is correct
+          assert {:ok, %{value: 5}} = result
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.BasicAction"
+      assert log =~ "Finished execution of JidoTest.TestActions.BasicAction"
 
       # Give any potential tasks time to start (though there shouldn't be any)
       Process.sleep(50)
@@ -88,87 +178,186 @@ defmodule JidoTest.WorkflowExecuteTest do
     end
 
     test "times out for slow action" do
-      assert {:error, %Error{type: :timeout}} =
-               Workflow.execute_action_with_timeout(DelayAction, %{delay: 1000}, %{}, 100)
+      log =
+        capture_log(fn ->
+          assert {:error, %Error{type: :timeout}} =
+                   Workflow.execute_action_with_timeout(DelayAction, %{delay: 1000}, %{}, 100,
+                     log_level: :debug
+                   )
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.DelayAction"
     end
 
     test "handles very short timeout" do
-      result = Workflow.execute_action_with_timeout(DelayAction, %{delay: 100}, %{}, 1)
-      assert {:error, %Error{type: :timeout}} = result
+      log =
+        capture_log(fn ->
+          result =
+            Workflow.execute_action_with_timeout(DelayAction, %{delay: 100}, %{}, 1,
+              log_level: :debug
+            )
+
+          assert {:error, %Error{type: :timeout}} = result
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.DelayAction"
     end
 
     test "handles action errors" do
-      assert {:error, %Error{type: :execution_error}} =
-               Workflow.execute_action_with_timeout(
-                 ErrorAction,
-                 %{error_type: :runtime},
-                 %{},
-                 1000
-               )
+      log =
+        capture_log(fn ->
+          assert {:error, %Error{type: :execution_error}} =
+                   Workflow.execute_action_with_timeout(
+                     ErrorAction,
+                     %{error_type: :runtime},
+                     %{},
+                     1000,
+                     log_level: :debug
+                   )
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
+      assert log =~ "Action JidoTest.TestActions.ErrorAction failed"
     end
 
     test "handles unexpected errors during execution" do
-      assert {:error, %Error{type: :execution_error, message: message}} =
-               Workflow.execute_action_with_timeout(ErrorAction, %{type: :unexpected}, %{}, 1000)
+      log =
+        capture_log(fn ->
+          assert {:error, %Error{type: :execution_error, message: message}} =
+                   Workflow.execute_action_with_timeout(
+                     ErrorAction,
+                     %{type: :unexpected},
+                     %{},
+                     1000,
+                     log_level: :debug
+                   )
 
-      assert message =~ "Workflow failed"
+          assert message =~ "Workflow failed"
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
+      assert log =~ "Action JidoTest.TestActions.ErrorAction failed"
     end
 
     test "handles errors thrown during execution" do
-      assert {:error, %Error{type: :execution_error, message: message}} =
-               Workflow.execute_action_with_timeout(ErrorAction, %{type: :throw}, %{}, 1000)
+      log =
+        capture_log(fn ->
+          assert {:error, %Error{type: :execution_error, message: message}} =
+                   Workflow.execute_action_with_timeout(ErrorAction, %{type: :throw}, %{}, 1000,
+                     log_level: :debug
+                   )
 
-      assert message =~ "Caught throw: \"Action threw an error\""
+          assert message =~ "Caught throw: \"Action threw an error\""
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.ErrorAction"
     end
 
     test "handles :DOWN message after killing the process" do
       test_pid = self()
 
-      spawn(fn ->
-        result = Workflow.execute_action_with_timeout(SlowKilledAction, %{}, %{}, 50)
-        send(test_pid, {:result, result})
-      end)
+      log =
+        capture_log(fn ->
+          spawn(fn ->
+            result =
+              Workflow.execute_action_with_timeout(SlowKilledAction, %{}, %{}, 50,
+                log_level: :debug
+              )
 
-      assert_receive {:result, {:error, %Error{type: :timeout}}}, 1000
+            send(test_pid, {:result, result})
+          end)
+
+          assert_receive {:result, {:error, %Error{type: :timeout}}}, 1000
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.SlowKilledAction"
     end
 
     test "uses default timeout when not specified" do
-      assert {:ok, %{result: "Async workflow completed"}} ==
-               Workflow.execute_action_with_timeout(DelayAction, %{delay: 80}, %{}, 0)
+      log =
+        capture_log(fn ->
+          assert {:ok, %{result: "Async workflow completed"}} ==
+                   Workflow.execute_action_with_timeout(DelayAction, %{delay: 80}, %{}, 0,
+                     log_level: :debug
+                   )
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.DelayAction"
+      assert log =~ "Finished execution of JidoTest.TestActions.DelayAction"
     end
 
     test "executes without timeout when timeout is zero" do
-      assert {:ok, %{result: "Async workflow completed"}} ==
-               Workflow.execute_action_with_timeout(DelayAction, %{delay: 80}, %{}, 0)
+      log =
+        capture_log(fn ->
+          assert {:ok, %{result: "Async workflow completed"}} ==
+                   Workflow.execute_action_with_timeout(DelayAction, %{delay: 80}, %{}, 0,
+                     log_level: :debug
+                   )
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.DelayAction"
+      assert log =~ "Finished execution of JidoTest.TestActions.DelayAction"
     end
 
     test "uses default timeout for invalid timeout value" do
-      capture_log(fn ->
-        assert {:ok, %{value: 5}} ==
-                 Workflow.execute_action_with_timeout(BasicAction, %{value: 5}, %{}, -1)
-      end)
+      log =
+        capture_log(fn ->
+          assert {:ok, %{value: 5}} ==
+                   Workflow.execute_action_with_timeout(BasicAction, %{value: 5}, %{}, -1,
+                     log_level: :debug
+                   )
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.BasicAction"
+      assert log =~ "Finished execution of JidoTest.TestActions.BasicAction"
     end
 
     test "handles normal exit" do
-      result = Workflow.execute_action_with_timeout(NormalExitAction, %{}, %{}, 1000)
-      assert {:error, %Error{type: :execution_error, message: "Task exited: :normal"}} = result
+      log =
+        capture_log(fn ->
+          result =
+            Workflow.execute_action_with_timeout(NormalExitAction, %{}, %{}, 1000,
+              log_level: :debug
+            )
+
+          assert {:error, %Error{type: :execution_error, message: "Task exited: :normal"}} =
+                   result
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.NormalExitAction"
     end
 
     test "handles killed tasks" do
-      result = Workflow.execute_action_with_timeout(KilledAction, %{}, %{}, 1000)
-      assert {:error, %Error{type: :execution_error, message: "Task was killed"}} = result
+      log =
+        capture_log(fn ->
+          result =
+            Workflow.execute_action_with_timeout(KilledAction, %{}, %{}, 1000, log_level: :debug)
+
+          assert {:error, %Error{type: :execution_error, message: "Task was killed"}} = result
+        end)
+
+      assert log =~ "Starting execution of JidoTest.TestActions.KilledAction"
     end
 
     test "handles concurrent action execution" do
-      tasks =
-        for i <- 1..10 do
-          Task.async(fn ->
-            Workflow.execute_action_with_timeout(BasicAction, %{value: i}, %{}, 1000)
-          end)
-        end
+      log =
+        capture_log(fn ->
+          tasks =
+            for i <- 1..10 do
+              Task.async(fn ->
+                Workflow.execute_action_with_timeout(BasicAction, %{value: i}, %{}, 1000,
+                  log_level: :debug
+                )
+              end)
+            end
 
-      results = Task.await_many(tasks)
-      assert Enum.all?(results, fn {:ok, %{value: v}} -> is_integer(v) end)
+          results = Task.await_many(tasks)
+          assert Enum.all?(results, fn {:ok, %{value: v}} -> is_integer(v) end)
+        end)
+
+      # Each task should have logged its execution
+      assert log =~ "Starting execution of JidoTest.TestActions.BasicAction"
+      assert log =~ "Finished execution of JidoTest.TestActions.BasicAction"
     end
   end
 end

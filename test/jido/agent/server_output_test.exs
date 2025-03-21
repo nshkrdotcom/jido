@@ -1,5 +1,5 @@
 defmodule Jido.Agent.Server.OutputTest do
-  use JidoTest.Case, async: false
+  use JidoTest.Case, async: true
   require Logger
   import ExUnit.CaptureLog
 
@@ -13,19 +13,12 @@ defmodule Jido.Agent.Server.OutputTest do
   @receive_timeout 500
 
   setup do
-    # Save original log level and set to :info for test isolation
-    original_level = Logger.level()
-    # Set to debug to allow all levels
-    :ok = Logger.configure(level: :debug)
-
     # Register test process for assertions
     test_pid = self()
     Process.put(:test_pid, test_pid)
 
     on_exit(fn ->
       Process.delete(:test_pid)
-      # Restore original log level
-      Logger.configure(level: original_level)
     end)
 
     agent = SignalOutputAgent.new("test-agent-123")
@@ -45,7 +38,7 @@ defmodule Jido.Agent.Server.OutputTest do
       log_level: :debug
     }
 
-    {:ok, %{state: state, test_pid: test_pid, original_log_level: original_level}}
+    {:ok, %{state: state, test_pid: test_pid}}
   end
 
   describe "log/4" do
@@ -73,9 +66,6 @@ defmodule Jido.Agent.Server.OutputTest do
       levels = [:debug, :info, :notice, :warning, :error, :critical, :alert, :emergency]
 
       Enum.each(levels, fn level ->
-        # Configure Logger to accept this level
-        Logger.configure(level: level)
-
         log =
           capture_log([level: level], fn ->
             Output.log(state, level, "#{level} message", [])
@@ -98,27 +88,21 @@ defmodule Jido.Agent.Server.OutputTest do
       assert log =~ "Test with metadata"
     end
 
-    @tag :flaky
-    test "restores original log level after logging", %{
-      state: state,
-      original_log_level: original_level
-    } do
-      # Ensure we start with original level
-      Logger.configure(level: original_level)
+    test "doesn't affect global log level", %{state: state} do
+      # Get global log level before test
+      original_level = Logger.level()
 
-      # Log at a different level
+      # Log at warning level
       capture_log([level: :warning], fn ->
         Output.log(state, :warning, "Test message", [])
       end)
 
-      # Give the logger more time to restore the level
-      Process.sleep(100)
+      # Verify global level hasn't changed
       assert Logger.level() == original_level
     end
   end
 
   describe "emit/2" do
-    @tag :flaky
     test "emits signal with default channel", %{state: state} do
       {:ok, signal} = Signal.new(%{type: "test.signal", data: "test", id: "test-id-123"})
 
@@ -129,8 +113,7 @@ defmodule Jido.Agent.Server.OutputTest do
         end)
 
       # Verify log contains all important signal information
-      assert log =~ "Signal dispatched"
-      assert log =~ "test.signal"
+      assert log =~ "SIGNAL: test.signal"
       assert log =~ "test"
       assert log =~ "Elixir.Jido.Agent.Server.OutputTest"
     end
@@ -220,9 +203,6 @@ defmodule Jido.Agent.Server.OutputTest do
       {:ok, pid} = Server.start_link(agent: BasicAgent, log_level: :debug)
       {:ok, state} = Server.state(pid)
 
-      # Configure Logger to accept debug level
-      Logger.configure(level: :debug)
-
       # Capture all logs and check their levels
       log =
         capture_log([level: :debug], fn ->
@@ -237,9 +217,6 @@ defmodule Jido.Agent.Server.OutputTest do
       agent2 = BasicAgent.new("test-agent-#{System.unique_integer([:positive])}")
       {:ok, pid2} = Server.start_link(agent: agent2, log_level: :error)
       {:ok, state2} = Server.state(pid2)
-
-      # Configure Logger to accept all levels
-      Logger.configure(level: :debug)
 
       # Capture all logs and check their levels
       error_log =

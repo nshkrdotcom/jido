@@ -20,14 +20,13 @@ defmodule JidoTest.WorkflowRunTest do
   setup :set_mimic_global
 
   setup do
-    original_level = Logger.level()
-    Logger.configure(level: :debug)
+    Logger.put_process_level(self(), :debug)
 
     :ets.new(@attempts_table, [:set, :public, :named_table])
     :ets.insert(@attempts_table, {:attempts, 0})
 
     on_exit(fn ->
-      Logger.configure(level: original_level)
+      Logger.delete_process_level(self())
 
       if :ets.info(@attempts_table) != :undefined do
         :ets.delete(@attempts_table)
@@ -47,8 +46,7 @@ defmodule JidoTest.WorkflowRunTest do
           assert {:ok, %{value: 5}} = Workflow.run(BasicAction, %{value: 5})
         end)
 
-      assert log =~ "Action Elixir.JidoTest.TestActions.BasicAction start"
-      assert log =~ "Action Elixir.JidoTest.TestActions.BasicAction complete"
+      assert log =~ "Executing JidoTest.TestActions.BasicAction with params: %{value: 5}"
       verify!()
     end
 
@@ -65,8 +63,9 @@ defmodule JidoTest.WorkflowRunTest do
                    })
         end)
 
-      assert log =~ "Action Elixir.Jido.Actions.Directives.EnqueueAction start"
-      assert log =~ "Action Elixir.Jido.Actions.Directives.EnqueueAction complete"
+      assert log =~
+               "Executing Jido.Actions.Directives.EnqueueAction with params: %{params: %{value: 5}"
+
       verify!()
     end
 
@@ -83,8 +82,10 @@ defmodule JidoTest.WorkflowRunTest do
                    })
         end)
 
-      assert log =~ "Action Elixir.JidoTest.TestActions.ErrorDirective start"
-      assert log =~ "Action Elixir.JidoTest.TestActions.ErrorDirective error"
+      assert log =~
+               "Executing JidoTest.TestActions.ErrorDirective with params: %{params: %{value: 5}"
+
+      assert log =~ "Action JidoTest.TestActions.ErrorDirective failed"
       verify!()
     end
 
@@ -97,8 +98,8 @@ defmodule JidoTest.WorkflowRunTest do
           assert {:error, %Error{}} = Workflow.run(ErrorAction, %{}, %{}, timeout: 50)
         end)
 
-      assert log =~ "Action Elixir.JidoTest.TestActions.ErrorAction start"
-      assert log =~ "Action Elixir.JidoTest.TestActions.ErrorAction error"
+      assert log =~ "Executing JidoTest.TestActions.ErrorAction with params: %{}"
+      assert log =~ "Action JidoTest.TestActions.ErrorAction failed"
       verify!()
     end
 

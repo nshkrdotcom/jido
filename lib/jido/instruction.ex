@@ -239,6 +239,66 @@ defmodule Jido.Instruction do
   def new(_), do: {:error, :missing_action}
 
   @doc """
+  Normalizes a single instruction into an instruction struct. Unlike normalize/3,
+  this function enforces that the input must be a single instruction and returns
+  a single instruction struct rather than a list.
+
+  ## Parameters
+    * `input` - One of:
+      * Single instruction struct (%Instruction{})
+      * Single action module (MyApp.Actions.ProcessOrder)
+      * Action tuple with params ({MyApp.Actions.ProcessOrder, %{order_id: "123"}})
+      * Action tuple with empty params ({MyApp.Actions.ProcessOrder, %{}})
+    * `context` - Optional context map to merge into the instruction (default: %{})
+    * `opts` - Optional keyword list of options (default: [])
+
+  ## Returns
+    * `{:ok, %Instruction{}}` - Successfully normalized instruction
+    * `{:error, term()}` - If normalization fails
+
+  ## Examples
+
+      iex> Instruction.normalize_single(MyApp.Actions.ProcessOrder)
+      {:ok, %Instruction{action: MyApp.Actions.ProcessOrder}}
+
+      iex> Instruction.normalize_single({MyApp.Actions.ProcessOrder, %{order_id: "123"}})
+      {:ok, %Instruction{action: MyApp.Actions.ProcessOrder, params: %{order_id: "123"}}}
+  """
+  @spec normalize_single(instruction(), map(), keyword()) :: {:ok, t()} | {:error, term()}
+  def normalize_single(input, context \\ %{}, opts \\ [])
+
+  # Already normalized instruction - just merge context and opts
+  def normalize_single(%__MODULE__{} = instruction, context, opts) do
+    context = context || %{}
+    merged_opts = Keyword.merge(instruction.opts, opts)
+    {:ok, %{instruction | context: Map.merge(instruction.context, context), opts: merged_opts}}
+  end
+
+  # Single action module
+  def normalize_single(action, context, opts) when is_atom(action) do
+    context = context || %{}
+    {:ok, new!(%{action: action, params: %{}, context: context, opts: opts})}
+  end
+
+  # Action tuple with params
+  def normalize_single({action, params}, context, opts) when is_atom(action) do
+    context = context || %{}
+
+    case normalize_params(params) do
+      {:ok, normalized_params} ->
+        {:ok, new!(%{action: action, params: normalized_params, context: context, opts: opts})}
+
+      error ->
+        error
+    end
+  end
+
+  # Invalid format
+  def normalize_single(invalid, _context, _opts) do
+    {:error, Error.execution_error("Invalid instruction format", %{instruction: invalid})}
+  end
+
+  @doc """
   Normalizes instruction shorthand input into instruction structs. Accepts a variety of input formats
   and returns a list of normalized instruction structs.
 
@@ -291,8 +351,8 @@ defmodule Jido.Instruction do
 
       instructions
       |> Enum.reduce_while({:ok, []}, fn instruction, {:ok, acc} ->
-        case normalize(instruction, context, opts) do
-          {:ok, [normalized]} -> {:cont, {:ok, [normalized | acc]}}
+        case normalize_single(instruction, context, opts) do
+          {:ok, normalized} -> {:cont, {:ok, [normalized | acc]}}
           error -> {:halt, error}
         end
       end)
@@ -303,35 +363,12 @@ defmodule Jido.Instruction do
     end
   end
 
-  # Already normalized instruction - just merge context and opts
-  def normalize(%__MODULE__{} = instruction, context, opts) do
-    context = context || %{}
-    merged_opts = if Enum.empty?(instruction.opts), do: opts, else: instruction.opts
-    {:ok, [%{instruction | context: Map.merge(instruction.context, context), opts: merged_opts}]}
-  end
-
-  # Single action module
-  def normalize(action, context, opts) when is_atom(action) do
-    context = context || %{}
-    {:ok, [new!(%{action: action, params: %{}, context: context, opts: opts})]}
-  end
-
-  # Action tuple with params
-  def normalize({action, params}, context, opts) when is_atom(action) do
-    context = context || %{}
-
-    case normalize_params(params) do
-      {:ok, normalized_params} ->
-        {:ok, [new!(%{action: action, params: normalized_params, context: context, opts: opts})]}
-
-      error ->
-        error
+  # Single instruction - normalize and wrap in list
+  def normalize(instruction, context, opts) do
+    case normalize_single(instruction, context, opts) do
+      {:ok, normalized} -> {:ok, [normalized]}
+      error -> error
     end
-  end
-
-  # Invalid format
-  def normalize(invalid, _context, _opts) do
-    {:error, Error.execution_error("Invalid instruction format", %{instruction: invalid})}
   end
 
   @doc """

@@ -92,7 +92,7 @@ defmodule Jido.InstructionTest do
       }
 
       assert {:ok, [normalized]} = Instruction.normalize(instruction, %{}, retry: true)
-      assert normalized.opts == [timeout: 20_000]
+      assert normalized.opts == [timeout: 20_000, retry: true]
     end
 
     test "uses provided options when instruction has none" do
@@ -146,6 +146,73 @@ defmodule Jido.InstructionTest do
       instruction = %Instruction{action: BasicAction}
       assert :ok = Instruction.validate_allowed_actions(instruction, [BasicAction])
       assert {:error, %Error{}} = Instruction.validate_allowed_actions(instruction, [NoSchema])
+    end
+  end
+
+  describe "normalize_single/3" do
+    test "normalizes instruction struct" do
+      instruction = %Instruction{
+        action: BasicAction,
+        params: %{value: 1},
+        context: %{local: true}
+      }
+
+      assert {:ok, normalized} = Instruction.normalize_single(instruction, %{request_id: "123"})
+      assert normalized.action == BasicAction
+      assert normalized.params == %{value: 1}
+      assert normalized.context == %{local: true, request_id: "123"}
+    end
+
+    test "normalizes bare action module" do
+      assert {:ok, instruction} = Instruction.normalize_single(BasicAction)
+      assert instruction.action == BasicAction
+      assert instruction.params == %{}
+      assert instruction.context == %{}
+    end
+
+    test "normalizes action tuple with map params" do
+      assert {:ok, instruction} = Instruction.normalize_single({BasicAction, %{value: 42}})
+      assert instruction.action == BasicAction
+      assert instruction.params == %{value: 42}
+      assert instruction.context == %{}
+    end
+
+    test "normalizes action tuple with keyword list params" do
+      assert {:ok, instruction} =
+               Instruction.normalize_single({BasicAction, [value: 42, name: "test"]})
+
+      assert instruction.action == BasicAction
+      assert instruction.params == %{value: 42, name: "test"}
+      assert instruction.context == %{}
+    end
+
+    test "returns error for invalid params format" do
+      assert {:error, %Error{}} =
+               Instruction.normalize_single({BasicAction, "invalid"})
+    end
+
+    test "returns error for invalid instruction format" do
+      assert {:error, %Error{}} = Instruction.normalize_single(123)
+    end
+
+    test "returns error for list input" do
+      assert {:error, %Error{}} = Instruction.normalize_single([BasicAction])
+    end
+
+    test "merges options from input" do
+      instruction = %Instruction{
+        action: BasicAction,
+        params: %{value: 1},
+        opts: [timeout: 20_000]
+      }
+
+      assert {:ok, normalized} = Instruction.normalize_single(instruction, %{}, retry: true)
+      assert normalized.opts == [timeout: 20_000, retry: true]
+    end
+
+    test "uses provided options when instruction has none" do
+      assert {:ok, normalized} = Instruction.normalize_single(BasicAction, %{}, retry: true)
+      assert normalized.opts == [retry: true]
     end
   end
 end

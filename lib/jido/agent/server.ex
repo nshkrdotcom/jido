@@ -26,7 +26,7 @@ defmodule Jido.Agent.Server do
   alias Jido.Agent.Server.Skills, as: ServerSkills
   alias Jido.Agent.Server.State, as: ServerState
   alias Jido.Signal
-
+  alias Jido.Instruction
   # Default actions to register with every agent
   @default_actions [
     Jido.Actions.Basic.Log,
@@ -121,10 +121,11 @@ defmodule Jido.Agent.Server do
   @doc """
   Sends a synchronous signal to an agent and waits for the response.
   """
-  @spec call(pid() | atom() | {atom(), node()}, Signal.t()) ::
+  @spec call(pid() | atom() | {atom(), node()}, Signal.t() | Instruction.t(), timeout()) ::
           {:ok, Signal.t()} | {:error, term()}
-  def call(agent, %Signal{} = signal, timeout \\ 5000) do
-    dbug("Calling agent", agent: agent, signal: signal)
+          def call(agent, signal_or_instruction, timeout \\ 5000)
+  def call(agent, %Signal{} = signal, timeout) do
+    dbug("Calling agent with signal", agent: agent, signal: signal)
 
     with {:ok, pid} <- Jido.resolve_pid(agent) do
       case GenServer.call(pid, {:signal, signal}, timeout) do
@@ -139,10 +140,16 @@ defmodule Jido.Agent.Server do
     end
   end
 
+  def call(agent, %Instruction{} = instruction, timeout) do
+    dbug("Calling agent with instruction", agent: agent, instruction: instruction)
+    signal = Signal.new!(%{type: "instruction", data: instruction})
+    call(agent, signal, timeout)
+  end
+
   @doc """
   Sends an asynchronous signal to an agent.
   """
-  @spec cast(pid() | atom() | {atom(), node()}, Signal.t()) ::
+  @spec cast(pid() | atom() | {atom(), node()}, Signal.t() | Instruction.t()) ::
           {:ok, String.t()} | {:error, term()}
   def cast(agent, %Signal{} = signal) do
     dbug("Casting signal to agent", agent: agent, signal: signal)
@@ -151,6 +158,12 @@ defmodule Jido.Agent.Server do
       GenServer.cast(pid, {:signal, signal})
       {:ok, signal.id}
     end
+  end
+
+  def cast(agent, %Instruction{} = instruction) do
+    dbug("Casting instruction to agent", agent: agent, instruction: instruction)
+    signal = Signal.new!(%{type: "instruction", data: instruction})
+    cast(agent, signal)
   end
 
   @impl true

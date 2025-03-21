@@ -21,7 +21,8 @@ defmodule Jido.Runner.Chain do
   @type chain_result :: {:ok, Jido.Agent.t(), [Directive.t()]} | {:error, Error.t()}
   @type chain_opts :: [
           merge_results: boolean(),
-          apply_directives?: boolean()
+          apply_directives?: boolean(),
+          log_level: atom()
         ]
 
   @doc """
@@ -131,7 +132,11 @@ defmodule Jido.Runner.Chain do
       end
 
     # Inject agent state into instruction context
-    instruction = %{instruction | context: Map.put(instruction.context, :state, agent.state)}
+    instruction = %{
+      instruction
+      | context: Map.put(instruction.context, :state, agent.state),
+        opts: opts
+    }
 
     dbug("Running workflow", agent: agent.id, instruction: instruction.id)
 

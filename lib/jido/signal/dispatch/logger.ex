@@ -145,7 +145,7 @@ defmodule Jido.Signal.Dispatch.LoggerAdapter do
     else
       Logger.log(
         level,
-        "Signal dispatched: #{signal.type} from #{signal.source} with data=#{inspect(signal.data)}",
+        "SIGNAL: #{signal.type} from #{signal.source} with data=#{inspect(signal.data)}",
         []
       )
     end

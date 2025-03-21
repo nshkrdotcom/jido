@@ -124,6 +124,7 @@ defmodule Jido.Agent.Server.Runtime do
 
     defp do_agent_cmd(%ServerState{agent: agent} = state, instructions, opts) do
       opts = Keyword.put(opts, :apply_directives?, false)
+      opts = Keyword.put(opts, :log_level, state.log_level)
 
       case agent.__struct__.cmd(agent, instructions, %{}, opts) do
         {:ok, new_agent, directives} ->
@@ -185,7 +186,7 @@ defmodule Jido.Agent.Server.Runtime do
 
         :instruction_result
         |> ServerSignal.out_signal(state, processed_result, opts)
-        |> ServerOutput.emit(opts)
+        |> ServerOutput.emit(state, opts)
 
         # Now handle any state transitions without emitting signals
         case state.status do
@@ -226,7 +227,7 @@ defmodule Jido.Agent.Server.Runtime do
 
             :signal_result
             |> ServerSignal.out_signal(state, result, opts)
-            |> ServerOutput.emit(opts)
+            |> ServerOutput.emit(state, opts)
 
             {:ok, state, result}
 
@@ -312,7 +313,7 @@ defmodule Jido.Agent.Server.Runtime do
         Error.execution_error(message, %{reason: reason}),
         %{source: source}
       )
-      |> ServerOutput.emit()
+      |> ServerOutput.emit(state)
     end
 
     defp set_current_signal(%ServerState{} = state, %Signal{} = signal) do

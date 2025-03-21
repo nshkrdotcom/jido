@@ -110,10 +110,11 @@ defmodule Jido.Agent.ServerTest do
       end
 
       # Start server with the pre-configured agent and additional actions
-      {:ok, pid} = Server.start_link(
-        agent: agent_with_action,
-        actions: [ServerAction]
-      )
+      {:ok, pid} =
+        Server.start_link(
+          agent: agent_with_action,
+          actions: [ServerAction]
+        )
 
       {:ok, state} = Server.state(pid)
       registered_actions = Jido.Agent.registered_actions(state.agent)

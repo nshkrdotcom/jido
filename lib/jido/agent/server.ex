@@ -156,7 +156,6 @@ defmodule Jido.Agent.Server do
   @impl true
   def init(opts) do
     dbug("Initializing agent server", opts: opts)
-    ServerOutput.log(opts[:log_level], "Initializing agent server")
 
     # Ensure ID consistency - should be a no-op if already consistent from start_link
     opts = ensure_id_consistency(opts)
@@ -171,11 +170,17 @@ defmodule Jido.Agent.Server do
          {:ok, state, _pids} <- ServerProcess.start(state, opts[:child_specs]),
          {:ok, state} <- ServerCallback.mount(state),
          {:ok, state} <- ServerState.transition(state, :idle) do
-      dbug("Agent server initialized successfully")
+      agent_name = state.agent.__struct__ |> Module.split() |> List.last()
+
+      ServerOutput.log(
+        state,
+        :info,
+        "Initializing #{agent_name} Agent Server, ID: #{state.agent.id}, Log Level: #{state.log_level}"
+      )
 
       :started
       |> ServerSignal.event_signal(state, %{agent_id: state.agent.id})
-      |> ServerOutput.emit()
+      |> ServerOutput.emit(state)
 
       {:ok, state}
     else
@@ -296,7 +301,7 @@ defmodule Jido.Agent.Server do
 
     :process_terminated
     |> ServerSignal.event_signal(state, %{pid: pid, reason: reason})
-    |> ServerOutput.emit()
+    |> ServerOutput.emit(state)
 
     {:noreply, state}
   end
@@ -347,7 +352,7 @@ defmodule Jido.Agent.Server do
       {:ok, new_state} ->
         :stopped
         |> ServerSignal.event_signal(state, %{reason: reason})
-        |> ServerOutput.emit()
+        |> ServerOutput.emit(state)
 
         ServerProcess.stop_supervisor(new_state)
         :ok
@@ -515,7 +520,8 @@ defmodule Jido.Agent.Server do
   end
 
   @spec register_actions(ServerState.t(), [module()]) :: {:ok, ServerState.t()} | {:error, term()}
-  defp register_actions(%ServerState{} = state, provided_actions) when is_list(provided_actions) do
+  defp register_actions(%ServerState{} = state, provided_actions)
+       when is_list(provided_actions) do
     dbug("Registering actions with agent",
       default_actions: @default_actions,
       provided_actions: provided_actions
@@ -531,7 +537,9 @@ defmodule Jido.Agent.Server do
           agent_id: updated_agent.id,
           actions: Jido.Agent.registered_actions(updated_agent)
         )
+
         {:ok, %{state | agent: updated_agent}}
+
       {:error, reason} ->
         dbug("Failed to register actions", reason: reason)
         {:error, reason}

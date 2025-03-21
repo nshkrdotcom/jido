@@ -32,7 +32,7 @@ defmodule Jido.Runner.Simple do
   alias Jido.Error
   alias Jido.Agent.Directive
 
-  @type run_opts :: [apply_directives?: boolean()]
+  @type run_opts :: [apply_directives?: boolean(), log_level: atom()]
   @type run_result :: {:ok, Jido.Agent.t(), list()} | {:error, Error.t()}
 
   @doc """
@@ -110,8 +110,13 @@ defmodule Jido.Runner.Simple do
   @doc false
   @spec execute_instruction(Jido.Agent.t(), Instruction.t(), keyword()) :: run_result()
   defp execute_instruction(agent, instruction, opts) do
-    # Inject agent state into instruction context
-    instruction = %{instruction | context: Map.put(instruction.context, :state, agent.state)}
+    # Inject agent state and runtime opts into instruction
+    instruction = %{
+      instruction
+      | context: Map.put(instruction.context, :state, agent.state),
+        opts: opts
+    }
+
     dbug("Executing instruction", instruction: instruction)
 
     case Jido.Workflow.run(instruction) do

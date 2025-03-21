@@ -164,7 +164,7 @@ defmodule Jido.Agent.Server.Process do
 
         :process_terminated
         |> ServerSignal.event_signal(state, %{child_pid: child_pid})
-        |> ServerOutput.emit()
+        |> ServerOutput.emit(state)
 
         :ok
 
@@ -201,7 +201,7 @@ defmodule Jido.Agent.Server.Process do
 
       :process_restarted
       |> ServerSignal.event_signal(state, %{child_pid: child_pid, child_spec: child_spec})
-      |> ServerOutput.emit()
+      |> ServerOutput.emit(state)
 
       result
     else
@@ -214,7 +214,7 @@ defmodule Jido.Agent.Server.Process do
           child_spec: child_spec,
           error: error
         })
-        |> ServerOutput.emit()
+        |> ServerOutput.emit(state)
 
         error
     end
@@ -305,7 +305,7 @@ defmodule Jido.Agent.Server.Process do
 
             :process_started
             |> ServerSignal.event_signal(state, %{child_pid: pid, child_spec: child_spec})
-            |> ServerOutput.emit()
+            |> ServerOutput.emit(state)
 
             result
 
@@ -314,7 +314,7 @@ defmodule Jido.Agent.Server.Process do
 
             :process_failed
             |> ServerSignal.event_signal(state, %{child_spec: child_spec, error: reason})
-            |> ServerOutput.emit()
+            |> ServerOutput.emit(state)
 
             error
         end
@@ -324,7 +324,7 @@ defmodule Jido.Agent.Server.Process do
 
         :process_failed
         |> ServerSignal.event_signal(state, %{child_spec: child_spec, error: reason})
-        |> ServerOutput.emit()
+        |> ServerOutput.emit(state)
 
         error
     end

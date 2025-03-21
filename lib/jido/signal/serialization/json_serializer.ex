@@ -26,10 +26,13 @@ if Code.ensure_loaded?(Jason) do
     def deserialize(binary, config) do
       {type, opts} =
         case Keyword.get(config, :type) do
-          nil -> {nil, []}
+          nil ->
+            {nil, []}
+
           type_str ->
             # Check if the module exists before trying to convert to a struct
             module_name = String.to_atom(type_str)
+
             if Code.ensure_loaded?(module_name) do
               {TypeProvider.to_struct(type_str), [keys: :atoms]}
             else
@@ -44,6 +47,7 @@ if Code.ensure_loaded?(Jason) do
     end
 
     defp to_struct(data, nil), do: data
+
     defp to_struct(data, struct) when is_atom(struct) do
       # Check if the module exists to prevent UndefinedFunctionError
       if Code.ensure_loaded?(struct) do
@@ -52,6 +56,7 @@ if Code.ensure_loaded?(Jason) do
         raise ArgumentError, "Cannot deserialize to non-existent module: #{inspect(struct)}"
       end
     end
+
     # Handle the case where struct is already a struct type (not a module name)
     defp to_struct(data, %type{} = _struct) do
       struct(type, data)

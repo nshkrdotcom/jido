@@ -2,6 +2,8 @@ defmodule Jido.Agent.Server.Options do
   @moduledoc false
   use ExDbug, enabled: false
 
+  @valid_log_levels [:debug, :info, :notice, :warning, :error, :critical, :alert, :emergency]
+
   @server_state_opts_schema NimbleOptions.new!(
                               id: [
                                 type: :string,
@@ -19,9 +21,9 @@ defmodule Jido.Agent.Server.Options do
                                 doc: "Server execution mode"
                               ],
                               log_level: [
-                                type: {:in, [:debug, :info, :warning, :error]},
+                                type: {:in, @valid_log_levels},
                                 default: :info,
-                                doc: "Logging verbosity level"
+                                doc: "Controls the verbosity of agent logs and signals."
                               ],
                               max_queue_size: [
                                 type: :non_neg_integer,
@@ -35,7 +37,7 @@ defmodule Jido.Agent.Server.Options do
                               ],
                               dispatch: [
                                 type: {:custom, __MODULE__, :validate_dispatch_opts, []},
-                                default: {:logger, [level: :info]},
+                                default: {:logger, []},
                                 doc: "Dispatch configuration for signal routing"
                               ],
                               routes: [
@@ -47,7 +49,8 @@ defmodule Jido.Agent.Server.Options do
                               actions: [
                                 type: {:custom, __MODULE__, :validate_actions_opts, []},
                                 default: [],
-                                doc: "List of Action modules to register with the agent at startup"
+                                doc:
+                                  "List of Action modules to register with the agent at startup"
                               ],
                               sensors: [
                                 type: {:list, :mod_arg},
@@ -195,6 +198,7 @@ defmodule Jido.Agent.Server.Options do
       {:ok, validated} ->
         dbug("Actions validated successfully", validated: validated)
         {:ok, validated}
+
       {:error, reason} ->
         dbug("Actions validation failed", reason: reason)
         {:error, reason}

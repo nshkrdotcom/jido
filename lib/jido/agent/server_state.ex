@@ -189,7 +189,7 @@ defmodule Jido.Agent.Server.State do
 
         :transition_failed
         |> ServerSignal.event_signal(state, %{from: current, to: desired})
-        |> ServerOutput.emit()
+        |> ServerOutput.emit(state)
 
         {:error, {:invalid_transition, current, desired}}
 
@@ -198,7 +198,7 @@ defmodule Jido.Agent.Server.State do
 
         :transition_succeeded
         |> ServerSignal.event_signal(state, %{from: current, to: desired})
-        |> ServerOutput.emit()
+        |> ServerOutput.emit(state)
 
         {:ok, %{state | status: desired}}
     end
@@ -244,7 +244,7 @@ defmodule Jido.Agent.Server.State do
         queue_size: queue_size,
         max_size: state.max_queue_size
       })
-      |> ServerOutput.emit()
+      |> ServerOutput.emit(state)
 
       {:error, :queue_overflow}
     else
@@ -294,7 +294,7 @@ defmodule Jido.Agent.Server.State do
         queue_size: queue_size,
         max_size: state.max_queue_size
       })
-      |> ServerOutput.emit()
+      |> ServerOutput.emit(state)
 
       {:error, :queue_overflow}
     else
@@ -376,7 +376,7 @@ defmodule Jido.Agent.Server.State do
     |> ServerSignal.event_signal(state, %{
       queue_size: :queue.len(state.pending_signals)
     })
-    |> ServerOutput.emit()
+    |> ServerOutput.emit(state)
 
     {:ok, %{state | pending_signals: :queue.new()}}
   end
@@ -419,7 +419,7 @@ defmodule Jido.Agent.Server.State do
         queue_size: queue_size,
         max_size: state.max_queue_size
       })
-      |> ServerOutput.emit()
+      |> ServerOutput.emit(state)
 
       {:error, :queue_overflow}
     else

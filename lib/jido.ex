@@ -49,7 +49,7 @@ defmodule Jido do
       # Public function to retrieve config from application environment
       def config do
         Application.get_env(@otp_app, __MODULE__, [])
-        |> Keyword.put_new(:agent_registry, Jido.Agent.Registry)
+        |> Keyword.put_new(:agent_registry, Jido.Registry)
       end
 
       # Get the configured agent registry
@@ -106,7 +106,7 @@ defmodule Jido do
   """
   @spec get_agent(String.t() | atom(), keyword()) :: {:ok, pid()} | {:error, :not_found}
   def get_agent(id, opts \\ []) when is_binary(id) or is_atom(id) do
-    registry = opts[:registry] || Jido.Agent.Registry
+    registry = opts[:registry] || Jido.Registry
 
     case Registry.lookup(registry, id) do
       [{pid, _}] -> {:ok, pid}
@@ -220,7 +220,7 @@ defmodule Jido do
         |> Keyword.put_new(:max_queue_size, 10_000)
         |> Keyword.put_new(:mode, :auto)
         |> Keyword.put_new(:log_level, :info)
-        |> Keyword.put_new(:registry, Jido.Agent.Registry)
+        |> Keyword.put_new(:registry, Jido.Registry)
         |> Keyword.put_new(
           :dispatch,
           {:logger, []}
@@ -241,34 +241,6 @@ defmodule Jido do
     Jido.Supervisor.start_link(jido_module, config)
   end
 
-  @doc """
-  Retrieves a prompt file from the priv/prompts directory by its name.
-
-  ## Parameters
-
-  - `name`: An atom representing the name of the prompt file (without .txt extension)
-
-  ## Returns
-
-  The contents of the prompt file as a string if found, otherwise raises an error.
-
-  ## Examples
-
-      iex> Jido.prompt(:system)
-      "You are a helpful AI assistant..."
-
-      iex> Jido.prompt(:nonexistent)
-      ** (File.Error) could not read file priv/prompts/nonexistent.txt
-
-  """
-  @spec prompt(atom()) :: String.t()
-  def prompt(name) when is_atom(name) do
-    app = Application.get_application(__MODULE__)
-    path = :code.priv_dir(app)
-    prompt_path = Path.join([path, "prompts", "#{name}.txt"])
-    File.read!(prompt_path)
-  end
-
   @spec resolve_pid(server()) :: {:ok, pid()} | {:error, :server_not_found}
   def resolve_pid(pid) when is_pid(pid), do: {:ok, pid}
 
@@ -284,7 +256,7 @@ defmodule Jido do
 
   def resolve_pid(name) when is_atom(name) or is_binary(name) do
     name = if is_atom(name), do: Atom.to_string(name), else: name
-    resolve_pid({name, Jido.Agent.Registry})
+    resolve_pid({name, Jido.Registry})
   end
 
   # Component Discovery

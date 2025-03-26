@@ -368,4 +368,94 @@ defmodule Jido.Signal do
   end
 
   defp parse_jido_dispatch(_), do: {:error, "invalid dispatch config"}
+
+  alias Jido.Signal.Serialization.JsonSerializer
+
+  @doc """
+  Serializes a Signal or a list of Signals to JSON string.
+
+  ## Parameters
+
+  - `signal_or_list`: A Signal struct or list of Signal structs
+
+  ## Returns
+
+  A JSON string representing the Signal(s)
+
+  ## Examples
+
+      iex> signal = %Jido.Signal{type: "example.event", source: "/example"}
+      iex> json = Jido.Signal.serialize(signal)
+      iex> is_binary(json)
+      true
+
+      iex> # Serializing multiple Signals
+      iex> signals = [
+      ...>   %Jido.Signal{type: "event1", source: "/ex1"},
+      ...>   %Jido.Signal{type: "event2", source: "/ex2"}
+      ...> ]
+      iex> json = Jido.Signal.serialize(signals)
+      iex> is_binary(json)
+      true
+  """
+  @spec serialize(t() | list(t())) :: binary()
+  def serialize(%__MODULE__{} = signal) do
+    JsonSerializer.serialize(signal)
+  end
+
+  def serialize(signals) when is_list(signals) do
+    JsonSerializer.serialize(signals)
+  end
+
+  @doc """
+  Deserializes a JSON string back into a Signal struct or list of Signal structs.
+
+  ## Parameters
+
+  - `json`: The JSON string to deserialize
+
+  ## Returns
+
+  `{:ok, Signal.t() | list(Signal.t())}` if successful, `{:error, reason}` otherwise
+
+  ## Examples
+
+      iex> json = ~s({"type":"example.event","source":"/example","id":"123"})
+      iex> {:ok, signal} = Jido.Signal.deserialize(json)
+      iex> signal.type
+      "example.event"
+
+      iex> # Deserializing multiple Signals
+      iex> json = ~s([{"type":"event1","source":"/ex1"},{"type":"event2","source":"/ex2"}])
+      iex> {:ok, signals} = Jido.Signal.deserialize(json)
+      iex> length(signals)
+      2
+  """
+  @spec deserialize(binary()) :: {:ok, t() | list(t())} | {:error, term()}
+  def deserialize(json) when is_binary(json) do
+    try do
+      decoded = Jason.decode!(json)
+
+      result =
+        if is_list(decoded) do
+          # Handle array of Signals
+          Enum.map(decoded, fn signal_map ->
+            case from_map(signal_map) do
+              {:ok, signal} -> signal
+              {:error, reason} -> raise "Failed to parse signal: #{reason}"
+            end
+          end)
+        else
+          # Handle single Signal
+          case from_map(decoded) do
+            {:ok, signal} -> signal
+            {:error, reason} -> raise "Failed to parse signal: #{reason}"
+          end
+        end
+
+      {:ok, result}
+    rescue
+      e -> {:error, Exception.message(e)}
+    end
+  end
 end

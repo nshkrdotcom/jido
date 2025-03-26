@@ -4,22 +4,15 @@ defmodule Jido.Application do
 
   def start(_type, _args) do
     children = [
+      # Telemetry handler
+      Jido.Telemetry,
+
       # Exec Async Actions Task Supervisor
       {Task.Supervisor, name: Jido.Exec.TaskSupervisor},
 
-      # Default global process registry
+      # Global Registry & Default Supervisor
       {Registry, keys: :unique, name: Jido.Registry},
-
-      # Agent Registry & Default Supervisor
-      {Registry, keys: :unique, name: Jido.Agent.Registry},
       {DynamicSupervisor, strategy: :one_for_one, name: Jido.Agent.Supervisor},
-
-      # Bus Registry & Default Supervisor
-      {Registry, keys: :unique, name: Jido.Bus.Registry},
-      {DynamicSupervisor, strategy: :one_for_one, name: Jido.Bus.Supervisor},
-
-      # Default Bus - register with a name
-      {Jido.Signal.Bus, name: :default_bus},
 
       # Add the Jido Scheduler (Quantum) under the name :jido_quantum
       {Jido.Scheduler, name: Jido.Quantum}

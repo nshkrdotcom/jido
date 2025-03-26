@@ -97,7 +97,6 @@ defmodule JidoTest.ExecCompensateTest do
   end
 
   describe "telemetry with compensation" do
-    @tag :flaky
     test "emits telemetry events for compensation flow" do
       params = %{should_fail: true}
       expect(:telemetry, :execute, fn _, _, _ -> :ok end)

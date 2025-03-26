@@ -73,6 +73,11 @@ defmodule Jido.Exec do
     - `:backoff` - Initial backoff time in milliseconds, doubles with each retry (default: #{@initial_backoff}).
     - `:log_level` - Override the global Logger level for this specific action. Accepts #{inspect(Logger.levels())}.
 
+  ## Action Metadata in Context
+
+  The action's metadata (name, description, category, tags, version, etc.) is made available
+  to the action's `run/2` function via the `context` parameter under the `:action_metadata` key.
+  This allows actions to access their own metadata when needed.
 
   ## Returns
 
@@ -89,6 +94,19 @@ defmodule Jido.Exec do
 
       iex> Jido.Exec.run(MyAction, %{input: "value"}, %{}, log_level: :debug)
       {:ok, %{result: "processed value"}}
+
+      # Access action metadata in the action:
+      # defmodule MyAction do
+      #   use Jido.Action,
+      #     name: "my_action",
+      #     description: "Example action",
+      #     vsn: "1.0.0"
+      #
+      #   def run(_params, context) do
+      #     metadata = context.action_metadata
+      #     {:ok, %{name: metadata.name, version: metadata.vsn}}
+      #   end
+      # end
   """
   @spec run(action(), params(), context(), run_opts()) :: {:ok, map()} | {:error, Error.t()}
   def run(action, params \\ %{}, context \\ %{}, opts \\ [])
@@ -101,19 +119,22 @@ defmodule Jido.Exec do
          {:ok, normalized_context} <- normalize_context(context),
          :ok <- validate_action(action),
          OK.success(validated_params) <- validate_params(action, normalized_params) do
+      enhanced_context =
+        Map.put(normalized_context, :action_metadata, action.__action_metadata__())
+
       dbug("Params and context normalized and validated",
         normalized_params: normalized_params,
-        normalized_context: normalized_context,
+        normalized_context: enhanced_context,
         validated_params: validated_params
       )
 
       cond_log(
         log_level,
         :notice,
-        "Executing #{inspect(action)} with params: #{inspect(validated_params)} and context: #{inspect(normalized_context)}"
+        "Executing #{inspect(action)} with params: #{inspect(validated_params)} and context: #{inspect(enhanced_context)}"
       )
 
-      do_run_with_retry(action, validated_params, normalized_context, opts)
+      do_run_with_retry(action, validated_params, enhanced_context, opts)
     else
       {:error, reason} ->
         dbug("Error in action setup", error: reason)
@@ -600,7 +621,6 @@ defmodule Jido.Exec do
       event_name = [:jido, :action, event]
       measurements = %{system_time: System.system_time()}
 
-      # Logger.debug("Action #{metadata.action} #{event}", metadata)
       :telemetry.execute(event_name, measurements, metadata)
     end
 

@@ -32,7 +32,7 @@ defmodule Jido.Agent.Server.Options do
                               ],
                               registry: [
                                 type: :atom,
-                                default: Jido.Agent.Registry,
+                                default: Jido.Registry,
                                 doc: "Registry to register the server process with"
                               ],
                               dispatch: [

@@ -48,6 +48,11 @@ defmodule Jido.Actions.Basic do
     require Logger
 
     @spec run(map(), map()) :: {:ok, map()}
+    def run(params, _ctx) when map_size(params) == 0 do
+      Logger.info("Current time: #{DateTime.utc_now()}")
+      {:ok, params}
+    end
+
     def run(%{level: level, message: message} = params, _ctx) do
       case level do
         :debug -> Logger.debug(message)

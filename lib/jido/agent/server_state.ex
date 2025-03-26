@@ -98,7 +98,7 @@ defmodule Jido.Agent.Server.State do
     field(:max_queue_size, non_neg_integer(), default: 10_000)
 
     # The registry of the agent
-    field(:registry, atom(), default: Jido.Agent.Registry)
+    field(:registry, atom(), default: Jido.Registry)
 
     # The dispatch configuration for the worker
     field(:dispatch, dispatch_config(), default: {:logger, []})

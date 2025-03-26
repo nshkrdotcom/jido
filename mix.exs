@@ -305,6 +305,7 @@ defmodule Jido.MixProject do
       {:private, "~> 0.1.2"},
       {:proper_case, "~> 1.3"},
       {:telemetry, "~> 1.3"},
+      {:telemetry_metrics, "~> 1.1"},
       {:typed_struct, "~> 0.3.0"},
       {:typed_struct_nimble_options, "~> 0.1.1"},
       {:quantum, "~> 3.5"},
@@ -313,6 +314,7 @@ defmodule Jido.MixProject do
 
       # Skill & Action Dependencies for examples
       {:abacus, "~> 2.1"},
+      {:req, "~> 0.5.10"},
 
       # Development & Test Dependencies
       {:credo, "~> 1.7", only: [:dev, :test]},

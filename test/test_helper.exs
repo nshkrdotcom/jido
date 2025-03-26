@@ -2,7 +2,8 @@
 Enum.each(
   [
     :telemetry,
-    System
+    System,
+    Req
   ],
   &Mimic.copy/1
 )
@@ -13,4 +14,4 @@ Logger.configure(level: :debug)
 
 ExUnit.start()
 
-ExUnit.configure(exclude: [:skip, :bus_skip])
+ExUnit.configure(exclude: [:skip])

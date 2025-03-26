@@ -78,7 +78,7 @@ defmodule Jido.Agent.Server do
          opts = Keyword.put(opts, :agent, agent) |> Keyword.put(:id, agent.id),
          {:ok, opts} <- ServerOptions.validate_server_opts(opts) do
       agent_id = agent.id
-      registry = Keyword.get(opts, :registry)
+      registry = Keyword.get(opts, :registry, Jido.Registry)
 
       GenServer.start_link(
         __MODULE__,
@@ -507,7 +507,13 @@ defmodule Jido.Agent.Server do
 
     # Check if we have an explicit ID in the options
     explicit_id = Keyword.get(opts, :id)
-    explicit_id = if is_binary(explicit_id) && explicit_id != "", do: explicit_id, else: nil
+
+    explicit_id =
+      cond do
+        is_binary(explicit_id) && explicit_id != "" -> explicit_id
+        is_atom(explicit_id) -> Atom.to_string(explicit_id)
+        true -> nil
+      end
 
     cond do
       # If we have both an agent ID and an explicit ID, and they differ,
@@ -525,7 +531,8 @@ defmodule Jido.Agent.Server do
 
       # If we have neither, generate a new ID
       !agent_id && !explicit_id ->
-        Keyword.put(opts, :id, Jido.Util.generate_id())
+        new_id = Jido.Util.generate_id()
+        Keyword.put(opts, :id, new_id)
 
       # Otherwise, options are already consistent
       true ->

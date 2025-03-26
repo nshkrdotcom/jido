@@ -162,9 +162,7 @@ defmodule JidoTest.ExecRunTest do
       io =
         capture_io(fn ->
           assert {:ok, %{input: "test", operation: :inspect}} =
-                   Exec.run(IOAction, %{input: "test", operation: :inspect}, %{},
-                     timeout: 5000
-                   )
+                   Exec.run(IOAction, %{input: "test", operation: :inspect}, %{}, timeout: 5000)
         end)
 
       assert io =~ "IOAction"
@@ -172,6 +170,17 @@ defmodule JidoTest.ExecRunTest do
       assert io =~ "test"
       assert io =~ "operation"
       assert io =~ "inspect"
+    end
+
+    test "passes metadata to the action context" do
+      result =
+        Exec.run(JidoTest.TestActions.MetadataAction, %{}, %{}, timeout: 1000, log_level: :debug)
+
+      assert {:ok, %{metadata: metadata}} = result
+      assert metadata[:name] == "metadata_action"
+      assert metadata[:description] == "Demonstrates action metadata"
+      assert metadata[:vsn] == "87.52.1"
+      assert metadata[:schema] == []
     end
   end
 

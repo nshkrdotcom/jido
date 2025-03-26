@@ -29,7 +29,7 @@ defmodule Jido.Util do
   Generates a unique ID.
   """
   @spec generate_id() :: String.t()
-  def generate_id, do: Uniq.UUID.uuid7()
+  def generate_id, do: Jido.Signal.ID.generate!()
 
   @doc """
   Converts a string to a binary.

@@ -36,10 +36,12 @@ defmodule JidoTest.ExecExecuteTest do
     test "successfully executes a Action with context" do
       log =
         capture_log(fn ->
-          assert {:ok, %{result: "5 processed with context: %{context: \"test\"}"}} =
+          assert {:ok, %{result: result}} =
                    Exec.execute_action(ContextAction, %{input: 5}, %{context: "test"},
                      log_level: :debug
                    )
+
+          assert result =~ "5 processed with context"
         end)
 
       assert log =~ "Starting execution of JidoTest.TestActions.ContextAction"
@@ -158,9 +160,7 @@ defmodule JidoTest.ExecExecuteTest do
       log =
         capture_log(fn ->
           result =
-            Exec.execute_action_with_timeout(BasicAction, %{value: 5}, %{}, 0,
-              log_level: :debug
-            )
+            Exec.execute_action_with_timeout(BasicAction, %{value: 5}, %{}, 0, log_level: :debug)
 
           # Verify the result is correct
           assert {:ok, %{value: 5}} = result
@@ -260,9 +260,7 @@ defmodule JidoTest.ExecExecuteTest do
         capture_log(fn ->
           spawn(fn ->
             result =
-              Exec.execute_action_with_timeout(SlowKilledAction, %{}, %{}, 50,
-                log_level: :debug
-              )
+              Exec.execute_action_with_timeout(SlowKilledAction, %{}, %{}, 50, log_level: :debug)
 
             send(test_pid, {:result, result})
           end)
@@ -316,9 +314,7 @@ defmodule JidoTest.ExecExecuteTest do
       log =
         capture_log(fn ->
           result =
-            Exec.execute_action_with_timeout(NormalExitAction, %{}, %{}, 1000,
-              log_level: :debug
-            )
+            Exec.execute_action_with_timeout(NormalExitAction, %{}, %{}, 1000, log_level: :debug)
 
           assert {:error, %Error{type: :execution_error, message: "Task exited: :normal"}} =
                    result

@@ -986,4 +986,17 @@ defmodule JidoTest.TestActions do
       {:ok, %{}, instructions}
     end
   end
+
+  defmodule MetadataAction do
+    @moduledoc false
+    use Action,
+      name: "metadata_action",
+      description: "Demonstrates action metadata",
+      vsn: "87.52.1",
+      schema: []
+
+    def run(_params, context) do
+      {:ok, %{metadata: context.action_metadata}}
+    end
+  end
 end

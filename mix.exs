@@ -1,7 +1,7 @@
 defmodule Jido.MixProject do
   use Mix.Project
 
-  @version "1.1.0-rc.2"
+  @version "1.2.0"
 
   def vsn do
     @version
@@ -242,8 +242,8 @@ defmodule Jido.MixProject do
 
   defp deps do
     [
-      {:jido_signal, github: "agentjido/jido_signal", branch: "main"},
-      # {:jido_signal, path: "../jido_signal"},
+      # Jido Signal
+      {:jido_signal, "~> 1.0.0"},
 
       # Jido Deps
       {:backoff, "~> 1.1"},

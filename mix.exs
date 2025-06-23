@@ -1,7 +1,7 @@
 defmodule Jido.MixProject do
   use Mix.Project
 
-  @version "1.1.0-rc.2"
+  @version "1.2.0"
 
   def vsn do
     @version
@@ -85,14 +85,6 @@ defmodule Jido.MixProject do
           "guides/examples/think-plan-act.livemd",
           "guides/examples/multi-agent.livemd"
         ],
-        Signals: [
-          "guides/signals/overview.livemd",
-          "guides/signals/routing.md",
-          "guides/signals/dispatching.md",
-          "guides/signals/bus.md",
-          "guides/signals/serialization.md",
-          "guides/signals/testing.md"
-        ],
         Actions: [
           "guides/actions/overview.md",
           "guides/actions/workflows.md",
@@ -146,14 +138,6 @@ defmodule Jido.MixProject do
         {"guides/examples/think-plan-act.livemd", title: "Think-Plan-Act"},
         {"guides/examples/chain-of-thought.livemd", title: "Chain of Thought"},
         {"guides/examples/multi-agent.livemd", title: "Multi-Agent Systems"},
-
-        # Signals
-        {"guides/signals/overview.livemd", title: "Overview"},
-        {"guides/signals/routing.md", title: "Routing"},
-        {"guides/signals/dispatching.md", title: "Dispatching"},
-        {"guides/signals/bus.md", title: "Signal Bus"},
-        {"guides/signals/serialization.md", title: "Serialization"},
-        {"guides/signals/testing.md", title: "Testing"},
 
         # Actions
         {"guides/actions/overview.md", title: "Overview"},
@@ -218,39 +202,7 @@ defmodule Jido.MixProject do
           Jido.Actions.Directives
         ],
         "Actions: Extra": [
-          Jido.Action.Tool
-        ],
-        "Signals: Core": [
-          Jido.Signal,
-          Jido.Signal.Router,
-          Jido.Signal.Router.Instruction,
-          Jido.Signal.Router.Match,
-          Jido.Signal.Router.NodeHandlers,
-          Jido.Signal.Router.PatternMatch,
-          Jido.Signal.Router.Route,
-          Jido.Signal.Router.TrieNode,
-          Jido.Signal.Router.HandlerInfo,
-          Jido.Signal.Router.Router,
-          Jido.Signal.Router.WildcardHandlers
-        ],
-        "Signals: Bus": [
-          Jido.Bus,
-          Jido.Bus.Adapter,
-          Jido.Bus.Adapters.InMemory,
-          Jido.Bus.Adapters.PubSub,
-          Jido.Bus.Snapshot,
-          Jido.Bus.RecordedSignal
-        ],
-        "Signals: Dispatch": [
-          Jido.Signal.Dispatch,
-          Jido.Signal.Dispatch.Adapter,
-          Jido.Signal.Dispatch.Bus,
-          Jido.Signal.Dispatch.ConsoleAdapter,
-          Jido.Signal.Dispatch.LoggerAdapter,
-          Jido.Signal.Dispatch.Named,
-          Jido.Signal.Dispatch.NoopAdapter,
-          Jido.Signal.Dispatch.PidAdapter,
-          Jido.Signal.Dispatch.PubSub
+          Jido.Actions.Tool
         ],
         Skills: [
           Jido.Skill,
@@ -268,10 +220,6 @@ defmodule Jido.MixProject do
           Jido.Discovery,
           Jido.Error,
           Jido.Scheduler,
-          Jido.Signal.Serialization.JsonDecoder,
-          Jido.Signal.Serialization.JsonSerializer,
-          Jido.Signal.Serialization.ModuleNameTypeProvider,
-          Jido.Signal.Serialization.TypeProvider,
           Jido.Supervisor,
           Jido.Agent.Server.State,
           Jido.Util
@@ -294,10 +242,14 @@ defmodule Jido.MixProject do
 
   defp deps do
     [
+      # Jido Signal
+      {:jido_signal, "~> 1.0.0"},
+
       # Jido Deps
       {:backoff, "~> 1.1"},
       {:deep_merge, "~> 1.0"},
       {:jason, "~> 1.4"},
+      {:msgpax, "~> 2.3"},
       {:nimble_options, "~> 1.1"},
       {:nimble_parsec, "~> 1.4"},
       {:ok, "~> 2.3"},

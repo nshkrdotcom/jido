@@ -36,6 +36,18 @@ defmodule Jido.Exec do
       # ... do other work ...
       result = Jido.Exec.await(async_ref)
 
+  ## Configuration
+
+  The default timeout for action execution can be configured using the Application environment:
+
+      config :jido, default_timeout: 60_000  # 60 seconds
+
+  If not configured, the default timeout is 30 seconds (30,000 milliseconds).
+
+  Special timeout values:
+  - `timeout: 0` - Disables timeout completely, actions run without time limits
+  - Any positive integer - Sets timeout in milliseconds
+
   """
 
   use Private
@@ -49,7 +61,7 @@ defmodule Jido.Exec do
 
   import Jido.Util, only: [cond_log: 3]
 
-  @default_timeout 5000
+  @default_timeout Application.compile_env(:jido, :default_timeout, 30_000)
   @default_max_retries 1
   @initial_backoff 250
 
@@ -204,7 +216,7 @@ defmodule Jido.Exec do
   or cancel the action.
 
   **Note**: This approach integrates with OTP by spawning tasks under a `Task.Supervisor`.
-  Make sure `{Task.Supervisor, name: Jido.Exec.TaskSupervisor}` is part of your supervision tree.
+  Make sure `{Task.Supervisor, name: Jido.TaskSupervisor}` is part of your supervision tree.
 
   ## Parameters
 
@@ -236,7 +248,7 @@ defmodule Jido.Exec do
     # Start the task under the TaskSupervisor.
     # If the supervisor is not running, this will raise an error.
     {:ok, pid} =
-      Task.Supervisor.start_child(Jido.Exec.TaskSupervisor, fn ->
+      Task.Supervisor.start_child(Jido.TaskSupervisor, fn ->
         result = run(action, params, context, opts)
         send(parent, {:action_async_result, ref, result})
         result
@@ -255,7 +267,7 @@ defmodule Jido.Exec do
   ## Parameters
 
   - `async_ref`: The reference returned by `run_async/4`.
-  - `timeout`: Maximum time (in ms) to wait for the result (default: 5000).
+  - `timeout`: Maximum time (in ms) to wait for the result (default: #{@default_timeout}).
 
   ## Returns
 
@@ -273,7 +285,8 @@ defmodule Jido.Exec do
       {:error, %Jido.Error{type: :timeout, message: "Async action timed out after 100ms"}}
   """
   @spec await(async_ref(), timeout()) :: {:ok, map()} | {:error, Error.t()}
-  def await(%{ref: ref, pid: pid}, timeout \\ 5000) do
+  def await(%{ref: ref, pid: pid}, timeout \\ @default_timeout) do
+    timeout = if timeout == 0, do: :infinity, else: timeout
     dbug("Awaiting async action result", ref: ref, pid: pid, timeout: timeout)
 
     receive do
@@ -407,6 +420,42 @@ defmodule Jido.Exec do
             "Module #{inspect(action)} is not a valid action: missing validate_params/1 function"
           )
         )
+      end
+    end
+
+    @spec validate_output(action(), map(), run_opts()) :: {:ok, map()} | {:error, Error.t()}
+    defp validate_output(action, output, opts) do
+      log_level = Keyword.get(opts, :log_level, :info)
+      dbug("Validating output", action: action, output: output)
+
+      if function_exported?(action, :validate_output, 1) do
+        case action.validate_output(output) do
+          {:ok, validated_output} ->
+            cond_log(log_level, :debug, "Output validation succeeded for #{inspect(action)}")
+            OK.success(validated_output)
+
+          {:error, reason} ->
+            cond_log(
+              log_level,
+              :debug,
+              "Output validation failed for #{inspect(action)}: #{inspect(reason)}"
+            )
+
+            OK.failure(reason)
+
+          _ ->
+            cond_log(log_level, :debug, "Invalid return from action.validate_output/1")
+            OK.failure(Error.validation_error("Invalid return from action.validate_output/1"))
+        end
+      else
+        # If action doesn't have validate_output/1, skip output validation
+        cond_log(
+          log_level,
+          :debug,
+          "No output validation function found for #{inspect(action)}, skipping"
+        )
+
+        OK.success(output)
       end
     end
 
@@ -653,9 +702,9 @@ defmodule Jido.Exec do
         timeout =
           Keyword.get(opts, :timeout) ||
             case compensation_opts do
-              opts when is_list(opts) -> Keyword.get(opts, :timeout, 5_000)
+              opts when is_list(opts) -> Keyword.get(opts, :timeout, @default_timeout)
               %{timeout: timeout} -> timeout
-              _ -> 5_000
+              _ -> @default_timeout
             end
 
         dbug("Starting compensation", action: action, timeout: timeout)
@@ -767,7 +816,7 @@ defmodule Jido.Exec do
       # Create a temporary task group for this execution
       {:ok, task_group} =
         Task.Supervisor.start_child(
-          Jido.Exec.TaskSupervisor,
+          Jido.TaskSupervisor,
           fn ->
             Process.flag(:trap_exit, true)
 
@@ -867,7 +916,7 @@ Debug info:
 
       Process.exit(task_group, :kill)
 
-      Task.Supervisor.children(Jido.Exec.TaskSupervisor)
+      Task.Supervisor.children(Jido.TaskSupervisor)
       |> Enum.filter(fn pid ->
         case Process.info(pid, :group_leader) do
           {:group_leader, ^task_group} -> true
@@ -893,24 +942,52 @@ Debug info:
         {:ok, result, other} ->
           dbug("Action succeeded with additional info", result: result, other: other)
 
-          cond_log(
-            log_level,
-            :debug,
-            "Finished execution of #{inspect(action)}, result: #{inspect(result)}, directive: #{inspect(other)}"
-          )
+          case validate_output(action, result, opts) do
+            {:ok, validated_result} ->
+              cond_log(
+                log_level,
+                :debug,
+                "Finished execution of #{inspect(action)}, result: #{inspect(validated_result)}, directive: #{inspect(other)}"
+              )
 
-          {:ok, result, other}
+              {:ok, validated_result, other}
+
+            {:error, validation_error} ->
+              dbug("Action output validation failed", error: validation_error)
+
+              cond_log(
+                log_level,
+                :error,
+                "Action #{inspect(action)} output validation failed: #{inspect(validation_error)}"
+              )
+
+              {:error, validation_error, other}
+          end
 
         OK.success(result) ->
           dbug("Action succeeded", result: result)
 
-          cond_log(
-            log_level,
-            :debug,
-            "Finished execution of #{inspect(action)}, result: #{inspect(result)}"
-          )
+          case validate_output(action, result, opts) do
+            {:ok, validated_result} ->
+              cond_log(
+                log_level,
+                :debug,
+                "Finished execution of #{inspect(action)}, result: #{inspect(validated_result)}"
+              )
 
-          OK.success(result)
+              OK.success(validated_result)
+
+            {:error, validation_error} ->
+              dbug("Action output validation failed", error: validation_error)
+
+              cond_log(
+                log_level,
+                :error,
+                "Action #{inspect(action)} output validation failed: #{inspect(validation_error)}"
+              )
+
+              OK.failure(validation_error)
+          end
 
         {:error, reason, other} ->
           dbug("Action failed with additional info", error: reason, other: other)
@@ -930,13 +1007,27 @@ Debug info:
         result ->
           dbug("Action returned unexpected result", result: result)
 
-          cond_log(
-            log_level,
-            :debug,
-            "Finished execution of #{inspect(action)}, result: #{inspect(result)}"
-          )
+          case validate_output(action, result, opts) do
+            {:ok, validated_result} ->
+              cond_log(
+                log_level,
+                :debug,
+                "Finished execution of #{inspect(action)}, result: #{inspect(validated_result)}"
+              )
 
-          OK.success(result)
+              OK.success(validated_result)
+
+            {:error, validation_error} ->
+              dbug("Action output validation failed", error: validation_error)
+
+              cond_log(
+                log_level,
+                :error,
+                "Action #{inspect(action)} output validation failed: #{inspect(validation_error)}"
+              )
+
+              OK.failure(validation_error)
+          end
       end
     rescue
       e in RuntimeError ->

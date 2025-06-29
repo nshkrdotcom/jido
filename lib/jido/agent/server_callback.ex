@@ -216,6 +216,7 @@ defmodule Jido.Agent.Server.Callback do
     transform_result(state, signal, result)
   end
 
+  @dialyzer {:nowarn_function, transform_result: 3}
   def transform_result(
         %ServerState{agent: agent, skills: skills} = _state,
         %Signal{} = signal,
@@ -235,18 +236,21 @@ defmodule Jido.Agent.Server.Callback do
         # Process through each matching skill
         final_result =
           Enum.reduce(matching_skills, transformed_result, fn skill, acc_result ->
-            case safe_transform_result(skill, signal, acc_result, skill) do
-              {:ok, new_result} ->
-                dbug("Skill transformed result", skill: skill)
-                new_result
+            result =
+              case safe_transform_result(skill, signal, acc_result, skill) do
+                {:ok, new_result} ->
+                  dbug("Skill transformed result", skill: skill)
+                  new_result
 
-              {:error, _reason} ->
-                dbug("Skill failed to transform result, continuing with previous result",
-                  skill: skill
-                )
+                {:error, _reason} ->
+                  dbug("Skill failed to transform result, continuing with previous result",
+                    skill: skill
+                  )
 
-                acc_result
-            end
+                  acc_result
+              end
+
+            result
           end)
 
         {:ok, final_result}
@@ -298,39 +302,42 @@ defmodule Jido.Agent.Server.Callback do
   defp find_matching_skills(skills, %Signal{} = signal) when is_list(skills) do
     matches =
       Enum.filter(skills, fn skill ->
-        try do
-          case skill do
-            nil ->
+        result =
+          try do
+            case skill do
+              nil ->
+                false
+
+              skill ->
+                case skill.signal_patterns() do
+                  nil ->
+                    false
+
+                  patterns when is_list(patterns) ->
+                    Enum.any?(patterns, fn pattern ->
+                      case pattern do
+                        pattern when is_binary(pattern) ->
+                          matches = Router.matches?(signal.type, pattern)
+                          dbug("Pattern match result", pattern: pattern, matches: matches)
+                          matches
+
+                        _invalid ->
+                          false
+                      end
+                    end)
+
+                  _invalid ->
+                    dbug("Invalid patterns format - must be list")
+                    false
+                end
+            end
+          rescue
+            _ ->
+              dbug("Error matching skill patterns")
               false
-
-            skill ->
-              case skill.signal_patterns() do
-                nil ->
-                  false
-
-                patterns when is_list(patterns) ->
-                  Enum.any?(patterns, fn pattern ->
-                    case pattern do
-                      pattern when is_binary(pattern) ->
-                        matches = Router.matches?(signal.type, pattern)
-                        dbug("Pattern match result", pattern: pattern, matches: matches)
-                        matches
-
-                      _invalid ->
-                        false
-                    end
-                  end)
-
-                _invalid ->
-                  dbug("Invalid patterns format - must be list")
-                  false
-              end
           end
-        rescue
-          _ ->
-            dbug("Error matching skill patterns")
-            false
-        end
+
+        result
       end)
 
     dbug("Found matching skills", matches: matches, count: length(matches))

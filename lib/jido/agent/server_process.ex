@@ -168,7 +168,7 @@ defmodule Jido.Agent.Server.Process do
 
         :ok
 
-      {:error, _reason} = error ->
+      {:error, :not_found} = error ->
         dbug("Failed to terminate child process", error: error)
         error
     end

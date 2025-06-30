@@ -236,21 +236,18 @@ defmodule Jido.Agent.Server.Callback do
         # Process through each matching skill
         final_result =
           Enum.reduce(matching_skills, transformed_result, fn skill, acc_result ->
-            result =
-              case safe_transform_result(skill, signal, acc_result, skill) do
-                {:ok, new_result} ->
-                  dbug("Skill transformed result", skill: skill)
-                  new_result
+            case safe_transform_result(skill, signal, acc_result, skill) do
+              {:ok, new_result} ->
+                dbug("Skill transformed result", skill: skill)
+                new_result
 
-                {:error, _reason} ->
-                  dbug("Skill failed to transform result, continuing with previous result",
-                    skill: skill
-                  )
+              {:error, _reason} ->
+                dbug("Skill failed to transform result, continuing with previous result",
+                  skill: skill
+                )
 
-                  acc_result
-              end
-
-            result
+                acc_result
+            end
           end)
 
         {:ok, final_result}

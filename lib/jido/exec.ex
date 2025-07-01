@@ -666,7 +666,14 @@ defmodule Jido.Exec do
     defp get_process_info do
       for key <- [:reductions, :message_queue_len, :total_heap_size, :garbage_collection],
           into: %{} do
-        {key, self() |> Process.info(key) |> elem(1)}
+        value =
+          try do
+            self() |> Process.info(key) |> elem(1)
+          rescue
+            ErlangError -> nil
+          end
+
+        {key, value}
       end
     end
 
@@ -923,10 +930,11 @@ Debug info:
 
       Task.Supervisor.children(Jido.TaskSupervisor)
       |> Enum.filter(fn pid ->
-        case Process.info(pid, :group_leader) do
-          {:group_leader, ^task_group} -> true
-          _ -> false
-        end
+        Process.alive?(pid) and
+          case Process.info(pid, :group_leader) do
+            {:group_leader, ^task_group} -> true
+            _ -> false
+          end
       end)
       |> Enum.each(&Process.exit(&1, :kill))
     end

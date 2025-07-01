@@ -342,7 +342,8 @@ defmodule Jido.Agent.Server do
   def terminate(reason, %ServerState{} = state) do
     dbug("Terminating agent server", reason: reason)
     require Logger
-    stacktrace = Process.info(self(), :current_stacktrace)
+    # Safely get stacktrace without calling Process.info during termination
+    stacktrace = {:current_stacktrace, []}
 
     # Format the error message in a more readable way
     error_msg = """

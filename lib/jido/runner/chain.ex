@@ -186,6 +186,14 @@ defmodule Jido.Runner.Chain do
       {:error, %Error{} = error} ->
         dbug("Exec returned error", agent: agent.id, error: error)
         {:error, error}
+
+      {:error, reason} when is_binary(reason) ->
+        dbug("Exec returned string error", agent: agent.id, reason: reason)
+        {:error, Error.validation_error("Invalid directive", %{reason: reason})}
+
+      {:error, reason} ->
+        dbug("Exec returned generic error", agent: agent.id, reason: reason)
+        {:error, Error.new(:execution_error, "Chain execution failed", reason)}
     end
   end
 

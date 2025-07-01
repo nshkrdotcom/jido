@@ -367,6 +367,8 @@ defmodule Jido.Agent.ServerTest do
         spawn(fn ->
           receive do
             :shutdown -> :ok
+          after
+            5000 -> :timeout
           end
         end)
 

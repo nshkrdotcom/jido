@@ -78,13 +78,13 @@ defmodule Jido.Exec.Chain do
   defp should_interrupt?(check) when is_function(check, 0), do: check.()
 
   @spec process_action(chain_action(), map(), map(), keyword()) ::
-          {:cont, {:ok, map()}} | {:halt, chain_result()}
+          {:cont, {:ok, term()} | {:error, term()}} | {:halt, chain_result()}
   defp process_action(action, params, context, opts) when is_atom(action) do
     run_action(action, params, context, opts)
   end
 
   @spec process_action({module(), keyword()} | {module(), map()}, map(), map(), keyword()) ::
-          {:cont, {:ok, map()}} | {:halt, chain_result()}
+          {:cont, {:ok, term()} | {:error, term()}} | {:halt, chain_result()}
   defp process_action({action, action_opts}, params, context, opts)
        when is_atom(action) and (is_list(action_opts) or is_map(action_opts)) do
     case validate_action_params(action_opts) do

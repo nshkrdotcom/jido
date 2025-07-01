@@ -329,6 +329,7 @@ defmodule Jido.Agent.Server do
   def handle_info(:process_queue, state) do
     case ServerRuntime.process_signals_in_queue(state) do
       {:ok, new_state} -> {:noreply, new_state}
+      {:error, _reason} -> {:noreply, state}
     end
   end
 

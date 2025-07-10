@@ -225,7 +225,7 @@ defmodule Jido.Agent do
     # credo:disable-for-next-line Credo.Check.Refactor.LongQuoteBlocks
     quote location: :keep do
       @behaviour Jido.Agent
-      @type t :: Jido.Agent.t()
+      @type t :: %__MODULE__{}
       @type instruction :: Jido.Agent.instruction()
       @type instructions :: Jido.Agent.instructions()
       @type agent_result :: Jido.Agent.agent_result()
@@ -291,6 +291,18 @@ defmodule Jido.Agent do
           def actions, do: @validated_opts[:actions]
           def runner, do: @validated_opts[:runner]
           def schema, do: @validated_opts[:schema]
+
+          # Helper function to safely get options from keyword lists or maps
+          @spec get_option(keyword() | map(), atom(), any()) :: any()
+          defp get_option(opts, key, default) when is_list(opts) do
+            Keyword.get(opts, key, default)
+          end
+
+          defp get_option(opts, key, default) when is_map(opts) do
+            Map.get(opts, key, default)
+          end
+
+          defp get_option(_opts, _key, default), do: default
 
           def to_json do
             %{
@@ -593,7 +605,7 @@ defmodule Jido.Agent do
           end
 
           def set(%__MODULE__{} = agent, attrs, opts) when is_map(attrs) do
-            strict_validation = Keyword.get(opts, :strict_validation, false)
+            strict_validation = get_option(opts, :strict_validation, false)
 
             if Enum.empty?(attrs) do
               OK.success(agent)
@@ -695,12 +707,12 @@ defmodule Jido.Agent do
 
           See `NimbleOptions` documentation for supported validation rules.
           """
-          @spec validate(t() | Jido.server(), keyword()) :: agent_result()
+          @spec validate(t() | Jido.server(), keyword() | map()) :: agent_result()
 
           def validate(agent, opts \\ [])
 
           def validate(%__MODULE__{} = agent, opts) do
-            strict_validation = Keyword.get(opts, :strict_validation, false)
+            strict_validation = get_option(opts, :strict_validation, false)
 
             with {:ok, before_agent} <- on_before_validate_state(agent),
                  {:ok, validated_state} <-
@@ -727,10 +739,10 @@ defmodule Jido.Agent do
             end
           end
 
-          @spec do_validate(t(), map(), keyword()) :: map_result()
+          @spec do_validate(t(), map(), keyword() | map()) :: map_result()
           defp do_validate(%__MODULE__{} = agent, state, opts) do
             schema = schema()
-            strict_validation = Keyword.get(opts, :strict_validation, false)
+            strict_validation = get_option(opts, :strict_validation, false)
 
             if Enum.empty?(schema) do
               OK.success(state)
@@ -951,11 +963,11 @@ defmodule Jido.Agent do
 
           See `Jido.Runner` for implementing custom runners and `plan/2` for queueing actions.
           """
-          @spec run(t() | Jido.server(), keyword()) :: agent_result_with_directives()
+          @spec run(t() | Jido.server(), keyword() | map()) :: agent_result_with_directives()
           def run(agent, opts \\ [])
 
           def run(%__MODULE__{} = agent, opts) do
-            runner = Keyword.get(opts, :runner, runner())
+            runner = get_option(opts, :runner, runner())
 
             with {:ok, validated_runner} <- Jido.Util.validate_runner(runner),
                  {:ok, agent} <- on_before_run(agent),
@@ -1051,14 +1063,14 @@ defmodule Jido.Agent do
                   # Handle execution error
               end
           """
-          @spec cmd(t() | Jido.server(), instructions(), map(), keyword()) ::
+          @spec cmd(t() | Jido.server(), instructions(), map(), keyword() | map()) ::
                   agent_result_with_directives()
           def cmd(agent, instructions, attrs \\ %{}, opts \\ [])
 
           def cmd(%__MODULE__{} = agent, instructions, attrs, opts) do
-            strict_validation = Keyword.get(opts, :strict_validation, false)
-            runner = Keyword.get(opts, :runner, runner())
-            context = Keyword.get(opts, :context, %{})
+            strict_validation = get_option(opts, :strict_validation, false)
+            runner = get_option(opts, :runner, runner())
+            context = get_option(opts, :context, %{})
 
             with {:ok, agent} <- set(agent, attrs, strict_validation: strict_validation),
                  {:ok, agent} <- plan(agent, instructions, context),
@@ -1130,7 +1142,7 @@ defmodule Jido.Agent do
           @spec on_error(t(), any()) :: agent_result()
           def on_error(agent, reason), do: OK.failure(reason)
 
-          @spec mount(ServerState.t(), opts :: keyword()) :: agent_result()
+          @spec mount(ServerState.t(), opts :: keyword() | map()) :: agent_result()
           def mount(state, _opts), do: OK.success(state)
 
           @spec code_change(ServerState.t(), any(), any()) :: agent_result()
@@ -1210,7 +1222,7 @@ defmodule Jido.Agent do
   # Server Callbacks
   @callback start_link(opts :: keyword()) :: {:ok, pid()} | {:error, any()}
   @callback child_spec(opts :: keyword()) :: Supervisor.child_spec()
-  @callback mount(agent :: t(), opts :: keyword()) :: {:ok, map()} | {:error, any()}
+  @callback mount(agent :: t(), opts :: keyword() | map()) :: {:ok, map()} | {:error, any()}
   @callback shutdown(agent :: t(), reason :: any()) :: {:ok, map()} | {:error, any()}
   @callback handle_signal(signal :: Signal.t(), agent :: t()) ::
               {:ok, Signal.t()} | {:error, any()}

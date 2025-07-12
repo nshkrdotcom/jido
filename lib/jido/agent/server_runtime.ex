@@ -117,8 +117,8 @@ defmodule Jido.Agent.Server.Runtime do
       end
     end
 
-    @dialyzer {:nowarn_function, execute_signal: 2}
     # This clause handles invalid signal types in test scenarios
+    @dialyzer {:nowarn_function, execute_signal: 2}
     defp execute_signal(%ServerState{} = state, _invalid_signal) do
       runtime_error(state, "Invalid signal format", :invalid_signal, "invalid-signal")
       {:error, :invalid_signal}
@@ -249,10 +249,11 @@ defmodule Jido.Agent.Server.Runtime do
       end
     end
 
-    @dialyzer {:nowarn_function, route_signal: 2}
     # Router can be nil in test scenarios despite type system expectations
+    @dialyzer {:nowarn_function, route_signal: 2}
     defp route_signal(%ServerState{router: router} = state, %Signal{} = signal) do
       case router do
+        # Defensive pattern used in tests
         nil ->
           {:error, :no_router}
 
@@ -272,6 +273,7 @@ defmodule Jido.Agent.Server.Runtime do
       end
     end
 
+    # Defensive pattern used in tests
     defp route_signal(_state, _invalid), do: {:error, :invalid_signal}
 
     defp apply_signal_to_first_instruction(%Signal{} = signal, [%Instruction{} = first | rest]) do

@@ -118,9 +118,9 @@ defmodule Jido.Runner.Simple do
   end
 
   @doc false
-  @dialyzer {:nowarn_function, execute_instruction: 3}
   # This function correctly handles 3-tuple returns from Jido.Exec.run/1 but Dialyzer
   # incorrectly reports them as unreachable due to conservative type inference
+  @dialyzer {:nowarn_function, execute_instruction: 3}
   @spec execute_instruction(Jido.Agent.t(), Instruction.t(), keyword()) :: run_result()
   defp execute_instruction(agent, instruction, opts) do
     # Inject agent state and merge runtime opts with instruction opts
@@ -135,11 +135,13 @@ defmodule Jido.Runner.Simple do
 
     dbug("Executing instruction", instruction: instruction)
 
+    # Note: Success patterns may appear unreachable to Dialyzer but are valid execution paths
     case Jido.Exec.run(instruction) do
       {:ok, result} when is_map(result) ->
         dbug("Exec returned result only", result: result)
         {:ok, %{agent | result: result}, []}
 
+      # May appear unreachable but is valid
       {:ok, result, directives} when is_list(directives) ->
         dbug("Exec returned result with directive list",
           result: result,
@@ -148,6 +150,7 @@ defmodule Jido.Runner.Simple do
 
         handle_directive_result(agent, result, directives, opts)
 
+      # May appear unreachable but is valid
       {:ok, result, directive} ->
         dbug("Exec returned result with single directive",
           result: result,

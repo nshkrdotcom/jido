@@ -145,7 +145,6 @@ defmodule Jido.Agent do
   alias Jido.{Error, Signal, Instruction}
   alias Jido.Agent.Directive
   alias Jido.Agent.Server.Signal, as: ServerSignal
-  alias Jido.Agent.Server.State, as: ServerState
 
   require OK
 
@@ -225,11 +224,43 @@ defmodule Jido.Agent do
     # credo:disable-for-next-line Credo.Check.Refactor.LongQuoteBlocks
     quote location: :keep do
       @behaviour Jido.Agent
-      @type t :: %__MODULE__{}
+
+      # Define struct for this agent module
+      defstruct [
+        :id,
+        :name,
+        :description,
+        :category,
+        :tags,
+        :vsn,
+        :schema,
+        :runner,
+        :pending_instructions,
+        actions: [],
+        dirty_state?: false,
+        state: %{},
+        result: nil
+      ]
+
+      @type t :: %__MODULE__{
+              id: String.t(),
+              name: String.t(),
+              description: String.t(),
+              category: String.t(),
+              tags: [String.t()],
+              vsn: String.t(),
+              schema: NimbleOptions.schema(),
+              actions: [module()],
+              runner: module(),
+              dirty_state?: boolean(),
+              pending_instructions: :queue.queue(instruction()),
+              state: map(),
+              result: term()
+            }
       @type instruction :: Jido.Agent.instruction()
       @type instructions :: Jido.Agent.instructions()
-      @type agent_result :: Jido.Agent.agent_result()
-      @type agent_result_with_directives :: Jido.Agent.agent_result_with_directives()
+      @type agent_result :: {:ok, t()} | {:error, Error.t()}
+      @type agent_result_with_directives :: {:ok, t(), [Directive.t()]} | {:error, Error.t()}
       @type map_result :: Jido.Agent.map_result()
 
       @agent_server_schema [
@@ -279,9 +310,6 @@ defmodule Jido.Agent do
       case NimbleOptions.validate(unquote(opts), unquote(escaped_schema)) do
         {:ok, validated_opts} ->
           @validated_opts validated_opts
-
-          @struct_keys Keyword.keys(@agent_server_schema)
-          defstruct @struct_keys
 
           def name, do: @validated_opts[:name]
           def description, do: @validated_opts[:description]
@@ -536,15 +564,21 @@ defmodule Jido.Agent do
               |> Map.new()
 
             # Create base agent struct with initialized values
-            base_agent =
-              struct(__MODULE__, %{
-                id: generated_id,
-                state: state_defaults,
-                dirty_state?: false,
-                pending_instructions: :queue.new(),
-                actions: @validated_opts[:actions] || [],
-                result: nil
-              })
+            base_agent = %__MODULE__{
+              id: generated_id,
+              name: @validated_opts[:name],
+              description: @validated_opts[:description],
+              category: @validated_opts[:category],
+              tags: @validated_opts[:tags],
+              vsn: @validated_opts[:vsn],
+              schema: @validated_opts[:schema],
+              actions: @validated_opts[:actions] || [],
+              runner: @validated_opts[:runner],
+              dirty_state?: false,
+              pending_instructions: :queue.new(),
+              state: state_defaults,
+              result: nil
+            }
 
             # Apply and validate initial state if provided
             case set(base_agent, initial_state) do
@@ -596,15 +630,15 @@ defmodule Jido.Agent do
 
           See `validate/1` for validation details and `Jido.Agent` callbacks for lifecycle hooks.
           """
-          @spec set(t() | Jido.server(), keyword() | map(), keyword()) :: agent_result()
+          @spec set(t() | Jido.server(), keyword() | map(), keyword() | map()) :: agent_result()
           def set(agent, attrs, opts \\ [])
 
-          def set(%__MODULE__{} = agent, attrs, opts) when is_list(attrs) do
+          def set(%_{state: _, id: _} = agent, attrs, opts) when is_list(attrs) do
             mapped_attrs = Map.new(attrs)
             set(agent, mapped_attrs, opts)
           end
 
-          def set(%__MODULE__{} = agent, attrs, opts) when is_map(attrs) do
+          def set(%_{state: _, id: _} = agent, attrs, opts) when is_map(attrs) do
             strict_validation = get_option(opts, :strict_validation, false)
 
             if Enum.empty?(attrs) do
@@ -622,7 +656,7 @@ defmodule Jido.Agent do
             end
           end
 
-          def set(%__MODULE__{} = agent, attrs, _opts) do
+          def set(%_{state: _, id: _} = agent, attrs, _opts) do
             Error.validation_error(
               "Invalid state update. Expected a map or keyword list, got #{inspect(attrs)}"
             )
@@ -631,7 +665,7 @@ defmodule Jido.Agent do
 
           def set(%_{} = agent, _attrs, _opts) do
             Error.validation_error(
-              "Invalid agent type. Expected #{inspect(agent.__struct__)}, got #{inspect(__MODULE__)}"
+              "Invalid agent type. Expected agent struct with :state and :id fields, got #{inspect(agent.__struct__)}"
             )
             |> OK.failure()
           end
@@ -711,7 +745,7 @@ defmodule Jido.Agent do
 
           def validate(agent, opts \\ [])
 
-          def validate(%__MODULE__{} = agent, opts) do
+          def validate(%_{state: _, id: _} = agent, opts) do
             strict_validation = get_option(opts, :strict_validation, false)
 
             with {:ok, before_agent} <- on_before_validate_state(agent),
@@ -740,7 +774,7 @@ defmodule Jido.Agent do
           end
 
           @spec do_validate(t(), map(), keyword() | map()) :: map_result()
-          defp do_validate(%__MODULE__{} = agent, state, opts) do
+          defp do_validate(%_{state: _, id: _} = agent, state, opts) do
             schema = schema()
             strict_validation = get_option(opts, :strict_validation, false)
 
@@ -852,10 +886,10 @@ defmodule Jido.Agent do
           @spec plan(t() | Jido.server(), instructions(), map()) :: agent_result()
           def plan(agent, instructions, context \\ %{})
 
-          def plan(%__MODULE__{} = agent, instructions, context) do
+          def plan(%_{state: _, id: _} = agent, instructions, context) do
             with {:ok, instruction_structs} <- Instruction.normalize(instructions, context),
                  :ok <- Instruction.validate_allowed_actions(instruction_structs, agent.actions),
-                 {:ok, agent} <- on_before_plan(agent, nil, %{}),
+                 {:ok, agent} <- on_before_plan(agent, instruction_structs, context),
                  {:ok, agent} <- enqueue_instructions(agent, instruction_structs) do
               OK.success(%{agent | dirty_state?: true})
             else
@@ -966,7 +1000,7 @@ defmodule Jido.Agent do
           @spec run(t() | Jido.server(), keyword() | map()) :: agent_result_with_directives()
           def run(agent, opts \\ [])
 
-          def run(%__MODULE__{} = agent, opts) do
+          def run(%_{state: _, id: _} = agent, opts) do
             runner = get_option(opts, :runner, runner())
 
             with {:ok, validated_runner} <- Jido.Util.validate_runner(runner),
@@ -1067,7 +1101,7 @@ defmodule Jido.Agent do
                   agent_result_with_directives()
           def cmd(agent, instructions, attrs \\ %{}, opts \\ [])
 
-          def cmd(%__MODULE__{} = agent, instructions, attrs, opts) do
+          def cmd(%_{state: _, id: _} = agent, instructions, attrs, opts) do
             strict_validation = get_option(opts, :strict_validation, false)
             runner = get_option(opts, :runner, runner())
             context = get_option(opts, :context, %{})
@@ -1106,7 +1140,7 @@ defmodule Jido.Agent do
             - `{:ok, updated_agent}` - Queue was reset successfully
           """
           @spec reset(t()) :: agent_result()
-          def reset(%__MODULE__{} = agent) do
+          def reset(%_{state: _, id: _} = agent) do
             OK.success(%{agent | dirty_state?: false, result: nil})
           end
 
@@ -1120,7 +1154,7 @@ defmodule Jido.Agent do
             - Integer count of pending actions
           """
           @spec pending?(t()) :: non_neg_integer()
-          def pending?(%__MODULE__{} = agent) do
+          def pending?(%_{state: _, id: _} = agent) do
             :queue.len(agent.pending_instructions)
           end
 
@@ -1142,14 +1176,14 @@ defmodule Jido.Agent do
           @spec on_error(t(), any()) :: agent_result()
           def on_error(agent, reason), do: OK.failure(reason)
 
-          @spec mount(ServerState.t(), opts :: keyword() | map()) :: agent_result()
-          def mount(state, _opts), do: OK.success(state)
+          @spec mount(t(), opts :: keyword() | map()) :: {:ok, t()} | {:error, any()}
+          def mount(agent, _opts), do: {:ok, agent}
 
-          @spec code_change(ServerState.t(), any(), any()) :: agent_result()
-          def code_change(state, _old_vsn, _extra), do: OK.success(state)
+          @spec agent_code_change(t(), any(), any()) :: {:ok, t()} | {:error, any()}
+          def agent_code_change(agent, _old_vsn, _extra), do: {:ok, agent}
 
-          @spec shutdown(ServerState.t(), reason :: any()) :: agent_result()
-          def shutdown(state, _reason), do: OK.success(state)
+          @spec shutdown(t(), reason :: any()) :: {:ok, t()} | {:error, any()}
+          def shutdown(agent, _reason), do: {:ok, agent}
 
           @spec handle_signal(Signal.t(), t()) :: {:ok, Signal.t()} | {:error, any()}
           def handle_signal(signal, _agent), do: OK.success(signal)
@@ -1162,7 +1196,7 @@ defmodule Jido.Agent do
                          child_spec: 1,
                          init: 1,
                          mount: 2,
-                         code_change: 3,
+                         agent_code_change: 3,
                          shutdown: 2,
                          handle_signal: 2,
                          transform_result: 3,
@@ -1222,8 +1256,10 @@ defmodule Jido.Agent do
   # Server Callbacks
   @callback start_link(opts :: keyword()) :: {:ok, pid()} | {:error, any()}
   @callback child_spec(opts :: keyword()) :: Supervisor.child_spec()
-  @callback mount(agent :: t(), opts :: keyword() | map()) :: {:ok, map()} | {:error, any()}
-  @callback shutdown(agent :: t(), reason :: any()) :: {:ok, map()} | {:error, any()}
+  @callback mount(agent :: t(), opts :: keyword() | map()) :: {:ok, t()} | {:error, any()}
+  @callback agent_code_change(agent :: t(), old_vsn :: any(), extra :: any()) ::
+              {:ok, t()} | {:error, any()}
+  @callback shutdown(agent :: t(), reason :: any()) :: {:ok, t()} | {:error, any()}
   @callback handle_signal(signal :: Signal.t(), agent :: t()) ::
               {:ok, Signal.t()} | {:error, any()}
   @callback transform_result(

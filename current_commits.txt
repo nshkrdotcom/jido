@@ -1,0 +1,10 @@
+b7c934f Fix Jido Agent macro type system violations (resolves 37 Dialyzer errors)
+e555267 Add comprehensive failing test suite for Jido type system fixes
+939e39e fix: add timeout for server test
+0743758 fix: resolve Process.info/2 race condition during agent termination
+25cc6ea fix: replaced the OK.t replacement with the proper OK return type (OK.t doesnt exist in OK)
+1aa6220 fix: typo
+add74e2 fix: put back error clause for execute_chain_step
+ecb8aa5 fix: put back error clause for process_signals_in_queue in agent server
+b0badb5 cleanup
+3a39743 fix: address bot feedback on type safety and code structure

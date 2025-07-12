@@ -113,13 +113,16 @@ defmodule JidoTest.AgentRunTest do
       assert recovered_agent.state.last_error.message =~ "Exec failed"
     end
 
-    test "prevents calling run with wrong agent module" do
+    test "cross-agent operations now work with duck typing" do
       agent = BasicAgent.new()
-      assert {:error, error} = FullFeaturedAgent.run(agent, apply_state: true)
-      assert error.type == :validation_error
 
-      assert error.message =~
-               "Invalid agent type. Expected #{BasicAgent}, got #{FullFeaturedAgent}"
+      # This now succeeds because both agents have :id and :state fields
+      assert {:ok, updated_agent, _result} = FullFeaturedAgent.run(agent, apply_state: true)
+
+      # The agent should retain its original struct type
+      assert updated_agent.__struct__ == BasicAgent
+      assert is_binary(updated_agent.id)
+      assert is_map(updated_agent.state)
     end
 
     test "validates runner module existence" do

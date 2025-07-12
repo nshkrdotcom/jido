@@ -37,7 +37,7 @@ defmodule Jido.Agent.Server.CallbackTest do
       old_vsn = "1.0.0"
       extra = %{data: "test"}
       {:ok, updated_state} = Callback.code_change(state, old_vsn, extra)
-      assert get_in(updated_state.agent.state, [:callback_count, :code_change]) == 1
+      assert get_in(updated_state.agent.state, [:callback_count, :agent_code_change]) == 1
     end
 
     test "shutdown callback", %{state: state} do

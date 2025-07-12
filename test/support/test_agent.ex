@@ -208,21 +208,21 @@ defmodule JidoTest.TestAgents do
     end
 
     @impl true
-    def mount(state, _opts) do
-      agent = track_callback(state.agent, :mount)
-      {:ok, %{state | agent: agent}}
+    def mount(agent, _opts) do
+      updated_agent = track_callback(agent, :mount)
+      {:ok, updated_agent}
     end
 
     @impl true
-    def code_change(state, _old_vsn, _extra) do
-      agent = track_callback(state.agent, :code_change)
-      {:ok, %{state | agent: agent}}
+    def agent_code_change(agent, _old_vsn, _extra) do
+      updated_agent = track_callback(agent, :agent_code_change)
+      {:ok, updated_agent}
     end
 
     @impl true
-    def shutdown(state, _reason) do
-      agent = track_callback(state.agent, :shutdown)
-      {:ok, %{state | agent: agent}}
+    def shutdown(agent, _reason) do
+      updated_agent = track_callback(agent, :shutdown)
+      {:ok, updated_agent}
     end
 
     @impl true

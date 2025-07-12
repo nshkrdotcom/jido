@@ -108,13 +108,19 @@ defmodule JidoTest.AgentStateTest do
       assert step2.dirty_state? == true
     end
 
-    test "prevents calling set with wrong agent module" do
+    test "cross-agent state operations now work with duck typing" do
       agent = BasicAgent.new()
-      assert {:error, error} = FullFeaturedAgent.set(agent, %{value: 42})
-      assert error.type == :validation_error
 
-      assert error.message =~
-               "Invalid agent type. Expected JidoTest.TestAgents.BasicAgent, got JidoTest.TestAgents.FullFeaturedAgent"
+      # This now succeeds because both agents have :id and :state fields
+      assert {:ok, updated_agent} = FullFeaturedAgent.set(agent, %{value: 42})
+
+      # The agent should retain its original struct type
+      assert updated_agent.__struct__ == BasicAgent
+      assert is_binary(updated_agent.id)
+      assert is_map(updated_agent.state)
+      # State should be updated
+      assert updated_agent.state.value == 42
+      assert updated_agent.dirty_state? == true
     end
 
     test "invalid state update with non-map or non-keyword list", %{agent: agent} do
@@ -146,13 +152,18 @@ defmodule JidoTest.AgentStateTest do
       assert updated.state.last_validated_at != nil
     end
 
-    test "prevents calling validate with wrong agent module" do
+    test "cross-agent validation now works with duck typing" do
       agent = BasicAgent.new()
-      assert {:error, error} = FullFeaturedAgent.validate(agent)
-      assert error.type == :validation_error
 
-      assert error.message =~
-               "Invalid agent type. Expected Elixir.JidoTest.TestAgents.BasicAgent, got Elixir.JidoTest.TestAgents.FullFeaturedAgent"
+      # This now succeeds because both agents have :id and :state fields
+      assert {:ok, updated_agent} = FullFeaturedAgent.validate(agent)
+
+      # The agent should retain its original struct type
+      assert updated_agent.__struct__ == BasicAgent
+      assert is_binary(updated_agent.id)
+      assert is_map(updated_agent.state)
+      # Validation timestamp should be updated
+      assert updated_agent.state.last_validated_at != nil
     end
 
     test "strict validation in callbacks", %{agent: agent} do

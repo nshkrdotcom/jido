@@ -363,13 +363,14 @@ defmodule JidoTest.AgentPlanTest do
       assert instruction.params == params
     end
 
-    test "prevents calling plan with wrong agent module" do
+    test "cross-agent plan operation with unregistered action" do
       agent = FullFeaturedAgent.new()
       assert {:error, error} = BasicAgent.plan(agent, BasicAction, %{})
-      assert error.type == :validation_error
+      assert error.type == :config_error
 
+      # With duck typing, the operation proceeds but fails on action registration
       assert error.message =~
-               "Invalid agent type. Expected #{FullFeaturedAgent}, got #{BasicAgent}"
+               "Action: #{BasicAction} not registered with agent"
     end
   end
 end

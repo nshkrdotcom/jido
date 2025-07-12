@@ -24,10 +24,10 @@ defmodule Jido.Agent.Server.Callback do
   def mount(%ServerState{agent: agent} = state) do
     dbug("Mounting agent", agent: agent)
 
-    case agent.__struct__.mount(state, []) do
-      {:ok, new_state} ->
-        dbug("Agent mounted successfully", new_state: new_state)
-        {:ok, new_state}
+    case agent.__struct__.mount(agent, []) do
+      {:ok, updated_agent} ->
+        dbug("Agent mounted successfully", updated_agent: updated_agent)
+        {:ok, %{state | agent: updated_agent}}
 
       error ->
         dbug("Agent mount failed", error: error)
@@ -54,10 +54,10 @@ defmodule Jido.Agent.Server.Callback do
   def code_change(%ServerState{agent: agent} = state, old_vsn, extra) do
     dbug("Code change", agent: agent, old_vsn: old_vsn, extra: extra)
 
-    case agent.__struct__.code_change(state, old_vsn, extra) do
-      {:ok, new_state} ->
-        dbug("Code change successful", new_state: new_state)
-        {:ok, new_state}
+    case agent.__struct__.agent_code_change(agent, old_vsn, extra) do
+      {:ok, updated_agent} ->
+        dbug("Code change successful", updated_agent: updated_agent)
+        {:ok, %{state | agent: updated_agent}}
 
       error ->
         dbug("Code change failed", error: error)
@@ -84,10 +84,10 @@ defmodule Jido.Agent.Server.Callback do
   def shutdown(%ServerState{agent: agent} = state, reason) do
     dbug("Shutting down agent", agent: agent, reason: reason)
 
-    case agent.__struct__.shutdown(state, reason) do
-      {:ok, new_state} ->
-        dbug("Agent shutdown successful", new_state: new_state)
-        {:ok, new_state}
+    case agent.__struct__.shutdown(agent, reason) do
+      {:ok, updated_agent} ->
+        dbug("Agent shutdown successful", updated_agent: updated_agent)
+        {:ok, %{state | agent: updated_agent}}
 
       error ->
         dbug("Agent shutdown failed", error: error)
@@ -210,13 +210,16 @@ defmodule Jido.Agent.Server.Callback do
     - `{:ok, result}` - Result successfully processed with possibly modified result
     - `{:error, reason}` - Result processing failed with reason
   """
+  # Dialyzer warns about "no local return" in the reduce function because matching_skills
+  # is often empty (when no skills are configured), causing the anonymous function to never execute.
+  # This is expected behavior - the reduce just returns the initial value when the list is empty.
+  @dialyzer {:nowarn_function, transform_result: 3}
   @spec transform_result(ServerState.t(), Signal.t() | {:ok, Signal.t()} | nil, term()) ::
           {:ok, term()}
   def transform_result(state, {:ok, signal}, result) do
     transform_result(state, signal, result)
   end
 
-  @dialyzer {:nowarn_function, transform_result: 3}
   def transform_result(
         %ServerState{agent: agent, skills: skills} = _state,
         %Signal{} = signal,
@@ -234,6 +237,9 @@ defmodule Jido.Agent.Server.Callback do
         dbug("Found matching skills", count: length(matching_skills))
 
         # Process through each matching skill
+        # Note: If matching_skills is empty (common case), the reduce function never executes
+        # and just returns transformed_result. Dialyzer flags this as "no local return" but
+        # this is expected behavior.
         final_result =
           Enum.reduce(matching_skills, transformed_result, fn skill, acc_result ->
             case safe_transform_result(skill, signal, acc_result, skill) do

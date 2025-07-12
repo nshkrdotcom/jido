@@ -113,7 +113,7 @@ defmodule Jido.Sensor do
     quote location: :keep do
       @behaviour Jido.Sensor
       @type t :: Jido.Sensor.t()
-      @type sensor_result :: Jido.Sensor.sensor_result()
+      @type sensor_result :: {:ok, Jido.Signal.t()} | {:error, any()}
 
       use GenServer
 

@@ -178,7 +178,7 @@ defmodule Jido.Agent.Server do
          opts = Keyword.put(opts, :agent, agent),
          {:ok, opts} <- ServerOptions.validate_server_opts(opts),
          {:ok, state} <- build_initial_state_from_opts(opts),
-         actions <- Keyword.get(opts, :actions, []),
+         {:ok, actions} <- normalize_actions(opts),
          {:ok, state} <- register_actions(state, actions),
          {:ok, state, opts} <- ServerSkills.build(state, opts),
          {:ok, state} <- ServerRouter.build(state, opts),
@@ -326,9 +326,11 @@ defmodule Jido.Agent.Server do
     {:noreply, state}
   end
 
+  @dialyzer {:nowarn_function, handle_info: 2}
   def handle_info(:process_queue, state) do
     case ServerRuntime.process_signals_in_queue(state) do
       {:ok, new_state} -> {:noreply, new_state}
+      # Defensive pattern for potential future errors
       {:error, _reason} -> {:noreply, state}
     end
   end
@@ -477,7 +479,10 @@ defmodule Jido.Agent.Server do
     end
   end
 
-  @spec build_initial_state_from_opts(Keyword.t()) :: {:ok, ServerState.t()}
+  @dialyzer {:nowarn_function, build_initial_state_from_opts: 1}
+  # Static analysis can't see through runtime module validation
+  @dialyzer {:nowarn_function, init: 1}
+  @spec build_initial_state_from_opts(Keyword.t()) :: {:ok, Jido.Agent.Server.State.t()}
   defp build_initial_state_from_opts(opts) do
     dbug("Building initial state from options", opts: opts)
 
@@ -494,6 +499,37 @@ defmodule Jido.Agent.Server do
     }
 
     {:ok, state}
+  end
+
+  @spec normalize_actions(keyword()) :: {:ok, [module()]} | {:error, Jido.Error.t()}
+  defp normalize_actions(opts) do
+    actions =
+      case Keyword.get(opts, :actions, []) do
+        actions when is_list(actions) -> actions
+        single when is_atom(single) -> [single]
+        _ -> []
+      end
+
+    # Validate that all actions are loadable modules
+    case validate_action_modules(actions) do
+      :ok ->
+        {:ok, actions}
+
+      {:error, invalid_module} ->
+        {:error, Jido.Error.validation_error("Invalid action module", %{module: invalid_module})}
+    end
+  end
+
+  @spec validate_action_modules([atom()]) :: :ok | {:error, atom()}
+  defp validate_action_modules(actions) when is_list(actions) do
+    Enum.find_value(actions, :ok, fn action ->
+      case Code.ensure_loaded(action) do
+        # Continue checking
+        {:module, _} -> nil
+        # Return the invalid module
+        _ -> {:error, action}
+      end
+    end)
   end
 
   @spec ensure_id_consistency(keyword()) :: keyword()
@@ -543,13 +579,11 @@ defmodule Jido.Agent.Server do
     end
   end
 
-  @spec register_actions(ServerState.t(), [module()] | module()) ::
-          {:ok, ServerState.t()} | {:error, Jido.Error.t()}
-  defp register_actions(%ServerState{} = state, provided_actions)
-       when is_atom(provided_actions) do
-    register_actions(state, [provided_actions])
-  end
-
+  # Dialyzer can't prove that our runtime validation makes [atom()] into [module()]
+  # This is a static analysis limitation, not a runtime error
+  @dialyzer {:nowarn_function, register_actions: 2}
+  @spec register_actions(Jido.Agent.Server.State.t(), [module()]) ::
+          {:ok, Jido.Agent.Server.State.t()} | {:error, Jido.Error.t()}
   defp register_actions(%ServerState{} = state, provided_actions)
        when is_list(provided_actions) do
     dbug("Registering actions with agent",

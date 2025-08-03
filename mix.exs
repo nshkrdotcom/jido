@@ -232,7 +232,7 @@ defmodule Jido.MixProject do
   defp deps do
     [
       # Jido Ecosystem
-      {:jido_action, path: "../jido_action"},
+      {:jido_action, github: "agentjido/jido_action"},
       {:jido_signal, github: "agentjido/jido_signal"},
 
       # Jido Deps

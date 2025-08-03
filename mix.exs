@@ -219,7 +219,7 @@ defmodule Jido.MixProject do
 
   defp package do
     [
-      files: ["lib", "mix.exs", "README.md", "LICENSE.md"],
+      files: ["lib", "mix.exs", "README.md", "LICENSE.md", "usage-rules.md"],
       maintainers: ["Mike Hostetler"],
       licenses: ["Apache-2.0"],
       links: %{
@@ -232,7 +232,7 @@ defmodule Jido.MixProject do
   defp deps do
     [
       # Jido Ecosystem
-      {:jido_action, github: "agentjido/jido_action"},
+      {:jido_action, path: "../jido_action"},
       {:jido_signal, github: "agentjido/jido_signal"},
 
       # Jido Deps

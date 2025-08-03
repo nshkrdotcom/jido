@@ -232,8 +232,8 @@ defmodule Jido.MixProject do
   defp deps do
     [
       # Jido Ecosystem
-      {:jido_action, path: "../jido_action"},
-      {:jido_signal, path: "../jido_signal"},
+      {:jido_action, github: "agentjido/jido_action"},
+      {:jido_signal, github: "agentjido/jido_signal"},
 
       # Jido Deps
       {:backoff, "~> 1.1"},
@@ -268,7 +268,7 @@ defmodule Jido.MixProject do
       {:expublish, "~> 2.7", only: [:dev], runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
       {:mock, "~> 0.3.0", only: :test},
-      {:mimic, "~> 1.11", only: :test},
+      {:mimic, "~> 2.0", only: :test},
       {:stream_data, "~> 1.0", only: [:dev, :test]}
     ]
   end

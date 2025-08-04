@@ -14,6 +14,9 @@ defmodule Jido.Actions.StateManagerTest do
       %StateModification{op: :delete, path: path}, acc ->
         {_, new_state} = pop_in(acc, path)
         new_state
+
+      %StateModification{op: :replace, value: new_state}, _acc ->
+        new_state
     end)
   end
 
@@ -403,6 +406,68 @@ defmodule Jido.Actions.StateManagerTest do
       state = apply_modifications(state, modifications)
       assert get_in(state, [:foo, :bar, :qux, :deep]) == nil
       assert get_in(state, [:foo, :bar, :baz]) == "updated"
+    end
+  end
+
+  describe "Replace" do
+    test "replaces entire state with new state" do
+      state = %{foo: "bar", baz: %{nested: "value"}}
+      new_state = %{completely: "different", structure: %{here: "now"}}
+
+      {:ok, _current_state, modifications} =
+        StateManager.Replace.run(%{state: new_state}, %{state: state})
+
+      assert length(modifications) == 1
+      [directive] = modifications
+      assert directive.op == :replace
+      assert directive.path == []
+      assert directive.value == new_state
+
+      final_state = apply_modifications(state, modifications)
+      assert final_state == new_state
+    end
+
+    test "replaces state with empty map" do
+      state = %{foo: "bar", baz: %{nested: "value"}}
+      new_state = %{}
+
+      {:ok, _current_state, modifications} =
+        StateManager.Replace.run(%{state: new_state}, %{state: state})
+
+      final_state = apply_modifications(state, modifications)
+      assert final_state == %{}
+    end
+
+    test "replaces state with complex nested structure" do
+      state = %{simple: "state"}
+      new_state = %{
+        complex: %{
+          nested: %{
+            structure: %{
+              with: ["lists", "and", "maps"],
+              numbers: 42,
+              booleans: true
+            }
+          }
+        }
+      }
+
+      {:ok, _current_state, modifications} =
+        StateManager.Replace.run(%{state: new_state}, %{state: state})
+
+      final_state = apply_modifications(state, modifications)
+      assert final_state == new_state
+    end
+
+    test "replaces state with non-map value" do
+      state = %{foo: "bar"}
+      new_state = "just a string"
+
+      {:ok, _current_state, modifications} =
+        StateManager.Replace.run(%{state: new_state}, %{state: state})
+
+      final_state = apply_modifications(state, modifications)
+      assert final_state == "just a string"
     end
   end
 end

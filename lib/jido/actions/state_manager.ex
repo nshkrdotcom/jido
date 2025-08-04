@@ -152,6 +152,34 @@ defmodule Jido.Actions.StateManager do
     end
   end
 
+  defmodule Replace do
+    @moduledoc """
+    Action for replacing the entire agent's state.
+
+    Replaces the agent's state completely with the provided value.
+    """
+
+    use Jido.Action,
+      name: "replace",
+      description: "Replace the entire agent state with a new state",
+      schema: [
+        state: [type: :any, required: true]
+      ]
+
+    @spec run(map(), map()) :: {:ok, map()} | {:ok, map(), any()} | {:error, any()}
+    @impl true
+    def run(params, context) do
+      {:ok, context.state,
+       [
+         %StateModification{
+           op: :replace,
+           path: [],
+           value: params.state
+         }
+       ]}
+    end
+  end
+
   defmodule Delete do
     @moduledoc """
     Action for deleting a value from the agent's state.

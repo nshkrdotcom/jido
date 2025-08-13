@@ -33,10 +33,26 @@ defmodule Jido.Skills.StateManager do
 
   def router(_opts \\ []) do
     [
-      {"jido.state.get", %Instruction{action: Jido.Actions.StateManager.Get}},
-      {"jido.state.set", %Instruction{action: Jido.Actions.StateManager.Set}},
-      {"jido.state.update", %Instruction{action: Jido.Actions.StateManager.Update}},
-      {"jido.state.delete", %Instruction{action: Jido.Actions.StateManager.Delete}}
+      %Jido.Signal.Router.Route{
+        path: "jido.state.get",
+        target: %Instruction{action: Jido.Actions.StateManager.Get},
+        priority: 0
+      },
+      %Jido.Signal.Router.Route{
+        path: "jido.state.set",
+        target: %Instruction{action: Jido.Actions.StateManager.Set},
+        priority: 0
+      },
+      %Jido.Signal.Router.Route{
+        path: "jido.state.update",
+        target: %Instruction{action: Jido.Actions.StateManager.Update},
+        priority: 0
+      },
+      %Jido.Signal.Router.Route{
+        path: "jido.state.delete",
+        target: %Instruction{action: Jido.Actions.StateManager.Delete},
+        priority: 0
+      }
     ]
   end
 

@@ -180,17 +180,13 @@ defmodule Jido.Runner.Chain do
         dbug("Exec returned result with no directives", agent: agent.id)
         execute_chain_step(remaining, agent, accumulated_directives, result, merge_results, opts)
 
+      {:error, %_{} = error, _dirs} ->
+        dbug("Exec returned error with directives", agent: agent.id, error: error)
+        {:error, error}
+
       {:error, %_{} = error} ->
         dbug("Exec returned error", agent: agent.id, error: error)
         {:error, error}
-
-      {:error, reason} when is_binary(reason) ->
-        dbug("Exec returned string error", agent: agent.id, reason: reason)
-        {:error, Error.validation_error("Invalid directive", %{reason: reason})}
-
-      {:error, reason} ->
-        dbug("Exec returned generic error", agent: agent.id, reason: reason)
-        {:error, Error.new(:execution_error, "Chain execution failed", reason)}
     end
   end
 

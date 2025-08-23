@@ -11,7 +11,9 @@ defmodule Jido.Agent.Server.Directive do
     Enqueue,
     RegisterAction,
     DeregisterAction,
-    StateModification
+    StateModification,
+    AddRoute,
+    RemoveRoute
   }
 
   alias Jido.{Agent.Directive, Error}
@@ -218,6 +220,25 @@ defmodule Jido.Agent.Server.Directive do
       error in [ArgumentError] ->
         {:error, Error.execution_error("Failed to modify state", %{error: error})}
     end
+  end
+
+  def execute(%ServerState{} = state, %AddRoute{path: path, target: target}) do
+    case Jido.Agent.Server.Router.add(state, {path, target}) do
+      {:ok, updated_state} ->
+        {:ok, updated_state}
+
+      {:error, reason} ->
+        {:error,
+         Error.execution_error("Failed to add route", %{
+           path: path,
+           target: target,
+           reason: reason
+         })}
+    end
+  end
+
+  def execute(%ServerState{} = state, %RemoveRoute{path: path}) do
+    Jido.Agent.Server.Router.remove(state, path)
   end
 
   def execute(_state, invalid_directive) do

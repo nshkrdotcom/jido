@@ -174,6 +174,25 @@ defmodule Jido.Agent.Directive do
     end
   end
 
+  defmodule AddRoute do
+    @moduledoc "Directive to add a route to the agent's router"
+    use TypedStruct
+
+    typedstruct do
+      field(:path, String.t(), enforce: true)
+      field(:target, term(), enforce: true)
+    end
+  end
+
+  defmodule RemoveRoute do
+    @moduledoc "Directive to remove a route from the agent's router"
+    use TypedStruct
+
+    typedstruct do
+      field(:path, String.t(), enforce: true)
+    end
+  end
+
   @type t ::
           Enqueue.t()
           | RegisterAction.t()
@@ -181,6 +200,8 @@ defmodule Jido.Agent.Directive do
           | Spawn.t()
           | Kill.t()
           | StateModification.t()
+          | AddRoute.t()
+          | RemoveRoute.t()
           | Instruction.t()
           | [Instruction.t()]
 
@@ -384,6 +405,17 @@ defmodule Jido.Agent.Directive do
 
   defp validate_directive(%Kill{pid: pid}) when is_pid(pid), do: :ok
   defp validate_directive(%Kill{}), do: {:error, :invalid_pid}
+
+  defp validate_directive(%AddRoute{path: path, target: target}) do
+    cond do
+      not is_binary(path) -> {:error, :invalid_path}
+      is_nil(target) -> {:error, :invalid_target}
+      true -> :ok
+    end
+  end
+
+  defp validate_directive(%RemoveRoute{path: path}) when is_binary(path), do: :ok
+  defp validate_directive(%RemoveRoute{}), do: {:error, :invalid_path}
 
   defp validate_directive(%Instruction{action: nil}), do: {:error, :invalid_action}
   defp validate_directive(%Instruction{action: action}) when is_atom(action), do: :ok

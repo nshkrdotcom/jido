@@ -132,7 +132,7 @@ defmodule Jido.Agent.Directive do
 
     typedstruct do
       field(:op, :set | :update | :delete | :reset | :replace, enforce: true)
-      field(:path, list(atom()) | atom(), enforce: true)
+      field(:path, list(atom()) | atom())
       field(:value, any())
     end
   end
@@ -354,7 +354,13 @@ defmodule Jido.Agent.Directive do
           {_, updated_state} = pop_in(agent.state, List.wrap(directive.path))
           {:ok, %{agent | state: updated_state}}
 
-        :reset ->
+        :replace ->
+          {:ok, %{agent | state: directive.value}}
+
+        :reset when is_nil(directive.path) ->
+          {:ok, %{agent | state: %{}}}
+
+        :reset when not is_nil(directive.path) ->
           updated_state = put_in(agent.state, List.wrap(directive.path), nil)
           {:ok, %{agent | state: updated_state}}
       end

@@ -88,11 +88,20 @@ defmodule JidoTest.AgentCaseTest do
     end
 
     test "queues signals correctly" do
-      spawn_agent()
-      |> assert_queue_empty()
-      |> send_signal_async("test.signal", %{data: "value"})
-      # Signal should be queued
-      |> assert_queue_size(1)
+      context =
+        spawn_agent()
+        |> assert_queue_empty()
+        |> send_signal_async("test.signal", %{data: "value"})
+
+      # Signal should be queued - use assert_eventually to handle race condition
+      assert_eventually(
+        (
+          {:ok, state} = Jido.Agent.Server.state(context.server_pid)
+          :queue.len(state.pending_signals) == 1
+        ),
+        timeout: 500,
+        check_interval: 10
+      )
     end
 
     test "queues multiple signals" do
@@ -232,6 +241,16 @@ defmodule JidoTest.AgentCaseTest do
     test "fails when queue has items" do
       context = spawn_agent()
       send_signal_async(context, "test.signal", %{})
+
+      # Wait for signal to be queued before asserting
+      assert_eventually(
+        (
+          {:ok, state} = Jido.Agent.Server.state(context.server_pid)
+          :queue.len(state.pending_signals) == 1
+        ),
+        timeout: 500,
+        check_interval: 10
+      )
 
       assert_raise ExUnit.AssertionError, ~r/Expected queue to be empty/, fn ->
         assert_queue_empty(context)

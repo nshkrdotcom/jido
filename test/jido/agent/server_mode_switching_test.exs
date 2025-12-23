@@ -175,12 +175,15 @@ defmodule Jido.Agent.ServerModeSwitchingTest do
       # Switch to :auto mode
       GenServer.call(pid, {:set_mode, :auto})
 
-      # Give time for queue processing
-      Process.sleep(10)
-
-      # Verify queue was processed
-      {:ok, final_state} = Server.state(pid)
-      assert :queue.len(final_state.pending_signals) == 0
+      # Wait for queue to be processed (use assert_eventually to avoid race conditions)
+      assert_eventually(
+        (
+          {:ok, final_state} = Server.state(pid)
+          :queue.len(final_state.pending_signals) == 0
+        ),
+        timeout: 500,
+        check_interval: 10
+      )
     end
 
     test "signals are queued after switching to :step", %{registry: registry} do

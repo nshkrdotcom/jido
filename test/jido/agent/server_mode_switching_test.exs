@@ -196,9 +196,15 @@ defmodule Jido.Agent.ServerModeSwitchingTest do
       signal = Signal.new!(%{type: "test", data: %{}})
       Server.cast(pid, signal)
 
-      # Verify signal is queued
-      {:ok, state} = Server.state(pid)
-      assert :queue.len(state.pending_signals) == 1
+      # Verify signal is queued (use assert_eventually to handle async cast)
+      assert_eventually(
+        (
+          {:ok, state} = Server.state(pid)
+          :queue.len(state.pending_signals) == 1
+        ),
+        timeout: 500,
+        check_interval: 10
+      )
     end
 
     test "signals are queued after switching to :debug", %{registry: registry} do
@@ -211,9 +217,15 @@ defmodule Jido.Agent.ServerModeSwitchingTest do
       signal = Signal.new!(%{type: "test", data: %{}})
       Server.cast(pid, signal)
 
-      # Verify signal is queued (debug mode behaves like step mode for queue processing)
-      {:ok, state} = Server.state(pid)
-      assert :queue.len(state.pending_signals) == 1
+      # Verify signal is queued (use assert_eventually to handle async cast)
+      assert_eventually(
+        (
+          {:ok, state} = Server.state(pid)
+          :queue.len(state.pending_signals) == 1
+        ),
+        timeout: 500,
+        check_interval: 10
+      )
     end
   end
 

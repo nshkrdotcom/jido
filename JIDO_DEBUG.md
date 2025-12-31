@@ -36,7 +36,7 @@ end
 - Can't step through ReAct iterations
 
 **3. Agent complexity is opaque**
-- Messages, processes, LLM calls flowing around
+- Messages, processes, external calls flowing around
 - Hard to visualize what's happening
 - No clear "debugging entry point"
 
@@ -183,7 +183,7 @@ config :jido, :observability,
   tracer: Jido.Observe.NoopTracer, # Existing
   # NEW debug-specific options:
   debug_events: :all,             # :all | :minimal | :off
-  redact_prompts: false,          # Show full prompts in dev
+  redact_sensitive: false,        # Show full data in dev
   trace_buffer_size: 1000         # Keep last N events per agent
 
 # config/prod.exs  
@@ -191,7 +191,7 @@ config :jido, :observability,
   log_level: :warning,
   tracer: Jido.Observe.NoopTracer,
   debug_events: :off,             # No debug noise
-  redact_prompts: true,           # Safety first
+  redact_sensitive: true,         # Safety first
   trace_buffer_size: 0            # No buffering
 ```
 
@@ -204,7 +204,7 @@ JIDO_DEBUG_EVENTS=all JIDO_DEBUG_REDACT=false mix run my_agent.exs
 ```elixir
 {:ok, pid} = AgentServer.start(
   agent: MyAgent,
-  debug: [events: :all, redact_prompts: false]
+  debug: [events: :all, redact_sensitive: false]
 )
 ```
 
@@ -231,7 +231,7 @@ Extend `Jido.Observe` event vocabulary for agent-specific events:
 
 **Metadata best practices:**
 - Use existing `Jido.Observe` patterns (small identifying data)
-- Add `redact_if_prod/2` helper for sensitive fields
+- Add `redact/2` helper for sensitive fields
 - Emit measurements (token counts, durations) instead of content
 
 ```elixir
@@ -242,7 +242,7 @@ Jido.Observe.with_span(
     agent_id: agent.id,
     iteration: 3,
     status: :awaiting_tool,
-    streaming_text: redact_if_prod(text, opts),
+    streaming_text: Jido.Observe.redact(text, opts),
     pending_tool_count: length(pending_tools)
   },
   fn -> :ok end
@@ -406,7 +406,7 @@ mix jido.debug.replay trace.json --fake-llm
 
 **5. Safety by default**
 - Debug events off in prod (`:debug_events: :off`)
-- Automatic prompt redaction (`redact_prompts: true`)
+- Automatic sensitive data redaction (`redact_sensitive: true`)
 - Zero trace buffer in prod (`trace_buffer_size: 0`)
 
 ### ⚠️ Trade-offs
@@ -419,9 +419,9 @@ mix jido.debug.replay trace.json --fake-llm
 - Ring buffer per agent when tracing enabled
 - **Mitigation:** Configurable size, defaults to 0 in prod
 
-**3. Potential PII leakage**
-- Debug events might capture sensitive prompts/data
-- **Mitigation:** Auto-redaction in prod, clear security guidance in docs
+**3. Potential sensitive data leakage**
+- Debug events might capture sensitive data
+- **Mitigation:** Auto-redaction when configured, clear security guidance in docs
 
 **4. Debugging async work is still hard**
 - Tool calls in Tasks/child processes

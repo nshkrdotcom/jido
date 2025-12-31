@@ -3,7 +3,7 @@ defmodule Jido.Observe do
   Unified observability façade for Jido agents.
 
   Wraps `:telemetry` events and `Logger` with a simple API for observing
-  agent execution, LLM calls, tool invocations, and ReAct loops.
+  agent execution, action invocations, and workflow iterations.
 
   ## Features
 
@@ -22,19 +22,19 @@ defmodule Jido.Observe do
 
   ### Synchronous work
 
-      Jido.Observe.with_span([:jido, :ai, :react, :step], %{agent_id: id, step: 1}, fn ->
+      Jido.Observe.with_span([:jido, :agent, :action, :run], %{agent_id: id, action: "my_action"}, fn ->
         # Your code here
         {:ok, result}
       end)
 
   ### Asynchronous work (Tasks)
 
-      span_ctx = Jido.Observe.start_span([:jido, :ai, :llm, :request], %{model: "claude"})
+      span_ctx = Jido.Observe.start_span([:jido, :agent, :async, :request], %{agent_id: id})
 
       Task.start(fn ->
         try do
-          result = do_llm_call()
-          Jido.Observe.finish_span(span_ctx, %{tokens: result.tokens})
+          result = do_async_work()
+          Jido.Observe.finish_span(span_ctx, %{result_size: byte_size(result)})
           result
         rescue
           e ->
@@ -275,8 +275,114 @@ defmodule Jido.Observe do
     Jido.Observe.Log.log(level, message, metadata)
   end
 
+  @doc """
+  Emits a debug event only if debug events are enabled in config.
+
+  This helper checks the `:debug_events` config before emitting, ensuring
+  zero overhead when debugging is disabled (production default).
+
+  ## Configuration
+
+      # config/dev.exs
+      config :jido, :observability,
+        debug_events: :all  # or :minimal, :off
+
+      # config/prod.exs
+      config :jido, :observability,
+        debug_events: :off
+
+  ## Parameters
+
+  - `event_prefix` - Telemetry event name
+  - `measurements` - Map of measurements (durations, counts, etc.)
+  - `metadata` - Map of metadata (agent_id, iteration, etc.)
+
+  ## Example
+
+      Jido.Observe.emit_debug_event(
+        [:jido, :agent, :iteration, :stop],
+        %{duration: 1_234_567},
+        %{agent_id: agent.id, iteration: 3, status: :awaiting_tool}
+      )
+  """
+  @spec emit_debug_event(event_prefix(), measurements(), metadata()) :: :ok
+  def emit_debug_event(event_prefix, measurements \\ %{}, metadata \\ %{}) do
+    if debug_enabled?() do
+      :telemetry.execute(event_prefix, measurements, metadata)
+    end
+
+    :ok
+  end
+
+  @doc """
+  Checks if debug events are enabled in configuration.
+
+  ## Returns
+
+  `true` if `:debug_events` is `:all` or `:minimal`, `false` otherwise.
+  """
+  @spec debug_enabled?() :: boolean()
+  def debug_enabled? do
+    case observability_config()[:debug_events] do
+      :off -> false
+      nil -> false
+      _ -> true
+    end
+  end
+
+  @doc """
+  Redacts sensitive data based on configuration.
+
+  When `:redact_sensitive` is true (production default), replaces the value
+  with `"[REDACTED]"`. Otherwise returns the value unchanged.
+
+  ## Configuration
+
+      # config/prod.exs
+      config :jido, :observability,
+        redact_sensitive: true
+
+      # config/dev.exs
+      config :jido, :observability,
+        redact_sensitive: false
+
+  ## Parameters
+
+  - `value` - The value to potentially redact
+  - `opts` - Optional keyword list with `:force_redact` override
+
+  ## Examples
+
+      # In production (redact_sensitive: true)
+      redact("secret data")
+      # => "[REDACTED]"
+
+      # In development (redact_sensitive: false)
+      redact("secret data")
+      # => "secret data"
+
+      # Force redaction regardless of config
+      redact("secret data", force_redact: true)
+      # => "[REDACTED]"
+  """
+  @spec redact(term(), keyword()) :: term()
+  def redact(value, opts \\ []) do
+    force_redact = Keyword.get(opts, :force_redact, false)
+    should_redact = force_redact || observability_config()[:redact_sensitive] == true
+
+    if should_redact do
+      "[REDACTED]"
+    else
+      value
+    end
+  end
+
   defp tracer do
-    Application.get_env(:jido, :observability, [])
+    observability_config()
     |> Keyword.get(:tracer, Jido.Observe.NoopTracer)
+  end
+
+  defp observability_config do
+    Application.get_env(:jido, :observability, [])
   end
 end

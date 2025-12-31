@@ -73,7 +73,7 @@ defmodule Jido.AgentServer do
 
   require Logger
 
-  alias Jido.AgentServer.{DirectiveExec, Options, ParentRef, State}
+  alias Jido.AgentServer.{DirectiveExec, Options, ParentRef, State, Status}
   alias Jido.AgentServer.Signal.{ChildExit, ChildStarted, Orphaned}
   alias Jido.Signal
 
@@ -178,6 +178,89 @@ defmodule Jido.AgentServer do
     with {:ok, pid} <- resolve_server(server) do
       GenServer.call(pid, :get_state)
     end
+  end
+
+  @doc """
+  Gets runtime status for an agent process.
+
+  Returns a `Status` struct combining the strategy snapshot with process metadata.
+  This provides a stable API for querying agent status without depending on internal
+  `__strategy__` state structure.
+
+  ## Examples
+
+      {:ok, agent_status} = Jido.AgentServer.status(pid)
+
+      # Check completion
+      if agent_status.snapshot.done? do
+        IO.puts("Result: " <> inspect(agent_status.snapshot.result))
+      end
+
+      # Use delegate helpers
+      case Status.status(agent_status) do
+        :success -> {:done, Status.result(agent_status)}
+        :failure -> {:error, Status.details(agent_status)}
+        _ -> :continue
+      end
+  """
+  @spec status(server()) :: {:ok, Status.t()} | {:error, term()}
+  def status(server) do
+    with {:ok, pid} <- resolve_server(server),
+         {:ok, %State{agent: agent, agent_module: agent_module} = state} <-
+           GenServer.call(pid, :get_state) do
+      snapshot = agent_module.strategy_snapshot(agent)
+
+      {:ok,
+       %Status{
+         agent_module: agent_module,
+         agent_id: state.id,
+         pid: pid,
+         snapshot: snapshot,
+         raw_state: agent.state
+       }}
+    end
+  end
+
+  @doc """
+  Streams status updates by polling at regular intervals.
+
+  Returns a Stream that yields status snapshots. Useful for monitoring agent
+  execution without manual polling loops.
+
+  ## Options
+
+  - `:interval_ms` - Polling interval in milliseconds (default: 100)
+
+  ## Examples
+
+      # Poll until completion
+      AgentServer.stream_status(pid, interval_ms: 50)
+      |> Enum.reduce_while(nil, fn status, _acc ->
+        case Status.status(status) do
+          :success -> {:halt, {:ok, Status.result(status)}}
+          :failure -> {:halt, {:error, Status.details(status)}}
+          _ -> {:cont, nil}
+        end
+      end)
+
+      # Take first 10 snapshots
+      AgentServer.stream_status(pid)
+      |> Enum.take(10)
+  """
+  @spec stream_status(server(), keyword()) :: Enumerable.t()
+  def stream_status(server, opts \\ []) do
+    interval_ms = Keyword.get(opts, :interval_ms, 100)
+
+    Stream.repeatedly(fn ->
+      case status(server) do
+        {:ok, status} ->
+          Process.sleep(interval_ms)
+          status
+
+        {:error, reason} ->
+          raise "Failed to get status: #{inspect(reason)}"
+      end
+    end)
   end
 
   @doc """

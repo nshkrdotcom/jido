@@ -397,7 +397,7 @@ defmodule Jido.Agent.Directive do
       Directive.error(Jido.Error.validation_error("Invalid input"))
       Directive.error(error, :normalize)
   """
-  @spec error(term(), atom()) :: Error.t()
+  @spec error(term(), atom() | nil) :: Error.t()
   def error(error, context \\ nil) do
     %Error{error: error, context: context}
   end
@@ -517,11 +517,15 @@ defmodule Jido.Agent.Directive do
 
   ## Examples
 
-      # In a child agent's handle_signal:
-      def handle_signal(agent, %Signal{type: "work.done"} = _signal) do
-        reply = Signal.new!("worker.result", %{answer: 42}, source: "/worker")
-        directive = Directive.emit_to_parent(agent, reply)
-        {agent, List.wrap(directive)}
+      # In a child agent's action:
+      defmodule WorkDoneAction do
+        use Jido.Action, name: "work.done", schema: []
+
+        def run(_params, context) do
+          reply = Signal.new!("worker.result", %{answer: 42}, source: "/worker")
+          directive = Directive.emit_to_parent(context.agent, reply)
+          {:ok, %{}, List.wrap(directive)}
+        end
       end
 
       # With sync delivery

@@ -3,8 +3,9 @@ defmodule Jido.AgentServer do
   GenServer runtime for Jido agents.
 
   AgentServer is the "Act" side of the Jido framework: while Agents "think"
-  (pure decision logic via `handle_signal/2` or `cmd/2`), AgentServer "acts"
-  by executing the directives they emit.
+  (pure decision logic via `cmd/2`), AgentServer "acts" by executing the
+  directives they emit. Signal routing happens in AgentServer, keeping
+  Agents purely action-oriented.
 
   ## Architecture
 
@@ -26,11 +27,16 @@ defmodule Jido.AgentServer do
 
   ```
   Signal → AgentServer.call/cast
-        → Agent.handle_signal/2 (or cmd/2)
+        → route_signal_to_action (via strategy.signal_routes or default)
+        → Agent.cmd/2
         → {agent, directives}
         → Directives queued
         → Drain loop executes via DirectiveExec protocol
   ```
+
+  Signal routing is owned by AgentServer, not the Agent. Strategies can define
+  `signal_routes/1` to map signal types to strategy commands. Unmatched signals
+  fall back to `{signal.type, signal.data}` as the action.
 
   ## Options
 
@@ -73,9 +79,11 @@ defmodule Jido.AgentServer do
 
   require Logger
 
-  alias Jido.AgentServer.{DirectiveExec, Options, ParentRef, State, Status}
+  alias Jido.AgentServer.{DirectiveExec, Options, ParentRef, SignalRouter, State, Status}
   alias Jido.AgentServer.Signal.{ChildExit, ChildStarted, Orphaned}
+  alias Jido.Agent.Directive
   alias Jido.Signal
+  alias Jido.Signal.Router, as: JidoRouter
 
   @type server :: pid() | atom() | {:via, module(), term()} | String.t()
 
@@ -359,6 +367,9 @@ defmodule Jido.AgentServer do
         state
       end
 
+    signal_router = SignalRouter.build(state)
+    state = %{state | signal_router: signal_router}
+
     notify_parent_of_startup(state)
 
     state = start_drain_if_idle(state)
@@ -465,7 +476,7 @@ defmodule Jido.AgentServer do
   # Internal: Signal Processing
   # ---------------------------------------------------------------------------
 
-  defp process_signal(%Signal{} = signal, %State{} = state) do
+  defp process_signal(%Signal{} = signal, %State{signal_router: router} = state) do
     start_time = System.monotonic_time()
     agent_module = state.agent_module
 
@@ -482,35 +493,62 @@ defmodule Jido.AgentServer do
     )
 
     try do
-      {agent, directives} =
-        if function_exported?(agent_module, :handle_signal, 2) do
-          agent_module.handle_signal(state.agent, signal)
-        else
-          agent_module.cmd(state.agent, signal)
-        end
+      case route_to_actions(router, signal) do
+        {:ok, actions} ->
+          action_arg =
+            case actions do
+              [single] -> single
+              many -> many
+            end
 
-      directives = List.wrap(directives)
-      state = State.update_agent(state, agent)
+          {agent, directives} = agent_module.cmd(state.agent, action_arg)
 
-      emit_telemetry(
-        [:jido, :agent_server, :signal, :stop],
-        %{duration: System.monotonic_time() - start_time},
-        Map.merge(metadata, %{directive_count: length(directives)})
-      )
+          directives = List.wrap(directives)
+          state = State.update_agent(state, agent)
 
-      case State.enqueue_all(state, signal, directives) do
-        {:ok, enq_state} ->
-          {:ok, start_drain_if_idle(enq_state)}
-
-        {:error, :queue_overflow} ->
           emit_telemetry(
-            [:jido, :agent_server, :queue, :overflow],
-            %{queue_size: state.max_queue_size},
-            metadata
+            [:jido, :agent_server, :signal, :stop],
+            %{duration: System.monotonic_time() - start_time},
+            Map.merge(metadata, %{directive_count: length(directives)})
           )
 
-          Logger.warning("AgentServer #{state.id} queue overflow, dropping directives")
-          {:error, :queue_overflow, state}
+          case State.enqueue_all(state, signal, directives) do
+            {:ok, enq_state} ->
+              {:ok, start_drain_if_idle(enq_state)}
+
+            {:error, :queue_overflow} ->
+              emit_telemetry(
+                [:jido, :agent_server, :queue, :overflow],
+                %{queue_size: state.max_queue_size},
+                metadata
+              )
+
+              Logger.warning("AgentServer #{state.id} queue overflow, dropping directives")
+              {:error, :queue_overflow, state}
+          end
+
+        {:error, reason} ->
+          emit_telemetry(
+            [:jido, :agent_server, :signal, :stop],
+            %{duration: System.monotonic_time() - start_time},
+            Map.merge(metadata, %{error: reason})
+          )
+
+          error =
+            Jido.Error.routing_error("No route for signal", %{
+              signal_type: signal.type,
+              reason: reason
+            })
+
+          error_directive = %Directive.Error{error: error, context: :routing}
+
+          case State.enqueue_all(state, signal, [error_directive]) do
+            {:ok, enq_state} ->
+              {:error, reason, start_drain_if_idle(enq_state)}
+
+            {:error, :queue_overflow} ->
+              {:error, reason, state}
+          end
       end
     catch
       kind, reason ->
@@ -522,6 +560,44 @@ defmodule Jido.AgentServer do
 
         :erlang.raise(kind, reason, __STACKTRACE__)
     end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Internal: Signal Routing
+  # ---------------------------------------------------------------------------
+
+  defp route_to_actions(router, signal) do
+    case JidoRouter.route(router, signal) do
+      {:ok, targets} when targets != [] ->
+        actions = Enum.map(targets, &target_to_action(&1, signal))
+        {:ok, actions}
+
+      {:error, %{details: %{reason: :no_handlers_found}}} ->
+        {:error, :no_matching_route}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp target_to_action({:strategy_cmd, cmd}, %Signal{data: data}) do
+    {cmd, data}
+  end
+
+  defp target_to_action({:strategy_tick}, _signal) do
+    {:strategy_tick, %{}}
+  end
+
+  defp target_to_action({:custom, _term}, %Signal{data: data}) do
+    {:custom, data}
+  end
+
+  defp target_to_action(mod, %Signal{data: data}) when is_atom(mod) do
+    {mod, data}
+  end
+
+  defp target_to_action({mod, params}, _signal) when is_atom(mod) and is_map(params) do
+    {mod, params}
   end
 
   # ---------------------------------------------------------------------------

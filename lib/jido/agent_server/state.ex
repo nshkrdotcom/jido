@@ -41,6 +41,11 @@ defmodule Jido.AgentServer.State do
               registry: Zoi.atom(description: "Registry module") |> Zoi.default(Jido.Registry),
               spawn_fun: Zoi.any(description: "Custom spawn function") |> Zoi.optional(),
 
+              # Routing
+              signal_router:
+                Zoi.any(description: "Jido.Signal.Router for signal routing")
+                |> Zoi.optional(),
+
               # Observability
               error_count:
                 Zoi.integer(description: "Count of errors for max_errors policy")

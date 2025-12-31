@@ -246,7 +246,7 @@ defmodule Jido.Agent.Strategy do
   Declares signal routes handled by this strategy.
 
   Returns a list of route specs that map signal types to strategy commands.
-  The agent macro uses these to auto-generate `handle_signal/2` clauses.
+  AgentServer consults this to route incoming signals to the appropriate actions.
 
   ## Route Targets
 

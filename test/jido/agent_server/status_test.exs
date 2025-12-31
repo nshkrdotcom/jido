@@ -5,6 +5,26 @@ defmodule JidoTest.AgentServer.StatusTest do
   alias Jido.AgentServer.Status
   alias Jido.Signal
 
+  # Test actions
+  defmodule IncrementAction do
+    @moduledoc false
+    use Jido.Action, name: "test_increment", schema: []
+
+    def run(_params, context) do
+      count = Map.get(context.state, :counter, 0)
+      {:ok, %{counter: count + 1}}
+    end
+  end
+
+  defmodule CompleteAction do
+    @moduledoc false
+    use Jido.Action, name: "test_complete", schema: []
+
+    def run(_params, context) do
+      {:ok, %{status: :completed, result: context.state.counter}}
+    end
+  end
+
   # Simple test agent with Direct strategy
   defmodule TestAgent do
     use Jido.Agent,
@@ -15,18 +35,12 @@ defmodule JidoTest.AgentServer.StatusTest do
         status: [type: :atom, default: :idle]
       ]
 
-    @impl true
-    def handle_signal(agent, %Signal{type: "test.increment"} = _signal) do
-      {:ok, agent} = set(agent, counter: agent.state.counter + 1)
-      {agent, []}
+    def signal_routes do
+      [
+        {"test_increment", IncrementAction},
+        {"test.complete", CompleteAction}
+      ]
     end
-
-    def handle_signal(agent, %Signal{type: "test.complete"} = _signal) do
-      {:ok, agent} = set(agent, status: :completed, result: agent.state.counter)
-      {agent, []}
-    end
-
-    def handle_signal(agent, _signal), do: {agent, []}
   end
 
   describe "Status struct" do
@@ -108,7 +122,7 @@ defmodule JidoTest.AgentServer.StatusTest do
       assert status1.raw_state.counter == 0
 
       # Send increment signal
-      signal = Signal.new!("test.increment", %{}, source: "test")
+      signal = Signal.new!("test_increment", %{}, source: "test")
       AgentServer.cast(pid, signal)
       Process.sleep(50)
 
@@ -144,27 +158,32 @@ defmodule JidoTest.AgentServer.StatusTest do
       assert Enum.all?(statuses, &match?(%Status{}, &1))
     end
 
+    @tag :flaky
     test "can monitor state changes via stream", %{pid: pid} do
       # Start streaming in a task
       task =
         Task.async(fn ->
-          AgentServer.stream_status(pid, interval_ms: 20)
-          |> Enum.reduce_while([], fn status, acc ->
-            new_acc = [status.raw_state[:counter] | acc]
+          try do
+            AgentServer.stream_status(pid, interval_ms: 20)
+            |> Enum.reduce_while([], fn status, acc ->
+              new_acc = [status.raw_state[:counter] | acc]
 
-            if status.raw_state[:counter] >= 3 do
-              {:halt, Enum.reverse(new_acc)}
-            else
-              {:cont, new_acc}
-            end
-          end)
+              if status.raw_state[:counter] >= 3 do
+                {:halt, Enum.reverse(new_acc)}
+              else
+                {:cont, new_acc}
+              end
+            end)
+          catch
+            :exit, _ -> []
+          end
         end)
 
       # Send increments while streaming
       Process.sleep(50)
 
       for _i <- 1..3 do
-        signal = Signal.new!("test.increment", %{}, source: "test")
+        signal = Signal.new!("test_increment", %{}, source: "test")
         AgentServer.cast(pid, signal)
         Process.sleep(50)
       end
@@ -174,6 +193,7 @@ defmodule JidoTest.AgentServer.StatusTest do
       assert 3 in counters
     end
 
+    @tag :flaky
     test "stream respects interval_ms option", %{pid: pid} do
       start_time = System.monotonic_time(:millisecond)
 

@@ -6,6 +6,83 @@ defmodule JidoTest.AgentServerTest do
   alias Jido.Agent.Directive
   alias Jido.Signal
 
+  # Test actions for TestAgent
+  defmodule IncrementAction do
+    @moduledoc false
+    use Jido.Action, name: "increment", schema: []
+
+    def run(_params, context) do
+      count = Map.get(context.state, :counter, 0)
+      {:ok, %{counter: count + 1}}
+    end
+  end
+
+  defmodule DecrementAction do
+    @moduledoc false
+    use Jido.Action, name: "decrement", schema: []
+
+    def run(_params, context) do
+      count = Map.get(context.state, :counter, 0)
+      {:ok, %{counter: count - 1}}
+    end
+  end
+
+  defmodule RecordAction do
+    @moduledoc false
+    use Jido.Action, name: "record", schema: []
+
+    def run(params, context) do
+      messages = Map.get(context.state, :messages, [])
+      {:ok, %{messages: messages ++ [params]}}
+    end
+  end
+
+  defmodule EmitTestAction do
+    @moduledoc false
+    use Jido.Action, name: "emit_test", schema: []
+
+    def run(_params, _context) do
+      signal = Signal.new!("test.emitted", %{from: "agent"}, source: "/test")
+      {:ok, %{}, [%Directive.Emit{signal: signal}]}
+    end
+  end
+
+  defmodule ScheduleTestAction do
+    @moduledoc false
+    use Jido.Action, name: "schedule_test", schema: []
+
+    def run(_params, _context) do
+      scheduled_signal = Signal.new!("scheduled.ping", %{}, source: "/test")
+      {:ok, %{}, [%Directive.Schedule{delay_ms: 50, message: scheduled_signal}]}
+    end
+  end
+
+  defmodule StopTestAction do
+    @moduledoc false
+    use Jido.Action, name: "stop_test", schema: []
+
+    def run(_params, _context) do
+      {:ok, %{}, [%Directive.Stop{reason: :normal}]}
+    end
+  end
+
+  defmodule ErrorTestAction do
+    @moduledoc false
+    use Jido.Action, name: "error_test", schema: []
+
+    def run(_params, _context) do
+      error = Jido.Error.validation_error("Test error", %{field: :test})
+      {:ok, %{}, [%Directive.Error{error: error, context: :test}]}
+    end
+  end
+
+  defmodule NoopAction do
+    @moduledoc false
+    use Jido.Action, name: "noop", schema: []
+
+    def run(_params, _context), do: {:ok, %{}}
+  end
+
   defmodule TestAgent do
     @moduledoc false
     use Jido.Agent,
@@ -15,45 +92,17 @@ defmodule JidoTest.AgentServerTest do
         messages: [type: {:list, :any}, default: []]
       ]
 
-    def handle_signal(agent, %Signal{type: "increment"} = _signal) do
-      count = Map.get(agent.state, :counter, 0)
-      agent = %{agent | state: Map.put(agent.state, :counter, count + 1)}
-      {agent, []}
-    end
-
-    def handle_signal(agent, %Signal{type: "decrement"} = _signal) do
-      count = Map.get(agent.state, :counter, 0)
-      agent = %{agent | state: Map.put(agent.state, :counter, count - 1)}
-      {agent, []}
-    end
-
-    def handle_signal(agent, %Signal{type: "record", data: data} = _signal) do
-      messages = Map.get(agent.state, :messages, [])
-      agent = %{agent | state: Map.put(agent.state, :messages, messages ++ [data])}
-      {agent, []}
-    end
-
-    def handle_signal(agent, %Signal{type: "emit_test"} = _signal) do
-      signal = Signal.new!("test.emitted", %{from: "agent"}, source: "/test")
-      {agent, [%Directive.Emit{signal: signal}]}
-    end
-
-    def handle_signal(agent, %Signal{type: "schedule_test"} = _signal) do
-      scheduled_signal = Signal.new!("scheduled.ping", %{}, source: "/test")
-      {agent, [%Directive.Schedule{delay_ms: 50, message: scheduled_signal}]}
-    end
-
-    def handle_signal(agent, %Signal{type: "stop_test"} = _signal) do
-      {agent, [%Directive.Stop{reason: :normal}]}
-    end
-
-    def handle_signal(agent, %Signal{type: "error_test"} = _signal) do
-      error = Jido.Error.validation_error("Test error", %{field: :test})
-      {agent, [%Directive.Error{error: error, context: :test}]}
-    end
-
-    def handle_signal(agent, _signal) do
-      {agent, []}
+    def signal_routes do
+      [
+        {"increment", IncrementAction},
+        {"decrement", DecrementAction},
+        {"record", RecordAction},
+        {"emit_test", EmitTestAction},
+        {"schedule_test", ScheduleTestAction},
+        {"stop_test", StopTestAction},
+        {"error_test", ErrorTestAction},
+        {"noop", NoopAction}
+      ]
     end
   end
 
@@ -296,13 +345,12 @@ defmodule JidoTest.AgentServerTest do
   end
 
   describe "unknown signals" do
-    test "handles unknown signal types gracefully" do
+    test "returns routing error for unknown signal types" do
       {:ok, pid} = AgentServer.start_link(agent: TestAgent)
 
       signal = Signal.new!("unknown.signal.type", %{}, source: "/test")
-      {:ok, agent} = AgentServer.call(pid, signal)
+      {:error, :no_matching_route} = AgentServer.call(pid, signal)
 
-      assert agent.state.counter == 0
       GenServer.stop(pid)
     end
   end
@@ -388,18 +436,21 @@ defmodule JidoTest.AgentServerTest do
     end
 
     test "transitions to processing during signal handling" do
+      defmodule SlowAction do
+        @moduledoc false
+        use Jido.Action, name: "slow", schema: []
+
+        def run(_params, _context) do
+          Process.sleep(100)
+          {:ok, %{}}
+        end
+      end
+
       defmodule SlowAgent do
         @moduledoc false
         use Jido.Agent,
           name: "slow_agent",
           schema: [value: [type: :integer, default: 0]]
-
-        def handle_signal(agent, %Signal{type: "slow"} = _signal) do
-          Process.sleep(100)
-          {agent, []}
-        end
-
-        def handle_signal(agent, _signal), do: {agent, []}
       end
 
       {:ok, pid} = AgentServer.start_link(agent: SlowAgent)
@@ -435,6 +486,26 @@ defmodule JidoTest.AgentServerTest do
 
   describe "scheduled signals" do
     test "scheduled signal is processed after delay" do
+      defmodule StartScheduleAction do
+        @moduledoc false
+        use Jido.Action, name: "start_schedule", schema: []
+
+        def run(_params, _context) do
+          scheduled = Signal.new!("scheduled.ping", %{}, source: "/test")
+          {:ok, %{}, [%Directive.Schedule{delay_ms: 50, message: scheduled}]}
+        end
+      end
+
+      defmodule ScheduledPingAction do
+        @moduledoc false
+        use Jido.Action, name: "scheduled_ping", schema: []
+
+        def run(_params, context) do
+          pings = Map.get(context.state, :pings, 0)
+          {:ok, %{pings: pings + 1}}
+        end
+      end
+
       defmodule ScheduleTrackingAgent do
         @moduledoc false
         use Jido.Agent,
@@ -443,18 +514,12 @@ defmodule JidoTest.AgentServerTest do
             pings: [type: :integer, default: 0]
           ]
 
-        def handle_signal(agent, %Signal{type: "start_schedule"} = _signal) do
-          scheduled = Signal.new!("scheduled.ping", %{}, source: "/test")
-          {agent, [%Directive.Schedule{delay_ms: 50, message: scheduled}]}
+        def signal_routes do
+          [
+            {"start_schedule", StartScheduleAction},
+            {"scheduled.ping", ScheduledPingAction}
+          ]
         end
-
-        def handle_signal(agent, %Signal{type: "scheduled.ping"} = _signal) do
-          pings = Map.get(agent.state, :pings, 0)
-          agent = %{agent | state: Map.put(agent.state, :pings, pings + 1)}
-          {agent, []}
-        end
-
-        def handle_signal(agent, _signal), do: {agent, []}
       end
 
       {:ok, pid} = AgentServer.start_link(agent: ScheduleTrackingAgent)
@@ -476,6 +541,31 @@ defmodule JidoTest.AgentServerTest do
     end
 
     test "multiple scheduled signals are processed" do
+      defmodule ScheduleManyAction do
+        @moduledoc false
+        use Jido.Action, name: "schedule_many", schema: []
+
+        def run(_params, _context) do
+          directives =
+            for i <- 1..3 do
+              sig = Signal.new!("tick", %{n: i}, source: "/test")
+              %Directive.Schedule{delay_ms: i * 20, message: sig}
+            end
+
+          {:ok, %{}, directives}
+        end
+      end
+
+      defmodule TickAction do
+        @moduledoc false
+        use Jido.Action, name: "tick", schema: []
+
+        def run(params, context) do
+          events = Map.get(context.state, :events, [])
+          {:ok, %{events: events ++ [params.n]}}
+        end
+      end
+
       defmodule MultiScheduleAgent do
         @moduledoc false
         use Jido.Agent,
@@ -484,23 +574,12 @@ defmodule JidoTest.AgentServerTest do
             events: [type: {:list, :any}, default: []]
           ]
 
-        def handle_signal(agent, %Signal{type: "schedule_many"} = _signal) do
-          directives =
-            for i <- 1..3 do
-              sig = Signal.new!("tick", %{n: i}, source: "/test")
-              %Directive.Schedule{delay_ms: i * 20, message: sig}
-            end
-
-          {agent, directives}
+        def signal_routes do
+          [
+            {"schedule_many", ScheduleManyAction},
+            {"tick", TickAction}
+          ]
         end
-
-        def handle_signal(agent, %Signal{type: "tick", data: data} = _signal) do
-          events = Map.get(agent.state, :events, [])
-          agent = %{agent | state: Map.put(agent.state, :events, events ++ [data.n])}
-          {agent, []}
-        end
-
-        def handle_signal(agent, _signal), do: {agent, []}
       end
 
       {:ok, pid} = AgentServer.start_link(agent: MultiScheduleAgent)
@@ -517,6 +596,24 @@ defmodule JidoTest.AgentServerTest do
     end
 
     test "non-signal message is wrapped in signal" do
+      defmodule ScheduleAtomAction do
+        @moduledoc false
+        use Jido.Action, name: "schedule_atom", schema: []
+
+        def run(_params, _context) do
+          {:ok, %{}, [%Directive.Schedule{delay_ms: 10, message: :timeout}]}
+        end
+      end
+
+      defmodule JidoScheduledAction do
+        @moduledoc false
+        use Jido.Action, name: "jido_scheduled", schema: []
+
+        def run(params, _context) do
+          {:ok, %{received: params.message}}
+        end
+      end
+
       defmodule WrapScheduleAgent do
         @moduledoc false
         use Jido.Agent,
@@ -525,16 +622,12 @@ defmodule JidoTest.AgentServerTest do
             received: [type: :any, default: nil]
           ]
 
-        def handle_signal(agent, %Signal{type: "schedule_atom"} = _signal) do
-          {agent, [%Directive.Schedule{delay_ms: 10, message: :timeout}]}
+        def signal_routes do
+          [
+            {"schedule_atom", ScheduleAtomAction},
+            {"jido.scheduled", JidoScheduledAction}
+          ]
         end
-
-        def handle_signal(agent, %Signal{type: "jido.scheduled", data: %{message: msg}} = _signal) do
-          agent = %{agent | state: Map.put(agent.state, :received, msg)}
-          {agent, []}
-        end
-
-        def handle_signal(agent, _signal), do: {agent, []}
       end
 
       {:ok, pid} = AgentServer.start_link(agent: WrapScheduleAgent)

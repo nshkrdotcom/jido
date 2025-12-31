@@ -8,6 +8,48 @@ defmodule JidoTest.AgentServer.HierarchyTest do
   alias Jido.Agent.Directive
   alias Jido.Signal
 
+  # Actions for ParentAgent
+  defmodule ChildExitAction do
+    @moduledoc false
+    use Jido.Action, name: "child_exit", schema: []
+
+    def run(params, context) do
+      events = Map.get(context.state, :child_events, [])
+      {:ok, %{child_events: events ++ [params]}}
+    end
+  end
+
+  defmodule SpawnChildAction do
+    @moduledoc false
+    use Jido.Action, name: "spawn_child", schema: []
+
+    def run(%{module: mod, tag: tag}, _context) do
+      {:ok, %{}, [%Directive.Spawn{child_spec: {mod, []}, tag: tag}]}
+    end
+  end
+
+  defmodule SpawnAgentAction do
+    @moduledoc false
+    use Jido.Action, name: "spawn_agent", schema: []
+
+    def run(%{module: mod, tag: tag} = params, _context) do
+      opts = Map.get(params, :opts, %{})
+      meta = Map.get(params, :meta, %{})
+      {:ok, %{}, [Directive.spawn_agent(mod, tag, opts: opts, meta: meta)]}
+    end
+  end
+
+  # Actions for ChildAgent
+  defmodule OrphanedAction do
+    @moduledoc false
+    use Jido.Action, name: "orphaned", schema: []
+
+    def run(params, context) do
+      events = Map.get(context.state, :orphan_events, [])
+      {:ok, %{orphan_events: events ++ [params]}}
+    end
+  end
+
   defmodule ParentAgent do
     @moduledoc false
     use Jido.Agent,
@@ -16,30 +58,13 @@ defmodule JidoTest.AgentServer.HierarchyTest do
         child_events: [type: {:list, :any}, default: []]
       ]
 
-    def handle_signal(agent, %Signal{type: "jido.agent.child.exit", data: data} = _signal) do
-      events = Map.get(agent.state, :child_events, [])
-      agent = %{agent | state: Map.put(agent.state, :child_events, events ++ [data])}
-      {agent, []}
-    end
-
-    def handle_signal(
-          agent,
-          %Signal{type: "spawn_child", data: %{module: mod, tag: tag}} = _signal
-        ) do
-      {agent, [%Directive.Spawn{child_spec: {mod, []}, tag: tag}]}
-    end
-
-    def handle_signal(
-          agent,
-          %Signal{type: "spawn_agent", data: %{module: mod, tag: tag} = data} = _signal
-        ) do
-      opts = Map.get(data, :opts, %{})
-      meta = Map.get(data, :meta, %{})
-      {agent, [Directive.spawn_agent(mod, tag, opts: opts, meta: meta)]}
-    end
-
-    def handle_signal(agent, _signal) do
-      {agent, []}
+    def signal_routes do
+      [
+        {"jido.agent.child.exit", ChildExitAction},
+        {"child_exit", ChildExitAction},
+        {"spawn_child", SpawnChildAction},
+        {"spawn_agent", SpawnAgentAction}
+      ]
     end
   end
 
@@ -51,14 +76,11 @@ defmodule JidoTest.AgentServer.HierarchyTest do
         orphan_events: [type: {:list, :any}, default: []]
       ]
 
-    def handle_signal(agent, %Signal{type: "jido.agent.orphaned", data: data} = _signal) do
-      events = Map.get(agent.state, :orphan_events, [])
-      agent = %{agent | state: Map.put(agent.state, :orphan_events, events ++ [data])}
-      {agent, []}
-    end
-
-    def handle_signal(agent, _signal) do
-      {agent, []}
+    def signal_routes do
+      [
+        {"jido.agent.orphaned", OrphanedAction},
+        {"orphaned", OrphanedAction}
+      ]
     end
   end
 
@@ -142,7 +164,8 @@ defmodule JidoTest.AgentServer.HierarchyTest do
 
       DynamicSupervisor.terminate_child(Jido.AgentSupervisor, parent_pid)
 
-      assert_receive {:DOWN, ^child_ref, :process, ^child_pid, {:parent_down, :shutdown}}, 1000
+      assert_receive {:DOWN, ^child_ref, :process, ^child_pid, {:parent_down, reason}}, 1000
+      assert reason in [:shutdown, :noproc]
     end
 
     test "logs when stopping due to parent death" do

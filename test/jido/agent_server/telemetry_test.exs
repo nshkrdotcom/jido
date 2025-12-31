@@ -5,6 +5,36 @@ defmodule JidoTest.AgentServer.TelemetryTest do
   alias Jido.Agent.Directive
   alias Jido.Signal
 
+  # Test actions for TelemetryAgent
+  defmodule IncrementAction do
+    @moduledoc false
+    use Jido.Action, name: "increment", schema: []
+
+    def run(_params, context) do
+      count = Map.get(context.state, :counter, 0)
+      {:ok, %{counter: count + 1}}
+    end
+  end
+
+  defmodule EmitDirectiveAction do
+    @moduledoc false
+    use Jido.Action, name: "emit_directive", schema: []
+
+    def run(_params, _context) do
+      signal = Signal.new!("test.emitted", %{}, source: "/test")
+      {:ok, %{}, [%Directive.Emit{signal: signal}]}
+    end
+  end
+
+  defmodule ScheduleDirectiveAction do
+    @moduledoc false
+    use Jido.Action, name: "schedule_directive", schema: []
+
+    def run(_params, _context) do
+      {:ok, %{}, [%Directive.Schedule{delay_ms: 100, message: :tick}]}
+    end
+  end
+
   defmodule TelemetryAgent do
     @moduledoc false
     use Jido.Agent,
@@ -13,23 +43,12 @@ defmodule JidoTest.AgentServer.TelemetryTest do
         counter: [type: :integer, default: 0]
       ]
 
-    def handle_signal(agent, %Signal{type: "increment"} = _signal) do
-      count = Map.get(agent.state, :counter, 0)
-      agent = %{agent | state: Map.put(agent.state, :counter, count + 1)}
-      {agent, []}
-    end
-
-    def handle_signal(agent, %Signal{type: "emit_directive"} = _signal) do
-      signal = Signal.new!("test.emitted", %{}, source: "/test")
-      {agent, [%Directive.Emit{signal: signal}]}
-    end
-
-    def handle_signal(agent, %Signal{type: "schedule_directive"} = _signal) do
-      {agent, [%Directive.Schedule{delay_ms: 100, message: :tick}]}
-    end
-
-    def handle_signal(agent, _signal) do
-      {agent, []}
+    def signal_routes do
+      [
+        {"increment", IncrementAction},
+        {"emit_directive", EmitDirectiveAction},
+        {"schedule_directive", ScheduleDirectiveAction}
+      ]
     end
   end
 

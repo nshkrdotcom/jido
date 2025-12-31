@@ -45,6 +45,17 @@ defmodule JidoTest.AgentServer.StrategyInitTest do
     end
   end
 
+  defmodule NoopAction do
+    @moduledoc false
+    use Jido.Action,
+      name: "noop",
+      description: "No-op action for testing",
+      schema: []
+
+    @impl true
+    def run(_params, _ctx), do: {:ok, %{}}
+  end
+
   defmodule TrackingAgent do
     @moduledoc false
     use Jido.Agent,
@@ -53,6 +64,12 @@ defmodule JidoTest.AgentServer.StrategyInitTest do
       schema: [
         counter: [type: :integer, default: 0]
       ]
+
+    def signal_routes do
+      [
+        {"test", JidoTest.AgentServer.StrategyInitTest.NoopAction}
+      ]
+    end
   end
 
   defmodule DirectiveAgent do
@@ -63,6 +80,8 @@ defmodule JidoTest.AgentServer.StrategyInitTest do
       schema: [
         value: [type: :integer, default: 0]
       ]
+
+    def signal_routes, do: []
   end
 
   defmodule DefaultStrategyAgent do
@@ -72,6 +91,8 @@ defmodule JidoTest.AgentServer.StrategyInitTest do
       schema: [
         status: [type: :atom, default: :idle]
       ]
+
+    def signal_routes, do: []
   end
 
   describe "strategy.init/2 lifecycle" do

@@ -145,6 +145,33 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.SpawnAgent do
   defp resolve_agent_module(_), do: nil
 end
 
+defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.StopChild do
+  @moduledoc false
+
+  require Logger
+
+  alias Jido.AgentServer.State
+
+  def exec(%{tag: tag, reason: reason}, _input_signal, state) do
+    case State.get_child(state, tag) do
+      nil ->
+        Logger.debug("AgentServer #{state.id} cannot stop child #{inspect(tag)}: not found")
+        {:ok, state}
+
+      %{pid: pid} ->
+        Logger.debug(
+          "AgentServer #{state.id} stopping child #{inspect(tag)} with reason #{inspect(reason)}"
+        )
+
+        Task.Supervisor.start_child(Jido.TaskSupervisor, fn ->
+          GenServer.stop(pid, reason, 5_000)
+        end)
+
+        {:ok, state}
+    end
+  end
+end
+
 defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Stop do
   @moduledoc false
 

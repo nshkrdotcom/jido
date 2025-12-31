@@ -23,9 +23,11 @@ defmodule Jido.Agent.Directive do
 
     * `%Emit{}` - Dispatch a signal via `Jido.Signal.Dispatch`
     * `%Error{}` - Signal an error (wraps `Jido.Error.t()`)
-    * `%Spawn{}` - Spawn a child process
+    * `%Spawn{}` - Spawn a generic BEAM child process (fire-and-forget, no tracking)
+    * `%SpawnAgent{}` - Spawn a child Jido agent with full hierarchy tracking
+    * `%StopChild{}` - Request a tracked child agent to stop gracefully
     * `%Schedule{}` - Schedule a delayed message
-    * `%Stop{}` - Stop the agent process
+    * `%Stop{}` - Stop the agent process (self)
 
   ## Usage
 
@@ -50,7 +52,7 @@ defmodule Jido.Agent.Directive do
   The runtime dispatches on struct type, so no changes to core are needed.
   """
 
-  alias __MODULE__.{Emit, Error, Spawn, SpawnAgent, Schedule, Stop}
+  alias __MODULE__.{Emit, Error, Spawn, SpawnAgent, StopChild, Schedule, Stop}
 
   @typedoc """
   Any external directive struct (core or extension).
@@ -66,6 +68,7 @@ defmodule Jido.Agent.Directive do
           | Error.t()
           | Spawn.t()
           | SpawnAgent.t()
+          | StopChild.t()
           | Schedule.t()
           | Stop.t()
 
@@ -163,12 +166,22 @@ defmodule Jido.Agent.Directive do
 
   defmodule Spawn do
     @moduledoc """
-    Spawn a child process under the agent's supervisor.
+    Spawn a generic BEAM child process under the agent's supervisor.
+
+    This is a **low-level, fire-and-forget** directive for spawning non-agent
+    processes (Tasks, GenServers, etc.). The spawned process is **not tracked**
+    in the agent's children map and has no parent-child relationship semantics.
+
+    Use `SpawnAgent` instead if you need to spawn another Jido agent with:
+    - Parent-child hierarchy tracking
+    - Process monitoring and exit signals
+    - The ability to use `emit_to_parent/3` from the child
+    - Lifecycle management via `StopChild`
 
     ## Fields
 
     - `child_spec` - Supervisor child_spec for the process to spawn
-    - `tag` - Optional correlation tag for tracking
+    - `tag` - Optional correlation tag for logging (not used for tracking)
     """
 
     @schema Zoi.struct(
@@ -237,6 +250,57 @@ defmodule Jido.Agent.Directive do
                 tag: Zoi.any(description: "Tag for tracking this child"),
                 opts: Zoi.map(description: "Options for child AgentServer") |> Zoi.default(%{}),
                 meta: Zoi.map(description: "Metadata to pass to child") |> Zoi.default(%{})
+              },
+              coerce: true
+            )
+
+    @type t :: unquote(Zoi.type_spec(@schema))
+    @enforce_keys Zoi.Struct.enforce_keys(@schema)
+    defstruct Zoi.Struct.struct_fields(@schema)
+
+    def schema, do: @schema
+  end
+
+  # ============================================================================
+  # StopChild - Stop a tracked child agent
+  # ============================================================================
+
+  defmodule StopChild do
+    @moduledoc """
+    Request that a tracked child agent stop gracefully.
+
+    This directive provides symmetric lifecycle control for child agents
+    spawned via `SpawnAgent`. It sends a shutdown signal to the child,
+    allowing it to terminate cleanly.
+
+    The child is identified by its `tag` (the key used in `SpawnAgent`).
+    If the child is not found, the directive is a no-op.
+
+    ## Fields
+
+    - `tag` - Tag of the child to stop (must match a key in the children map)
+    - `reason` - Reason for stopping (default: `:normal`)
+
+    ## Examples
+
+        # Stop a worker by tag
+        %StopChild{tag: :worker_1}
+
+        # Stop with a specific reason
+        %StopChild{tag: :processor, reason: :shutdown}
+
+    ## Behavior
+
+    The runtime sends a `jido.agent.stop` signal to the child process,
+    which triggers a graceful shutdown. The child's exit will be delivered
+    back to the parent as a `jido.agent.child.exit` signal.
+    """
+
+    @schema Zoi.struct(
+              __MODULE__,
+              %{
+                tag: Zoi.any(description: "Tag of the child to stop"),
+                reason: Zoi.any(description: "Reason for stopping") |> Zoi.default(:normal)
               },
               coerce: true
             )
@@ -370,6 +434,19 @@ defmodule Jido.Agent.Directive do
     opts = Keyword.get(options, :opts, %{})
     meta = Keyword.get(options, :meta, %{})
     %SpawnAgent{agent: agent, tag: tag, opts: opts, meta: meta}
+  end
+
+  @doc """
+  Creates a StopChild directive to gracefully stop a tracked child agent.
+
+  ## Examples
+
+      Directive.stop_child(:worker_1)
+      Directive.stop_child(:processor, :shutdown)
+  """
+  @spec stop_child(term(), term()) :: StopChild.t()
+  def stop_child(tag, reason \\ :normal) do
+    %StopChild{tag: tag, reason: reason}
   end
 
   @doc """

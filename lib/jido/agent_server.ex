@@ -654,7 +654,8 @@ defmodule Jido.AgentServer do
 
   # Warn when {:stop, ...} is used with normal-looking reasons.
   # This indicates likely misuse - normal completion should use state.status instead.
-  defp warn_if_normal_stop(reason, directive, state) when reason in [:normal, :completed, :ok, :done, :success] do
+  defp warn_if_normal_stop(reason, directive, state)
+       when reason in [:normal, :completed, :ok, :done, :success] do
     directive_type = directive.__struct__ |> Module.split() |> List.last()
 
     Logger.warning("""

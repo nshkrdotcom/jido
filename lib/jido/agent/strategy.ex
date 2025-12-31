@@ -346,8 +346,11 @@ defmodule Jido.Agent.Strategy do
     cond do
       is_struct(schema) ->
         case Zoi.parse(schema, atomized) do
-          {:ok, v} -> v
-          {:error, err} -> raise ArgumentError, "Invalid params for #{inspect(action)}: #{inspect(err)}"
+          {:ok, v} ->
+            v
+
+          {:error, err} ->
+            raise ArgumentError, "Invalid params for #{inspect(action)}: #{inspect(err)}"
         end
 
       is_list(schema) ->

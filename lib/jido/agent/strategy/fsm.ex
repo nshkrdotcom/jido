@@ -92,8 +92,11 @@ defmodule Jido.Agent.Strategy.FSM do
 
   defp process_instructions(agent, machine, instructions) do
     {agent, machine, directives} =
-      Enum.reduce(instructions, {agent, machine, []}, fn instruction, {acc_agent, acc_machine, acc_directives} ->
-        {new_agent, new_machine, new_directives} = run_instruction(acc_agent, acc_machine, instruction)
+      Enum.reduce(instructions, {agent, machine, []}, fn instruction,
+                                                         {acc_agent, acc_machine, acc_directives} ->
+        {new_agent, new_machine, new_directives} =
+          run_instruction(acc_agent, acc_machine, instruction)
+
         {new_agent, new_machine, acc_directives ++ new_directives}
       end)
 

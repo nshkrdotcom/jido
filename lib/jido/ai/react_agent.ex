@@ -58,7 +58,12 @@ defmodule Jido.AI.ReActAgent do
     default_model = @default_model
     default_max_iterations = @default_max_iterations
 
-    quote location: :keep, bind_quoted: [opts: opts, default_model: default_model, default_max_iterations: default_max_iterations] do
+    quote location: :keep,
+          bind_quoted: [
+            opts: opts,
+            default_model: default_model,
+            default_max_iterations: default_max_iterations
+          ] do
       import Jido.AI.ReActAgent, only: [tools_from_skills: 1]
 
       name = Keyword.fetch!(opts, :name)

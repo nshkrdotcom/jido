@@ -38,6 +38,7 @@ defmodule Jido.AgentServer.State do
                 Zoi.map(description: "Map of job_id => scheduler job name") |> Zoi.default(%{}),
 
               # Configuration
+              jido: Zoi.atom(description: "Jido instance name") |> Zoi.optional(),
               default_dispatch: Zoi.any(description: "Default dispatch config") |> Zoi.optional(),
               error_policy:
                 Zoi.any(description: "Error handling policy") |> Zoi.default(:log_only),
@@ -86,6 +87,7 @@ defmodule Jido.AgentServer.State do
       parent: opts.parent,
       children: %{},
       on_parent_death: opts.on_parent_death,
+      jido: opts.jido,
       default_dispatch: opts.default_dispatch,
       error_policy: opts.error_policy,
       max_queue_size: opts.max_queue_size,

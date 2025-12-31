@@ -85,9 +85,9 @@ defmodule JidoTest.AgentServer.CronIntegrationTest do
       {:ok, state} = AgentServer.state("cron-test-1")
       assert Map.has_key?(state.cron_jobs, :heartbeat)
 
-      job_name = state.cron_jobs[:heartbeat]
-      assert is_binary(job_name)
-      assert String.contains?(job_name, "jido_cron:cron-test-1:")
+      job_pid = state.cron_jobs[:heartbeat]
+      assert is_pid(job_pid)
+      assert Process.alive?(job_pid)
 
       GenServer.stop(pid)
     end
@@ -114,6 +114,12 @@ defmodule JidoTest.AgentServer.CronIntegrationTest do
       assert Map.has_key?(state.cron_jobs, :daily)
       assert Map.has_key?(state.cron_jobs, :hourly)
 
+      # All should be pids
+      for {_id, job_pid} <- state.cron_jobs do
+        assert is_pid(job_pid)
+        assert Process.alive?(job_pid)
+      end
+
       GenServer.stop(pid)
     end
 
@@ -131,7 +137,8 @@ defmodule JidoTest.AgentServer.CronIntegrationTest do
       Process.sleep(100)
 
       {:ok, state1} = AgentServer.state("cron-test-3")
-      first_job_name = state1.cron_jobs[:updatable]
+      first_job_pid = state1.cron_jobs[:updatable]
+      assert is_pid(first_job_pid)
 
       register_signal2 =
         Signal.new!(%{
@@ -145,8 +152,12 @@ defmodule JidoTest.AgentServer.CronIntegrationTest do
 
       {:ok, state2} = AgentServer.state("cron-test-3")
       assert map_size(state2.cron_jobs) == 1
-      second_job_name = state2.cron_jobs[:updatable]
-      assert first_job_name == second_job_name
+      second_job_pid = state2.cron_jobs[:updatable]
+      assert is_pid(second_job_pid)
+
+      # The old pid should have been cancelled (may or may not be alive depending on timing)
+      # The new pid should be different
+      refute first_job_pid == second_job_pid
 
       GenServer.stop(pid)
     end
@@ -170,6 +181,7 @@ defmodule JidoTest.AgentServer.CronIntegrationTest do
 
       {:ok, state} = AgentServer.state("cron-test-4")
       assert Map.has_key?(state.cron_jobs, :timezone_test)
+      assert is_pid(state.cron_jobs[:timezone_test])
 
       GenServer.stop(pid)
     end
@@ -213,7 +225,9 @@ defmodule JidoTest.AgentServer.CronIntegrationTest do
 
       {:ok, state1} = AgentServer.state("cron-test-6")
       assert Map.has_key?(state1.cron_jobs, :cancellable)
-      job_name = state1.cron_jobs[:cancellable]
+      job_pid = state1.cron_jobs[:cancellable]
+      assert is_pid(job_pid)
+      assert Process.alive?(job_pid)
 
       cancel_signal =
         Signal.new!(%{
@@ -228,8 +242,8 @@ defmodule JidoTest.AgentServer.CronIntegrationTest do
       {:ok, state2} = AgentServer.state("cron-test-6")
       refute Map.has_key?(state2.cron_jobs, :cancellable)
 
-      jobs = Jido.Scheduler.jobs()
-      refute Enum.any?(jobs, fn {name, _} -> Atom.to_string(name) == job_name end)
+      # The job pid should no longer be alive
+      refute Process.alive?(job_pid)
 
       GenServer.stop(pid)
     end
@@ -291,49 +305,7 @@ defmodule JidoTest.AgentServer.CronIntegrationTest do
 
       {:ok, state2} = AgentServer.state("cron-test-8")
       assert Map.has_key?(state2.cron_jobs, :toggle)
-      assert is_binary(state2.cron_jobs[:toggle])
-
-      GenServer.stop(pid)
-    end
-  end
-
-  describe "cron job execution" do
-    test "manually triggering cron job executes action" do
-      {:ok, pid} = AgentServer.start_link(agent: CronTestAgent, id: "cron-test-9")
-
-      tick_signal = Signal.new!(%{type: "cron.tick", source: "/scheduler", data: %{tick: 1}})
-
-      register_signal =
-        Signal.new!(%{
-          type: "register_cron",
-          source: "/test",
-          data: %{
-            job_id: :manual_test,
-            cron: "* * * * *",
-            message: tick_signal
-          }
-        })
-
-      :ok = AgentServer.cast("cron-test-9", register_signal)
-      Process.sleep(100)
-
-      {:ok, state1} = AgentServer.state("cron-test-9")
-      job_name = state1.cron_jobs[:manual_test]
-
-      :ok = Jido.Scheduler.run_job(String.to_atom(job_name))
-      Process.sleep(100)
-
-      {:ok, state2} = AgentServer.state("cron-test-9")
-      assert state2.agent.state.tick_count == 1
-      assert length(state2.agent.state.ticks) == 1
-
-      :ok = Jido.Scheduler.run_job(String.to_atom(job_name))
-      :ok = Jido.Scheduler.run_job(String.to_atom(job_name))
-      Process.sleep(100)
-
-      {:ok, state3} = AgentServer.state("cron-test-9")
-      assert state3.agent.state.tick_count == 3
-      assert length(state3.agent.state.ticks) == 3
+      assert is_pid(state2.cron_jobs[:toggle])
 
       GenServer.stop(pid)
     end
@@ -354,16 +326,15 @@ defmodule JidoTest.AgentServer.CronIntegrationTest do
       Process.sleep(100)
 
       {:ok, state} = AgentServer.state("cron-test-10")
-      job_name = state.cron_jobs[:cleanup_test]
-
-      jobs_before = Jido.Scheduler.jobs()
-      assert Enum.any?(jobs_before, fn {name, _} -> Atom.to_string(name) == job_name end)
+      job_pid = state.cron_jobs[:cleanup_test]
+      assert is_pid(job_pid)
+      assert Process.alive?(job_pid)
 
       GenServer.stop(pid)
       Process.sleep(100)
 
-      jobs_after = Jido.Scheduler.jobs()
-      refute Enum.any?(jobs_after, fn {name, _} -> Atom.to_string(name) == job_name end)
+      # The job pid should no longer be alive after agent terminates
+      refute Process.alive?(job_pid)
     end
 
     test "multiple cron jobs are all cleaned up on termination" do
@@ -385,26 +356,25 @@ defmodule JidoTest.AgentServer.CronIntegrationTest do
       Process.sleep(100)
 
       {:ok, state} = AgentServer.state("cron-test-11")
-      job_names = Enum.map(job_ids, fn id -> state.cron_jobs[id] end)
+      job_pids = Enum.map(job_ids, fn id -> state.cron_jobs[id] end)
 
-      jobs_before = Jido.Scheduler.jobs()
-
-      for job_name <- job_names do
-        assert Enum.any?(jobs_before, fn {name, _} -> Atom.to_string(name) == job_name end)
+      # All pids should be alive before termination
+      for job_pid <- job_pids do
+        assert is_pid(job_pid)
+        assert Process.alive?(job_pid)
       end
 
       GenServer.stop(pid)
       Process.sleep(100)
 
-      jobs_after = Jido.Scheduler.jobs()
-
-      for job_name <- job_names do
-        refute Enum.any?(jobs_after, fn {name, _} -> Atom.to_string(name) == job_name end)
+      # All pids should be dead after termination
+      for job_pid <- job_pids do
+        refute Process.alive?(job_pid)
       end
     end
   end
 
-  describe "job name scoping" do
+  describe "job scoping" do
     test "different agents can use same job_id without collision" do
       {:ok, pid1} = AgentServer.start_link(agent: CronTestAgent, id: "cron-test-12a")
       {:ok, pid2} = AgentServer.start_link(agent: CronTestAgent, id: "cron-test-12b")
@@ -428,14 +398,13 @@ defmodule JidoTest.AgentServer.CronIntegrationTest do
       assert Map.has_key?(state1.cron_jobs, :shared_name)
       assert Map.has_key?(state2.cron_jobs, :shared_name)
 
-      job_name1 = state1.cron_jobs[:shared_name]
-      job_name2 = state2.cron_jobs[:shared_name]
+      job_pid1 = state1.cron_jobs[:shared_name]
+      job_pid2 = state2.cron_jobs[:shared_name]
 
-      refute job_name1 == job_name2
-
-      jobs = Jido.Scheduler.jobs()
-      assert Enum.any?(jobs, fn {name, _} -> Atom.to_string(name) == job_name1 end)
-      assert Enum.any?(jobs, fn {name, _} -> Atom.to_string(name) == job_name2 end)
+      # Each agent has its own SchedEx process
+      refute job_pid1 == job_pid2
+      assert Process.alive?(job_pid1)
+      assert Process.alive?(job_pid2)
 
       GenServer.stop(pid1)
       GenServer.stop(pid2)

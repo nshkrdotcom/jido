@@ -12,7 +12,10 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Emit do
 
       cfg ->
         if Code.ensure_loaded?(Jido.Signal.Dispatch) do
-          Task.Supervisor.start_child(Jido.TaskSupervisor, fn ->
+          task_sup =
+            if state.jido, do: Jido.task_supervisor_name(state.jido), else: Jido.TaskSupervisor
+
+          Task.Supervisor.start_child(task_sup, fn ->
             Jido.Signal.Dispatch.dispatch(signal, cfg)
           end)
         else
@@ -46,7 +49,10 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Spawn do
           state.spawn_fun.(child_spec)
 
         true ->
-          DynamicSupervisor.start_child(Jido.AgentSupervisor, child_spec)
+          agent_sup =
+            if state.jido, do: Jido.agent_supervisor_name(state.jido), else: Jido.AgentSupervisor
+
+          DynamicSupervisor.start_child(agent_sup, child_spec)
       end
 
     case result do
@@ -114,6 +120,8 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.SpawnAgent do
         }
       ] ++ Map.to_list(Map.delete(opts, :id))
 
+    child_opts = if state.jido, do: Keyword.put(child_opts, :jido, state.jido), else: child_opts
+
     case AgentServer.start(child_opts) do
       {:ok, pid} ->
         ref = Process.monitor(pid)
@@ -163,7 +171,10 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.StopChild do
           "AgentServer #{state.id} stopping child #{inspect(tag)} with reason #{inspect(reason)}"
         )
 
-        Task.Supervisor.start_child(Jido.TaskSupervisor, fn ->
+        task_sup =
+          if state.jido, do: Jido.task_supervisor_name(state.jido), else: Jido.TaskSupervisor
+
+        Task.Supervisor.start_child(task_sup, fn ->
           GenServer.stop(pid, reason, 5_000)
         end)
 

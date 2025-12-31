@@ -306,16 +306,17 @@ end
 # =============================================================================
 
 defmodule SensorDemoRunner do
-  alias Jido.AgentServer
-
   def run do
     IO.puts("\n" <> String.duplicate("=", 60))
     IO.puts(">>> Jido Sensor Demo")
     IO.puts(String.duplicate("=", 60))
     
+    # Start a Jido instance for the example
+    {:ok, _} = Jido.start_link(name: SensorDemoRunner.Jido)
+
     # 1. Start the agent
     IO.puts("\n[1] Starting QuoteCollectorAgent...")
-    {:ok, agent_pid} = AgentServer.start(agent: QuoteCollectorAgent, id: "collector-1")
+    {:ok, agent_pid} = Jido.start_agent(SensorDemoRunner.Jido, QuoteCollectorAgent, id: "collector-1")
     IO.puts("    Agent started: #{inspect(agent_pid)}")
 
     # 2. Start a sensor targeting the agent
@@ -356,7 +357,7 @@ defmodule SensorDemoRunner do
 
     # 6. Check final state
     IO.puts("\n[6] Checking agent state...")
-    {:ok, state} = AgentServer.state(agent_pid)
+    {:ok, state} = Jido.state(SensorDemoRunner.Jido, agent_pid)
     
     IO.puts("\n" <> String.duplicate("-", 60))
     IO.puts("FINAL STATE:")

@@ -135,7 +135,17 @@ defmodule Jido.AgentServer do
   @spec start(keyword() | map()) :: DynamicSupervisor.on_start_child()
   def start(opts) do
     child_spec = {__MODULE__, opts}
-    DynamicSupervisor.start_child(Jido.AgentSupervisor, child_spec)
+
+    jido_instance =
+      if is_list(opts), do: Keyword.get(opts, :jido), else: Map.get(opts, :jido)
+
+    supervisor =
+      case jido_instance do
+        nil -> Jido.AgentSupervisor
+        instance -> Jido.agent_supervisor_name(instance)
+      end
+
+    DynamicSupervisor.start_child(supervisor, child_spec)
   end
 
   @doc """
@@ -545,8 +555,10 @@ defmodule Jido.AgentServer do
   @impl true
   def terminate(reason, state) do
     # Clean up all cron jobs owned by this agent
-    Enum.each(state.cron_jobs, fn {_job_id, scheduler_job_name} ->
-      Jido.Scheduler.delete_job(String.to_atom(scheduler_job_name))
+    Enum.each(state.cron_jobs, fn {_job_id, pid} ->
+      if is_pid(pid) and Process.alive?(pid) do
+        Jido.Scheduler.cancel(pid)
+      end
     end)
 
     Logger.debug("AgentServer #{state.id} terminating: #{inspect(reason)}")
@@ -849,13 +861,7 @@ defmodule Jido.AgentServer do
     start_time = System.monotonic_time()
 
     directive_type =
-      case directive do
-        %{__struct__: mod} when is_atom(mod) ->
-          mod |> Module.split() |> List.last()
-
-        _ ->
-          "UnknownDirective"
-      end
+      directive.__struct__ |> Module.split() |> List.last()
 
     metadata = %{
       agent_id: state.id,
@@ -895,14 +901,6 @@ defmodule Jido.AgentServer do
   defp result_type({:ok, _}), do: :ok
   defp result_type({:async, _, _}), do: :async
   defp result_type({:stop, _, _}), do: :stop
-  defp result_type({:error, _, _}), do: :error
-
-  defp result_type(other) do
-    case other do
-      {tag, _} -> tag
-      _ -> :unknown
-    end
-  end
 
   defp emit_telemetry(event, measurements, metadata) do
     :telemetry.execute(event, measurements, metadata)

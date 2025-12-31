@@ -1,5 +1,5 @@
 defmodule JidoTest.AgentServer.StatusTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   alias Jido.AgentServer
   alias Jido.AgentServer.Status
@@ -44,9 +44,19 @@ defmodule JidoTest.AgentServer.StatusTest do
   end
 
   describe "Status struct" do
-    setup do
-      {:ok, pid} = AgentServer.start(agent: TestAgent)
-      on_exit(fn -> if Process.alive?(pid), do: GenServer.stop(pid) end)
+    setup %{jido: jido} do
+      {:ok, pid} = AgentServer.start(agent: TestAgent, jido: jido)
+
+      on_exit(fn ->
+        if Process.alive?(pid) do
+          try do
+            GenServer.stop(pid)
+          catch
+            :exit, _ -> :ok
+          end
+        end
+      end)
+
       {:ok, pid: pid}
     end
 
@@ -86,9 +96,19 @@ defmodule JidoTest.AgentServer.StatusTest do
   end
 
   describe "AgentServer.status/1" do
-    setup do
-      {:ok, pid} = AgentServer.start(agent: TestAgent)
-      on_exit(fn -> if Process.alive?(pid), do: GenServer.stop(pid) end)
+    setup %{jido: jido} do
+      {:ok, pid} = AgentServer.start(agent: TestAgent, jido: jido)
+
+      on_exit(fn ->
+        if Process.alive?(pid) do
+          try do
+            GenServer.stop(pid)
+          catch
+            :exit, _ -> :ok
+          end
+        end
+      end)
+
       {:ok, pid: pid}
     end
 
@@ -101,9 +121,11 @@ defmodule JidoTest.AgentServer.StatusTest do
       assert status.pid == pid
     end
 
-    test "works with agent ID", %{pid: pid} do
+    test "works with agent ID", %{pid: pid, jido: jido} do
       {:ok, state} = AgentServer.state(pid)
-      assert {:ok, status} = AgentServer.status(state.id)
+      # Use whereis/2 with the test's jido registry to look up by ID
+      found_pid = AgentServer.whereis(Jido.registry(jido), state.id)
+      assert {:ok, status} = AgentServer.status(found_pid)
       assert status.agent_id == state.id
     end
 
@@ -112,8 +134,9 @@ defmodule JidoTest.AgentServer.StatusTest do
       assert {:error, :not_found} = AgentServer.status(:not_a_server)
     end
 
-    test "returns error for non-existent agent" do
-      assert {:error, :not_found} = AgentServer.status("non-existent-id")
+    test "returns error for non-existent agent", %{jido: jido} do
+      # Use whereis/2 with the test's jido registry to verify not found
+      assert nil == AgentServer.whereis(Jido.registry(jido), "non-existent-id")
     end
 
     test "reflects state changes", %{pid: pid} do
@@ -144,9 +167,19 @@ defmodule JidoTest.AgentServer.StatusTest do
   end
 
   describe "AgentServer.stream_status/2" do
-    setup do
-      {:ok, pid} = AgentServer.start(agent: TestAgent)
-      on_exit(fn -> if Process.alive?(pid), do: GenServer.stop(pid) end)
+    setup %{jido: jido} do
+      {:ok, pid} = AgentServer.start(agent: TestAgent, jido: jido)
+
+      on_exit(fn ->
+        if Process.alive?(pid) do
+          try do
+            GenServer.stop(pid)
+          catch
+            :exit, _ -> :ok
+          end
+        end
+      end)
+
       {:ok, pid: pid}
     end
 

@@ -122,11 +122,14 @@ end
 
 IO.puts("\n=== Debug Counter Agent Demo ===\n")
 
-# Start the agent
-{:ok, pid} = Jido.AgentServer.start(agent: DebugCounterAgent, initial_state: %{target: 5})
+# Start a Jido instance for the example
+{:ok, _} = Jido.start_link(name: DebugCounterExample.Jido)
+
+# Start the agent under the Jido instance
+{:ok, pid} = Jido.start_agent(DebugCounterExample.Jido, DebugCounterAgent, initial_state: %{target: 5})
 
 # Get initial status
-{:ok, status} = Jido.AgentServer.status(pid)
+{:ok, status} = Jido.status(DebugCounterExample.Jido, pid)
 IO.puts("Initial status: #{inspect(Jido.AgentServer.Status.status(status))}")
 IO.puts("Initial counter: #{inspect(status.raw_state[:counter])}")
 
@@ -135,20 +138,20 @@ IO.puts("\n--- Sending 3 increment signals ---")
 
 for i <- 1..3 do
   signal = Jido.Signal.new!("counter.increment", %{}, source: "user")
-  Jido.AgentServer.cast(pid, signal)
+  Jido.cast(DebugCounterExample.Jido, pid, signal)
   Process.sleep(50)
 
-  {:ok, status} = Jido.AgentServer.status(pid)
+  {:ok, status} = Jido.status(DebugCounterExample.Jido, pid)
   IO.puts("After increment #{i}: counter = #{status.raw_state[:counter]}")
 end
 
 # Send decrement signal
 IO.puts("\n--- Sending 1 decrement signal ---")
 signal = Jido.Signal.new!("counter.decrement", %{}, source: "user")
-Jido.AgentServer.cast(pid, signal)
+Jido.cast(DebugCounterExample.Jido, pid, signal)
 Process.sleep(50)
 
-{:ok, status} = Jido.AgentServer.status(pid)
+{:ok, status} = Jido.status(DebugCounterExample.Jido, pid)
 IO.puts("After decrement: counter = #{status.raw_state[:counter]}")
 
 # Send more increments to reach target
@@ -156,10 +159,10 @@ IO.puts("\n--- Sending increments to reach target (5) ---")
 
 Enum.reduce_while(1..3, nil, fn i, _acc ->
   signal = Jido.Signal.new!("counter.increment", %{}, source: "user")
-  Jido.AgentServer.cast(pid, signal)
+  Jido.cast(DebugCounterExample.Jido, pid, signal)
   Process.sleep(50)
 
-  {:ok, status} = Jido.AgentServer.status(pid)
+  {:ok, status} = Jido.status(DebugCounterExample.Jido, pid)
 
   IO.puts(
     "Increment #{i}: counter = #{status.raw_state[:counter]}, completed? = #{status.raw_state[:completed]}"
@@ -176,7 +179,7 @@ end)
 # Demonstrate stream_status for monitoring
 IO.puts("\n--- Stream Status Demo (monitoring final state) ---")
 
-Jido.AgentServer.stream_status(pid, interval_ms: 100)
+Jido.stream_status(DebugCounterExample.Jido, pid, interval_ms: 100)
 |> Enum.take(3)
 |> Enum.each(fn status ->
   IO.puts(

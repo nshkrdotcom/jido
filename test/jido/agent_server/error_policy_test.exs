@@ -1,5 +1,5 @@
 defmodule JidoTest.AgentServer.ErrorPolicyTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   import ExUnit.CaptureLog
 
@@ -15,15 +15,18 @@ defmodule JidoTest.AgentServer.ErrorPolicyTest do
       ]
   end
 
-  defp build_state(error_policy) do
+  defp build_state(error_policy, jido \\ nil) do
     agent = TestAgent.new()
 
-    {:ok, opts} =
-      Options.new(%{
-        agent: agent,
-        id: "error-policy-test-agent",
-        error_policy: error_policy
-      })
+    opts_map = %{
+      agent: agent,
+      id: "error-policy-test-agent",
+      error_policy: error_policy
+    }
+
+    opts_map = if jido, do: Map.put(opts_map, :jido, jido), else: opts_map
+
+    {:ok, opts} = Options.new(opts_map)
 
     {:ok, state} = State.from_options(opts, agent.__struct__, agent)
     state
@@ -81,8 +84,8 @@ defmodule JidoTest.AgentServer.ErrorPolicyTest do
   end
 
   describe "emit_signal policy" do
-    test "emits error signal via dispatch config" do
-      state = build_state({:emit_signal, {:logger, level: :error}})
+    test "emits error signal via dispatch config", %{jido: jido} do
+      state = build_state({:emit_signal, {:logger, level: :error}}, jido)
       directive = build_error_directive("Emittable error")
 
       assert {:ok, ^state} = ErrorPolicy.handle(directive, state)

@@ -35,18 +35,20 @@ defmodule CronExample do
     IO.puts("║  Interval: #{@tick_interval_seconds}s (for demo)            ║")
     IO.puts("╚═══════════════════════════════════════╝\n")
 
+    # Start a Jido instance for the example
+    {:ok, _} = Jido.start_link(name: CronExample.Jido)
+
     # Ensure scheduler is started
     case Jido.Scheduler.start_link() do
       {:ok, _pid} -> :ok
       {:error, {:already_started, _pid}} -> :ok
     end
 
-    # Step 1: Start agent
+    # Step 1: Start agent under the Jido instance
     IO.puts("1️⃣  Starting SleeperAgent...")
 
     {:ok, _pid} =
-      Jido.AgentServer.start(
-        agent: SleeperAgent,
+      Jido.start_agent(CronExample.Jido, SleeperAgent,
         id: "sleeper-001",
         state: %{tick_count: 0, max_ticks: @max_ticks}
       )
@@ -65,7 +67,7 @@ defmodule CronExample do
         source: "/example"
       )
 
-    :ok = Jido.AgentServer.cast("sleeper-001", register_signal)
+    :ok = Jido.cast(CronExample.Jido, "sleeper-001", register_signal)
     Process.sleep(100)
     IO.puts("   ✓ Cron job registered: :heartbeat\n")
 
@@ -81,7 +83,7 @@ defmodule CronExample do
       Process.sleep(100)
 
       # Check state
-      {:ok, state} = Jido.AgentServer.state("sleeper-001")
+      {:ok, state} = Jido.state(CronExample.Jido, "sleeper-001")
       tick_count = Map.get(state.agent.state, :tick_count, 0)
 
       if tick_count >= @max_ticks do
@@ -111,7 +113,7 @@ defmodule CronExample do
     # Step 5: Stop agent
     IO.puts("5️⃣  Stopping agent...")
 
-    case Jido.AgentServer.whereis("sleeper-001") do
+    case Jido.whereis(CronExample.Jido, "sleeper-001") do
       nil ->
         IO.puts("   ⚠ Agent not running")
 

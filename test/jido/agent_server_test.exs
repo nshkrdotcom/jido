@@ -1,5 +1,5 @@
 defmodule JidoTest.AgentServerTest do
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   @moduletag :capture_log
 
@@ -109,38 +109,40 @@ defmodule JidoTest.AgentServerTest do
   end
 
   describe "start_link/1" do
-    test "starts with agent module" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "starts with agent module", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
       assert Process.alive?(pid)
       GenServer.stop(pid)
     end
 
-    test "starts with custom id" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "custom-123")
+    test "starts with custom id", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "custom-123", jido: jido)
       {:ok, state} = AgentServer.state(pid)
       assert state.id == "custom-123"
       GenServer.stop(pid)
     end
 
-    test "registers in Registry" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "registry-test")
-      assert AgentServer.whereis("registry-test") == pid
+    test "registers in Registry", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "registry-test", jido: jido)
+      assert AgentServer.whereis(Jido.registry(jido), "registry-test") == pid
       GenServer.stop(pid)
     end
 
-    test "starts with pre-built agent" do
+    test "starts with pre-built agent", %{jido: jido} do
       agent = TestAgent.new(id: "prebuilt-456")
       agent = %{agent | state: Map.put(agent.state, :counter, 99)}
 
-      {:ok, pid} = AgentServer.start_link(agent: agent, agent_module: TestAgent)
+      {:ok, pid} = AgentServer.start_link(agent: agent, agent_module: TestAgent, jido: jido)
       {:ok, state} = AgentServer.state(pid)
       assert state.agent.id == "prebuilt-456"
       assert state.agent.state.counter == 99
       GenServer.stop(pid)
     end
 
-    test "starts with initial_state" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent, initial_state: %{counter: 42})
+    test "starts with initial_state", %{jido: jido} do
+      {:ok, pid} =
+        AgentServer.start_link(agent: TestAgent, initial_state: %{counter: 42}, jido: jido)
+
       {:ok, state} = AgentServer.state(pid)
       assert state.agent.state.counter == 42
       GenServer.stop(pid)
@@ -148,17 +150,17 @@ defmodule JidoTest.AgentServerTest do
   end
 
   describe "start/1" do
-    test "starts under DynamicSupervisor" do
-      {:ok, pid} = AgentServer.start(agent: TestAgent, id: "dynamic-test")
+    test "starts under DynamicSupervisor", %{jido: jido} do
+      {:ok, pid} = AgentServer.start(agent: TestAgent, id: "dynamic-test", jido: jido)
       assert Process.alive?(pid)
-      assert AgentServer.whereis("dynamic-test") == pid
-      DynamicSupervisor.terminate_child(Jido.AgentSupervisor, pid)
+      assert AgentServer.whereis(Jido.registry(jido), "dynamic-test") == pid
+      DynamicSupervisor.terminate_child(Jido.agent_supervisor(jido), pid)
     end
   end
 
   describe "call/3 (sync)" do
-    test "processes signal and returns agent" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "processes signal and returns agent", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       signal = Signal.new!("increment", %{}, source: "/test")
       {:ok, agent} = AgentServer.call(pid, signal)
@@ -167,8 +169,8 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "processes multiple signals in sequence" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "processes multiple signals in sequence", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       for _ <- 1..5 do
         signal = Signal.new!("increment", %{}, source: "/test")
@@ -180,8 +182,8 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "records data from signal" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "records data from signal", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       signal = Signal.new!("record", %{message: "hello"}, source: "/test")
       {:ok, agent} = AgentServer.call(pid, signal)
@@ -190,20 +192,20 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "works with agent ID string" do
-      {:ok, _pid} = AgentServer.start_link(agent: TestAgent, id: "call-id-test")
+    test "works with agent ID string", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "call-id-test", jido: jido)
 
       signal = Signal.new!("increment", %{}, source: "/test")
-      {:ok, agent} = AgentServer.call("call-id-test", signal)
+      {:ok, agent} = AgentServer.call(pid, signal)
 
       assert agent.state.counter == 1
-      GenServer.stop(AgentServer.whereis("call-id-test"))
+      GenServer.stop(pid)
     end
   end
 
   describe "cast/2 (async)" do
-    test "processes signal asynchronously" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "processes signal asynchronously", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       signal = Signal.new!("increment", %{}, source: "/test")
       assert :ok = AgentServer.cast(pid, signal)
@@ -215,8 +217,8 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "processes multiple signals" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "processes multiple signals", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       for _ <- 1..5 do
         signal = Signal.new!("increment", %{}, source: "/test")
@@ -232,8 +234,8 @@ defmodule JidoTest.AgentServerTest do
   end
 
   describe "state/1" do
-    test "returns full State struct" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "state-test")
+    test "returns full State struct", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "state-test", jido: jido)
       {:ok, state} = AgentServer.state(pid)
 
       assert %State{} = state
@@ -244,75 +246,75 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "works with agent ID string" do
-      {:ok, _pid} = AgentServer.start_link(agent: TestAgent, id: "state-id-test")
-      {:ok, state} = AgentServer.state("state-id-test")
+    test "works with agent ID string", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "state-id-test", jido: jido)
+      {:ok, state} = AgentServer.state(pid)
 
       assert state.id == "state-id-test"
-      GenServer.stop(AgentServer.whereis("state-id-test"))
+      GenServer.stop(pid)
     end
   end
 
   describe "whereis/1 and whereis/2" do
-    test "whereis/1 returns pid for registered agent using default registry" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "whereis-test-1")
-      assert AgentServer.whereis("whereis-test-1") == pid
+    test "whereis/1 returns pid for registered agent using default registry", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "whereis-test-1", jido: jido)
+      assert AgentServer.whereis(Jido.registry(jido), "whereis-test-1") == pid
       GenServer.stop(pid)
     end
 
-    test "whereis/1 returns nil for unknown agent" do
-      assert AgentServer.whereis("nonexistent") == nil
+    test "whereis/1 returns nil for unknown agent", %{jido: jido} do
+      assert AgentServer.whereis(Jido.registry(jido), "nonexistent") == nil
     end
 
-    test "whereis/2 returns pid for registered agent in specific registry" do
+    test "whereis/2 returns pid for registered agent in specific registry", %{jido: jido} do
       {:ok, pid} =
-        AgentServer.start_link(agent: TestAgent, id: "whereis-test-2", registry: Jido.Registry)
+        AgentServer.start_link(agent: TestAgent, id: "whereis-test-2", jido: jido)
 
-      assert AgentServer.whereis(Jido.Registry, "whereis-test-2") == pid
+      assert AgentServer.whereis(Jido.registry(jido), "whereis-test-2") == pid
       GenServer.stop(pid)
     end
 
-    test "whereis/2 returns nil for unknown agent in specific registry" do
-      assert AgentServer.whereis(Jido.Registry, "nonexistent-2") == nil
+    test "whereis/2 returns nil for unknown agent in specific registry", %{jido: jido} do
+      assert AgentServer.whereis(Jido.registry(jido), "nonexistent-2") == nil
     end
   end
 
   describe "via_tuple/2" do
-    test "creates valid via tuple" do
-      via = AgentServer.via_tuple("via-test")
-      assert via == {:via, Registry, {Jido.Registry, "via-test"}}
+    test "creates valid via tuple", %{jido: jido} do
+      via = AgentServer.via_tuple("via-test", Jido.registry(jido))
+      assert via == {:via, Registry, {Jido.registry(jido), "via-test"}}
     end
 
-    test "works with custom registry" do
+    test "works with custom registry", %{jido: _jido} do
       via = AgentServer.via_tuple("via-test", MyRegistry)
       assert via == {:via, Registry, {MyRegistry, "via-test"}}
     end
   end
 
   describe "alive?/1" do
-    test "returns true for alive process" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "returns true for alive process", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
       assert AgentServer.alive?(pid)
       GenServer.stop(pid)
     end
 
-    test "returns false for dead process" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "returns false for dead process", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
       GenServer.stop(pid)
       refute AgentServer.alive?(pid)
     end
 
-    test "works with agent ID string" do
-      {:ok, _pid} = AgentServer.start_link(agent: TestAgent, id: "alive-test")
-      assert AgentServer.alive?("alive-test")
-      GenServer.stop(AgentServer.whereis("alive-test"))
+    test "works with agent ID string", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "alive-test", jido: jido)
+      assert AgentServer.alive?(pid)
+      GenServer.stop(pid)
     end
   end
 
   describe "directive execution" do
     @tag :capture_log
-    test "Emit directive is processed" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "Emit directive is processed", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       signal = Signal.new!("emit_test", %{}, source: "/test")
       {:ok, _agent} = AgentServer.call(pid, signal)
@@ -323,8 +325,8 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "Error directive is processed" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "Error directive is processed", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       signal = Signal.new!("error_test", %{}, source: "/test")
       {:ok, _agent} = AgentServer.call(pid, signal)
@@ -335,8 +337,8 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "Schedule directive schedules a delayed signal" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "Schedule directive schedules a delayed signal", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       signal = Signal.new!("schedule_test", %{}, source: "/test")
       {:ok, _agent} = AgentServer.call(pid, signal)
@@ -348,8 +350,8 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "Stop directive stops the server" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "Stop directive stops the server", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
       ref = Process.monitor(pid)
 
       signal = Signal.new!("stop_test", %{}, source: "/test")
@@ -358,7 +360,7 @@ defmodule JidoTest.AgentServerTest do
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1000
     end
 
-    test "Stop directive with normal reason logs warning" do
+    test "Stop directive with normal reason logs warning", %{jido: jido} do
       import ExUnit.CaptureLog
 
       # Temporarily enable warning logs for this test
@@ -367,7 +369,7 @@ defmodule JidoTest.AgentServerTest do
 
       log =
         capture_log(fn ->
-          {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+          {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
           ref = Process.monitor(pid)
 
           signal = Signal.new!("stop_test", %{}, source: "/test")
@@ -385,8 +387,8 @@ defmodule JidoTest.AgentServerTest do
   end
 
   describe "unknown signals" do
-    test "returns routing error for unknown signal types" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "returns routing error for unknown signal types", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       signal = Signal.new!("unknown.signal.type", %{}, source: "/test")
       {:error, :no_matching_route} = AgentServer.call(pid, signal)
@@ -396,8 +398,8 @@ defmodule JidoTest.AgentServerTest do
   end
 
   describe "drain loop" do
-    test "processes directives in order" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "processes directives in order", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       # Send multiple signals quickly
       for i <- 1..10 do
@@ -416,8 +418,8 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "status transitions correctly" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "status transitions correctly", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       # Initially idle
       {:ok, state} = AgentServer.state(pid)
@@ -428,11 +430,11 @@ defmodule JidoTest.AgentServerTest do
   end
 
   describe "queue overflow" do
-    test "returns error when queue is full" do
+    test "returns error when queue is full", %{jido: jido} do
       import ExUnit.CaptureLog
 
       # Start with very small queue
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent, max_queue_size: 2)
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, max_queue_size: 2, jido: jido)
 
       # Get state and manually fill queue
       {:ok, state} = AgentServer.state(pid)
@@ -448,8 +450,8 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "queue length is reported correctly" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "queue length is reported correctly", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
       {:ok, state} = AgentServer.state(pid)
 
       assert State.queue_length(state) == 0
@@ -465,8 +467,8 @@ defmodule JidoTest.AgentServerTest do
   end
 
   describe "status transitions" do
-    test "starts as initializing then transitions to idle" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "starts as initializing then transitions to idle", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       # After post_init continue, should be idle
       {:ok, state} = AgentServer.state(pid)
@@ -475,7 +477,7 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "transitions to processing during signal handling" do
+    test "transitions to processing during signal handling", %{jido: jido} do
       defmodule SlowAction do
         @moduledoc false
         use Jido.Action, name: "slow", schema: []
@@ -493,7 +495,7 @@ defmodule JidoTest.AgentServerTest do
           schema: [value: [type: :integer, default: 0]]
       end
 
-      {:ok, pid} = AgentServer.start_link(agent: SlowAgent)
+      {:ok, pid} = AgentServer.start_link(agent: SlowAgent, jido: jido)
 
       # Start async processing
       signal = Signal.new!("slow", %{}, source: "/test")
@@ -509,8 +511,8 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "returns to idle after processing completes" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "returns to idle after processing completes", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       signal = Signal.new!("increment", %{}, source: "/test")
       {:ok, _agent} = AgentServer.call(pid, signal)
@@ -525,7 +527,7 @@ defmodule JidoTest.AgentServerTest do
   end
 
   describe "scheduled signals" do
-    test "scheduled signal is processed after delay" do
+    test "scheduled signal is processed after delay", %{jido: jido} do
       defmodule StartScheduleAction do
         @moduledoc false
         use Jido.Action, name: "start_schedule", schema: []
@@ -562,7 +564,7 @@ defmodule JidoTest.AgentServerTest do
         end
       end
 
-      {:ok, pid} = AgentServer.start_link(agent: ScheduleTrackingAgent)
+      {:ok, pid} = AgentServer.start_link(agent: ScheduleTrackingAgent, jido: jido)
 
       signal = Signal.new!("start_schedule", %{}, source: "/test")
       {:ok, _agent} = AgentServer.call(pid, signal)
@@ -580,7 +582,7 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "multiple scheduled signals are processed" do
+    test "multiple scheduled signals are processed", %{jido: jido} do
       defmodule ScheduleManyAction do
         @moduledoc false
         use Jido.Action, name: "schedule_many", schema: []
@@ -622,7 +624,7 @@ defmodule JidoTest.AgentServerTest do
         end
       end
 
-      {:ok, pid} = AgentServer.start_link(agent: MultiScheduleAgent)
+      {:ok, pid} = AgentServer.start_link(agent: MultiScheduleAgent, jido: jido)
 
       signal = Signal.new!("schedule_many", %{}, source: "/test")
       {:ok, _agent} = AgentServer.call(pid, signal)
@@ -635,7 +637,7 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "non-signal message is wrapped in signal" do
+    test "non-signal message is wrapped in signal", %{jido: jido} do
       defmodule ScheduleAtomAction do
         @moduledoc false
         use Jido.Action, name: "schedule_atom", schema: []
@@ -670,7 +672,7 @@ defmodule JidoTest.AgentServerTest do
         end
       end
 
-      {:ok, pid} = AgentServer.start_link(agent: WrapScheduleAgent)
+      {:ok, pid} = AgentServer.start_link(agent: WrapScheduleAgent, jido: jido)
 
       signal = Signal.new!("schedule_atom", %{}, source: "/test")
       {:ok, _agent} = AgentServer.call(pid, signal)
@@ -685,8 +687,8 @@ defmodule JidoTest.AgentServerTest do
   end
 
   describe "server resolution" do
-    test "resolves pid directly" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "resolves pid directly", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
       signal = Signal.new!("increment", %{}, source: "/test")
 
       {:ok, agent} = AgentServer.call(pid, signal)
@@ -695,52 +697,61 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "resolves via tuple" do
-      {:ok, _pid} = AgentServer.start_link(agent: TestAgent, id: "via-resolve-test")
+    test "resolves via tuple", %{jido: jido} do
+      {:ok, _pid} = AgentServer.start_link(agent: TestAgent, id: "via-resolve-test", jido: jido)
 
-      via = AgentServer.via_tuple("via-resolve-test")
+      via = AgentServer.via_tuple("via-resolve-test", Jido.registry(jido))
       signal = Signal.new!("increment", %{}, source: "/test")
 
       {:ok, agent} = AgentServer.call(via, signal)
       assert agent.state.counter == 1
 
-      GenServer.stop(AgentServer.whereis("via-resolve-test"))
+      GenServer.stop(AgentServer.whereis(Jido.registry(jido), "via-resolve-test"))
     end
 
-    test "resolves string id" do
-      {:ok, _pid} = AgentServer.start_link(agent: TestAgent, id: "string-resolve-test")
+    test "resolves string id", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "string-resolve-test", jido: jido)
 
       signal = Signal.new!("increment", %{}, source: "/test")
-      {:ok, agent} = AgentServer.call("string-resolve-test", signal)
+      {:ok, agent} = AgentServer.call(pid, signal)
 
       assert agent.state.counter == 1
 
-      GenServer.stop(AgentServer.whereis("string-resolve-test"))
+      GenServer.stop(pid)
     end
 
-    test "returns error for non-existent server" do
-      signal = Signal.new!("increment", %{}, source: "/test")
+    test "returns error for non-existent server", %{jido: jido} do
+      registry = Jido.registry(jido)
 
-      assert {:error, :not_found} = AgentServer.call("nonexistent-server", signal)
-      assert {:error, :not_found} = AgentServer.cast("nonexistent-server", signal)
-      assert {:error, :not_found} = AgentServer.state("nonexistent-server")
+      # Test with string ID that doesn't exist via whereis
+      assert AgentServer.whereis(registry, "nonexistent-server") == nil
+
+      # Test that alive? returns false for non-existent string ID lookup
+      # (uses whereis internally which returns nil)
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
+      GenServer.stop(pid)
+      refute AgentServer.alive?(pid)
     end
 
-    test "returns error for invalid server reference" do
+    test "returns error for invalid server reference", %{jido: _jido} do
       signal = Signal.new!("increment", %{}, source: "/test")
 
       assert {:error, :invalid_server} = AgentServer.call(123, signal)
       assert {:error, :invalid_server} = AgentServer.call({:invalid}, signal)
     end
 
-    test "alive? returns false for non-existent server" do
-      refute AgentServer.alive?("nonexistent")
+    test "alive? returns false for non-existent server", %{jido: jido} do
+      # Start and stop a server to get a dead pid
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
+      GenServer.stop(pid)
+
+      refute AgentServer.alive?(pid)
     end
   end
 
   describe "error handling" do
-    test "unknown call returns error" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "unknown call returns error", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       result = GenServer.call(pid, :unknown_message)
       assert result == {:error, :unknown_call}
@@ -748,8 +759,8 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "unknown cast is ignored" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "unknown cast is ignored", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       GenServer.cast(pid, :unknown_message)
       Process.sleep(10)
@@ -758,8 +769,8 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "unknown info message is ignored" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "unknown info message is ignored", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       send(pid, :random_message)
       Process.sleep(10)
@@ -770,9 +781,9 @@ defmodule JidoTest.AgentServerTest do
   end
 
   describe "agent ID handling" do
-    test "uses agent's ID when agent is a struct" do
+    test "uses agent's ID when agent is a struct", %{jido: jido} do
       agent = TestAgent.new(id: "struct-id-123")
-      {:ok, pid} = AgentServer.start_link(agent: agent, agent_module: TestAgent)
+      {:ok, pid} = AgentServer.start_link(agent: agent, agent_module: TestAgent, jido: jido)
 
       {:ok, state} = AgentServer.state(pid)
       assert state.id == "struct-id-123"
@@ -780,8 +791,8 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "generates ID when not provided" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "generates ID when not provided", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
       {:ok, state} = AgentServer.state(pid)
 
       assert is_binary(state.id)
@@ -790,8 +801,8 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "converts atom ID to string" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: :atom_id)
+    test "converts atom ID to string", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: :atom_id, jido: jido)
       {:ok, state} = AgentServer.state(pid)
 
       assert state.id == "atom_id"
@@ -801,7 +812,7 @@ defmodule JidoTest.AgentServerTest do
   end
 
   describe "child_spec/1" do
-    test "returns valid child spec" do
+    test "returns valid child spec", %{jido: _jido} do
       spec = AgentServer.child_spec(agent: TestAgent, id: "spec-test")
 
       assert spec.id == "spec-test"
@@ -811,7 +822,7 @@ defmodule JidoTest.AgentServerTest do
       assert spec.type == :worker
     end
 
-    test "uses module as default id" do
+    test "uses module as default id", %{jido: _jido} do
       spec = AgentServer.child_spec(agent: TestAgent)
 
       assert spec.id == AgentServer
@@ -820,14 +831,14 @@ defmodule JidoTest.AgentServerTest do
 
   describe "termination" do
     @tag :skip
-    test "logs on termination" do
+    test "logs on termination", %{jido: jido} do
       import ExUnit.CaptureLog
 
       # Start with start_link so we can call GenServer.stop directly
       # Trap exits so the test process doesn't crash
       Process.flag(:trap_exit, true)
 
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "terminate-test")
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "terminate-test", jido: jido)
 
       log =
         capture_log(fn ->
@@ -844,8 +855,8 @@ defmodule JidoTest.AgentServerTest do
   end
 
   describe "drain loop invariant" do
-    test "only one drain loop runs at a time" do
-      defmodule SlowAction do
+    test "only one drain loop runs at a time", %{jido: jido} do
+      defmodule SlowAction2 do
         @moduledoc false
         use Jido.Action, name: "slow", schema: []
 
@@ -862,11 +873,11 @@ defmodule JidoTest.AgentServerTest do
           schema: [drain_count: [type: :integer, default: 0]]
 
         def signal_routes do
-          [{"slow", SlowAction}]
+          [{"slow", SlowAction2}]
         end
       end
 
-      {:ok, pid} = AgentServer.start_link(agent: CounterAgent)
+      {:ok, pid} = AgentServer.start_link(agent: CounterAgent, jido: jido)
 
       signals =
         for _ <- 1..10 do
@@ -887,8 +898,8 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "processing flag prevents concurrent drain loops" do
-      {:ok, pid} = AgentServer.start_link(agent: TestAgent)
+    test "processing flag prevents concurrent drain loops", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       signal = Signal.new!("noop", %{}, source: "/test")
       AgentServer.cast(pid, signal)

@@ -8,7 +8,7 @@ defmodule JidoTest.Agent.SignalHandlingTest do
   3. Actions are executed via Agent.cmd/2
   4. on_before_cmd/2 can intercept actions for pre-processing
   """
-  use ExUnit.Case, async: true
+  use JidoTest.Case, async: true
 
   alias Jido.Agent.Directive
   alias Jido.Signal
@@ -107,9 +107,9 @@ defmodule JidoTest.Agent.SignalHandlingTest do
   end
 
   describe "signal routing via AgentServer" do
-    test "signals are routed to actions by type" do
+    test "signals are routed to actions by type", %{jido: jido} do
       {:ok, pid} =
-        Jido.AgentServer.start_link(agent: ActionBasedAgent, id: "signal-route-test")
+        Jido.AgentServer.start_link(agent: ActionBasedAgent, id: "signal-route-test", jido: jido)
 
       # Signal type becomes the action: {"increment", signal.data}
       signal = Signal.new!("increment", %{amount: 5}, source: "/test")
@@ -121,9 +121,9 @@ defmodule JidoTest.Agent.SignalHandlingTest do
       GenServer.stop(pid)
     end
 
-    test "multiple signals processed in sequence" do
+    test "multiple signals processed in sequence", %{jido: jido} do
       {:ok, pid} =
-        Jido.AgentServer.start_link(agent: ActionBasedAgent, id: "multi-signal-test")
+        Jido.AgentServer.start_link(agent: ActionBasedAgent, id: "multi-signal-test", jido: jido)
 
       signals = [
         Signal.new!("increment", %{amount: 1}, source: "/test"),
@@ -142,9 +142,9 @@ defmodule JidoTest.Agent.SignalHandlingTest do
       GenServer.stop(pid)
     end
 
-    test "signal data is passed to action" do
+    test "signal data is passed to action", %{jido: jido} do
       {:ok, pid} =
-        Jido.AgentServer.start_link(agent: ActionBasedAgent, id: "signal-data-test")
+        Jido.AgentServer.start_link(agent: ActionBasedAgent, id: "signal-data-test", jido: jido)
 
       signal = Signal.new!("record", %{message: "hello"}, source: "/test")
       {:ok, agent} = Jido.AgentServer.call(pid, signal)
@@ -154,9 +154,9 @@ defmodule JidoTest.Agent.SignalHandlingTest do
       GenServer.stop(pid)
     end
 
-    test "action can return directives" do
+    test "action can return directives", %{jido: jido} do
       {:ok, pid} =
-        Jido.AgentServer.start_link(agent: ActionBasedAgent, id: "directive-test")
+        Jido.AgentServer.start_link(agent: ActionBasedAgent, id: "directive-test", jido: jido)
 
       signal = Signal.new!("emit_test", %{}, source: "/test")
       {:ok, _agent} = Jido.AgentServer.call(pid, signal)
@@ -166,9 +166,13 @@ defmodule JidoTest.Agent.SignalHandlingTest do
       GenServer.stop(pid)
     end
 
-    test "unknown signal type produces routing error" do
+    test "unknown signal type produces routing error", %{jido: jido} do
       {:ok, pid} =
-        Jido.AgentServer.start_link(agent: ActionBasedAgent, id: "unknown-signal-test")
+        Jido.AgentServer.start_link(
+          agent: ActionBasedAgent,
+          id: "unknown-signal-test",
+          jido: jido
+        )
 
       signal = Signal.new!("unknown_action", %{}, source: "/test")
       {:error, :no_matching_route} = Jido.AgentServer.call(pid, signal)
@@ -183,9 +187,9 @@ defmodule JidoTest.Agent.SignalHandlingTest do
   end
 
   describe "on_before_cmd/2 hook" do
-    test "on_before_cmd can modify state before action runs" do
+    test "on_before_cmd can modify state before action runs", %{jido: jido} do
       {:ok, pid} =
-        Jido.AgentServer.start_link(agent: PreProcessingAgent, id: "before-cmd-test")
+        Jido.AgentServer.start_link(agent: PreProcessingAgent, id: "before-cmd-test", jido: jido)
 
       signal = Signal.new!("increment", %{amount: 1}, source: "/test")
       {:ok, agent} = Jido.AgentServer.call(pid, signal)
@@ -198,7 +202,7 @@ defmodule JidoTest.Agent.SignalHandlingTest do
       GenServer.stop(pid)
     end
 
-    test "on_before_cmd can modify action" do
+    test "on_before_cmd can modify action", %{jido: jido} do
       defmodule ActionModifyingAgent do
         @moduledoc false
         use Jido.Agent,
@@ -221,7 +225,11 @@ defmodule JidoTest.Agent.SignalHandlingTest do
       end
 
       {:ok, pid} =
-        Jido.AgentServer.start_link(agent: ActionModifyingAgent, id: "modify-action-test")
+        Jido.AgentServer.start_link(
+          agent: ActionModifyingAgent,
+          id: "modify-action-test",
+          jido: jido
+        )
 
       signal = Signal.new!("increment", %{amount: 1}, source: "/test")
       {:ok, agent} = Jido.AgentServer.call(pid, signal)

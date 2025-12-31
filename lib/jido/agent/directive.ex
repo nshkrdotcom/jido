@@ -52,7 +52,7 @@ defmodule Jido.Agent.Directive do
   The runtime dispatches on struct type, so no changes to core are needed.
   """
 
-  alias __MODULE__.{Emit, Error, Spawn, SpawnAgent, StopChild, Schedule, Stop}
+  alias __MODULE__.{Emit, Error, Spawn, SpawnAgent, StopChild, Schedule, Stop, Cron, CronCancel}
 
   @typedoc """
   Any external directive struct (core or extension).
@@ -71,6 +71,8 @@ defmodule Jido.Agent.Directive do
           | StopChild.t()
           | Schedule.t()
           | Stop.t()
+          | Cron.t()
+          | CronCancel.t()
 
   # ============================================================================
   # Error - Signal an error from cmd/2
@@ -473,6 +475,43 @@ defmodule Jido.Agent.Directive do
   @spec stop(term()) :: Stop.t()
   def stop(reason \\ :normal) do
     %Stop{reason: reason}
+  end
+
+  @doc """
+  Creates a Cron directive for recurring scheduled execution.
+
+  ## Options
+
+  - `:job_id` - Logical id for the job (for upsert/cancel)
+  - `:timezone` - Timezone identifier
+
+  ## Examples
+
+      Directive.cron("* * * * *", tick_signal)
+      Directive.cron("@daily", cleanup_signal, job_id: :daily_cleanup)
+      Directive.cron("0 9 * * MON", weekly_signal, job_id: :monday_9am, timezone: "America/New_York")
+  """
+  @spec cron(term(), term(), keyword()) :: Cron.t()
+  def cron(cron_expr, message, opts \\ []) do
+    %Cron{
+      cron: cron_expr,
+      message: message,
+      job_id: Keyword.get(opts, :job_id),
+      timezone: Keyword.get(opts, :timezone)
+    }
+  end
+
+  @doc """
+  Creates a CronCancel directive to stop a recurring job.
+
+  ## Examples
+
+      Directive.cron_cancel(:heartbeat)
+      Directive.cron_cancel(:daily_cleanup)
+  """
+  @spec cron_cancel(term()) :: CronCancel.t()
+  def cron_cancel(job_id) do
+    %CronCancel{job_id: job_id}
   end
 
   # ============================================================================

@@ -3,5 +3,5 @@
 # before tests run. We handle this by temporarily setting compile_time_purge_level.
 # However, since that's a compile-time option, we accept the Discovery log.
 
-ExUnit.start(capture_log: true)
+ExUnit.start()
 ExUnit.configure(exclude: [:skip, :flaky])

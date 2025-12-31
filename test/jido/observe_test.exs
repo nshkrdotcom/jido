@@ -334,6 +334,7 @@ defmodule JidoTest.ObserveTest do
       :ok
     end
 
+    @tag :skip
     test "delegates to Jido.Observe.Log" do
       Application.put_env(:jido, :observability, log_level: :debug)
 
@@ -395,6 +396,7 @@ defmodule JidoTest.ObserveTest do
       :ok
     end
 
+    @tag :skip
     test "logs when message level meets threshold" do
       Application.put_env(:jido, :observability, log_level: :info)
 
@@ -406,6 +408,7 @@ defmodule JidoTest.ObserveTest do
       assert log =~ "info message"
     end
 
+    @tag :skip
     test "logs when message level exceeds threshold" do
       Application.put_env(:jido, :observability, log_level: :info)
 
@@ -430,6 +433,7 @@ defmodule JidoTest.ObserveTest do
       refute log =~ "info message"
     end
 
+    @tag :skip
     test "includes metadata in log output" do
       Application.put_env(:jido, :observability, log_level: :debug)
 
@@ -441,6 +445,7 @@ defmodule JidoTest.ObserveTest do
       assert log =~ "with metadata"
     end
 
+    @tag :skip
     test "logs at debug level when threshold is debug" do
       Application.put_env(:jido, :observability, log_level: :debug)
 

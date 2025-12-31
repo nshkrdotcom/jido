@@ -32,3 +32,6 @@ if config_env() == :dev do
       ci: [hidden?: true]
     ]
 end
+
+# Import environment specific config
+import_config "#{config_env()}.exs"

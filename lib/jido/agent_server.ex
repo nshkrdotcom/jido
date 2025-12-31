@@ -21,7 +21,8 @@ defmodule Jido.AgentServer do
   - `call/3` - Synchronous signal processing
   - `cast/2` - Asynchronous signal processing
   - `state/1` - Get full State struct
-  - `whereis/2` - Registry lookup by ID
+  - `whereis/1` - Registry lookup by ID (default registry)
+  - `whereis/2` - Registry lookup by ID (specific registry)
 
   ## Signal Flow
 
@@ -50,6 +51,38 @@ defmodule Jido.AgentServer do
   - `:parent` - Parent reference for hierarchy
   - `:on_parent_death` - Behavior when parent dies (`:stop`, `:continue`, `:emit_orphan`)
   - `:spawn_fun` - Custom function for spawning children
+
+  ## Agent Resolution
+
+  The `:agent` option accepts:
+
+  - **Module name** - Must implement `new/0` or `new/1`
+    - `new/1` receives `[id: id, state: initial_state]` as keyword options
+    - `new/0` creates agent with defaults; `:id` and `:initial_state` options are ignored
+  - **Agent struct** - Used directly
+    - Provide `:agent_module` option to specify the module if it differs from `agent.__struct__`
+    - The struct's ID takes precedence over the `:id` option
+
+  The `:agent_module` option is only used when `:agent` is a struct. It tells AgentServer which module implements the agent behavior (for calling `cmd/2`, lifecycle hooks, etc.).
+
+  ## Examples
+
+      # Module with new/1 - receives id and state
+      {:ok, pid} = AgentServer.start_link(
+        agent: MyAgent,
+        id: "my-id",
+        initial_state: %{counter: 42}
+      )
+
+      # Module with new/0 - id and state ignored
+      {:ok, pid} = AgentServer.start_link(agent: SimpleAgent)
+
+      # Pre-built struct - requires agent_module
+      agent = MyAgent.new(id: "prebuilt", state: %{value: 99})
+      {:ok, pid} = AgentServer.start_link(
+        agent: agent,
+        agent_module: MyAgent
+      )
 
   ## Completion Detection
 
@@ -144,6 +177,13 @@ defmodule Jido.AgentServer do
   Returns the updated agent struct after signal processing.
   Directives are still executed asynchronously via the drain loop.
 
+  ## Returns
+
+  * `{:ok, agent}` - Signal processed successfully
+  * `{:error, :not_found}` - Server not found via registry
+  * `{:error, :invalid_server}` - Unsupported server reference
+  * Exits with `{:noproc, ...}` if process dies during call
+
   ## Examples
 
       {:ok, agent} = Jido.AgentServer.call(pid, signal)
@@ -161,6 +201,12 @@ defmodule Jido.AgentServer do
 
   Returns immediately. The signal is processed in the background.
 
+  ## Returns
+
+  * `:ok` - Signal queued successfully
+  * `{:error, :not_found}` - Server not found via registry
+  * `{:error, :invalid_server}` - Unsupported server reference
+
   ## Examples
 
       :ok = Jido.AgentServer.cast(pid, signal)
@@ -175,6 +221,12 @@ defmodule Jido.AgentServer do
 
   @doc """
   Gets the full State struct for an agent.
+
+  ## Returns
+
+  * `{:ok, state}` - Full State struct retrieved
+  * `{:error, :not_found}` - Server not found via registry
+  * `{:error, :invalid_server}` - Unsupported server reference
 
   ## Examples
 
@@ -194,6 +246,12 @@ defmodule Jido.AgentServer do
   Returns a `Status` struct combining the strategy snapshot with process metadata.
   This provides a stable API for querying agent status without depending on internal
   `__strategy__` state structure.
+
+  ## Returns
+
+  * `{:ok, status}` - Status struct with snapshot and metadata
+  * `{:error, :not_found}` - Server not found via registry
+  * `{:error, :invalid_server}` - Unsupported server reference
 
   ## Examples
 
@@ -272,15 +330,33 @@ defmodule Jido.AgentServer do
   end
 
   @doc """
-  Looks up an agent by ID in the registry.
+  Looks up an agent by ID using the default registry.
+
+  Returns the pid if found, nil otherwise.
 
   ## Examples
 
-      pid = Jido.AgentServer.whereis("agent-id")
-      pid = Jido.AgentServer.whereis("agent-id", MyRegistry)
+      pid = Jido.AgentServer.whereis("agent-123")
+      # => #PID<0.123.0>
+
+      Jido.AgentServer.whereis("nonexistent")
+      # => nil
   """
-  @spec whereis(String.t(), module()) :: pid() | nil
-  def whereis(id, registry \\ Jido.Registry) when is_binary(id) do
+  @spec whereis(String.t()) :: pid() | nil
+  def whereis(id) when is_binary(id), do: whereis(Jido.Registry, id)
+
+  @doc """
+  Looks up an agent by ID in a specific registry.
+
+  Returns the pid if found, nil otherwise.
+
+  ## Examples
+
+      pid = Jido.AgentServer.whereis(MyRegistry, "agent-123")
+      # => #PID<0.123.0>
+  """
+  @spec whereis(module(), String.t()) :: pid() | nil
+  def whereis(registry, id) when is_atom(registry) and is_binary(id) do
     case Registry.lookup(registry, id) do
       [{pid, _}] -> pid
       [] -> nil
@@ -468,6 +544,11 @@ defmodule Jido.AgentServer do
 
   @impl true
   def terminate(reason, state) do
+    # Clean up all cron jobs owned by this agent
+    Enum.each(state.cron_jobs, fn {_job_id, scheduler_job_name} ->
+      Jido.Scheduler.delete_job(String.to_atom(scheduler_job_name))
+    end)
+
     Logger.debug("AgentServer #{state.id} terminating: #{inspect(reason)}")
     :ok
   end
@@ -766,7 +847,15 @@ defmodule Jido.AgentServer do
 
   defp exec_directive_with_telemetry(directive, signal, state) do
     start_time = System.monotonic_time()
-    directive_type = directive.__struct__ |> Module.split() |> List.last()
+
+    directive_type =
+      case directive do
+        %{__struct__: mod} when is_atom(mod) ->
+          mod |> Module.split() |> List.last()
+
+        _ ->
+          "UnknownDirective"
+      end
 
     metadata = %{
       agent_id: state.id,
@@ -806,6 +895,14 @@ defmodule Jido.AgentServer do
   defp result_type({:ok, _}), do: :ok
   defp result_type({:async, _, _}), do: :async
   defp result_type({:stop, _, _}), do: :stop
+  defp result_type({:error, _, _}), do: :error
+
+  defp result_type(other) do
+    case other do
+      {tag, _} -> tag
+      _ -> :unknown
+    end
+  end
 
   defp emit_telemetry(event, measurements, metadata) do
     :telemetry.execute(event, measurements, metadata)

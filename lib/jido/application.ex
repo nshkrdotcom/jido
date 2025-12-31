@@ -15,7 +15,10 @@ defmodule Jido.Application do
 
       # Dynamic supervisor for all agent instances (flat hierarchy)
       {DynamicSupervisor,
-       name: Jido.AgentSupervisor, strategy: :one_for_one, max_restarts: 1000, max_seconds: 5}
+       name: Jido.AgentSupervisor, strategy: :one_for_one, max_restarts: 1000, max_seconds: 5},
+
+      # System-wide scheduler for cron jobs
+      Jido.Scheduler
     ]
 
     # Register essential signal extensions before starting supervision tree

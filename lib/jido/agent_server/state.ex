@@ -33,6 +33,10 @@ defmodule Jido.AgentServer.State do
               on_parent_death:
                 Zoi.atom(description: "Behavior on parent death") |> Zoi.default(:stop),
 
+              # Cron jobs
+              cron_jobs:
+                Zoi.map(description: "Map of job_id => scheduler job name") |> Zoi.default(%{}),
+
               # Configuration
               default_dispatch: Zoi.any(description: "Default dispatch config") |> Zoi.optional(),
               error_policy:
@@ -87,6 +91,7 @@ defmodule Jido.AgentServer.State do
       max_queue_size: opts.max_queue_size,
       registry: opts.registry,
       spawn_fun: opts.spawn_fun,
+      cron_jobs: %{},
       error_count: 0,
       metrics: %{}
     }

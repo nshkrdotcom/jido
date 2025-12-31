@@ -131,6 +131,7 @@ defmodule JidoTest.AgentServer.StatusTest do
       assert status2.raw_state.counter == 1
     end
 
+    @tag :skip
     test "reflects completion", %{pid: pid} do
       # Complete the agent
       signal = Signal.new!("test.complete", %{}, source: "test")

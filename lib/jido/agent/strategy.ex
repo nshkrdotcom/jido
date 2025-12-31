@@ -87,7 +87,7 @@ defmodule Jido.Agent.Strategy do
   @type status :: :idle | :running | :waiting | :success | :failure
 
   @type action_spec :: %{
-          optional(:schema) => Zoi.t() | keyword(),
+          optional(:schema) => Zoi.schema() | keyword(),
           optional(:doc) => String.t(),
           optional(:name) => String.t()
         }

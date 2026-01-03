@@ -165,12 +165,22 @@ defmodule JidoTest.Support do
   @spec send_signal_sync(map(), String.t(), map(), keyword()) :: :ok
   def send_signal_sync(%{pid: pid} = _context, signal_type, data \\ %{}, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, 1000)
+    check_interval = Keyword.get(opts, :check_interval, 10)
 
     {:ok, signal} = create_test_signal(signal_type, data)
     {:ok, _correlation_id} = Server.cast(pid, signal)
+    maybe_process_queue(pid)
 
-    # Wait a bit for processing in step mode
-    if timeout > 0, do: Process.sleep(10)
+    JidoTest.Helpers.Assertions.wait_for(
+      fn ->
+        {:ok, state} = Server.state(pid)
+        assert state.status == :idle
+        assert :queue.is_empty(state.pending_signals)
+      end,
+      timeout: timeout,
+      check_interval: check_interval
+    )
+
     :ok
   end
 
@@ -195,6 +205,14 @@ defmodule JidoTest.Support do
       timeout: timeout,
       check_interval: check_interval
     )
+  end
+
+  defp maybe_process_queue(pid) do
+    {:ok, state} = Server.state(pid)
+
+    if state.mode != :auto do
+      _ = GenServer.call(pid, :process_queue)
+    end
   end
 
   @doc """
@@ -339,7 +357,11 @@ defmodule JidoTest.Support do
   """
   def cleanup_agent(%{pid: pid}) do
     if Process.alive?(pid) do
-      GenServer.stop(pid, :normal, 1000)
+      try do
+        GenServer.stop(pid, :normal, 1000)
+      catch
+        :exit, _reason -> :ok
+      end
     end
   end
 

@@ -363,10 +363,6 @@ defmodule JidoTest.AgentServerTest do
     test "Stop directive with normal reason logs warning", %{jido: jido} do
       import ExUnit.CaptureLog
 
-      # Temporarily enable warning logs for this test
-      previous_level = Logger.level()
-      Logger.configure(level: :warning)
-
       log =
         capture_log(fn ->
           {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
@@ -377,9 +373,6 @@ defmodule JidoTest.AgentServerTest do
 
           assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1000
         end)
-
-      # Restore previous log level
-      Logger.configure(level: previous_level)
 
       assert log =~ "received {:stop, :normal"
       assert log =~ "This is a HARD STOP"
@@ -842,11 +835,8 @@ defmodule JidoTest.AgentServerTest do
       log =
         capture_log(fn ->
           GenServer.stop(pid, :normal)
-          Process.sleep(10)
+          assert_receive {:EXIT, ^pid, :normal}, 500
         end)
-
-      # Consume the EXIT message
-      assert_receive {:EXIT, ^pid, :normal}, 100
 
       assert log =~ "terminate-test"
       assert log =~ "terminating"

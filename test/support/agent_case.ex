@@ -740,15 +740,8 @@ defmodule JidoTest.AgentCase do
     end
   end
 
-  defp stop_test_agent(%{server_pid: server_pid}) do
-    if Process.alive?(server_pid) do
-      try do
-        GenServer.stop(server_pid, :normal, 1000)
-      catch
-        :exit, _reason -> :ok
-      end
-    end
-  end
+  defp stop_test_agent(%{server_pid: pid}) when is_pid(pid),
+    do: TestSupport.cleanup_agent(%{pid: pid})
 
   defp maybe_process_queue(server_pid) do
     {:ok, state} = Server.state(server_pid)

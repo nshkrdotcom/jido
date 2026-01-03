@@ -355,14 +355,19 @@ defmodule JidoTest.Support do
   This is automatically called if cleanup is enabled (default: true)
   when using `start_basic_agent!/1`.
   """
-  def cleanup_agent(%{pid: pid}) do
+  def cleanup_agent(%{pid: pid}) when is_pid(pid) do
     if Process.alive?(pid) do
+      # Prevent linked-exit propagation from killing the cleanup process
+      Process.unlink(pid)
+
       try do
-        GenServer.stop(pid, :normal, 1000)
+        GenServer.stop(pid, :normal, 1_000)
       catch
-        :exit, _reason -> :ok
+        :exit, _ -> :ok
       end
     end
+
+    :ok
   end
 
   @doc """

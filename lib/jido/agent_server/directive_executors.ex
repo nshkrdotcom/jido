@@ -3,7 +3,7 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Emit do
 
   require Logger
 
-  alias Jido.Signal.TraceContext
+  alias Jido.Tracing.Context, as: TraceContext
 
   def exec(%{signal: signal, dispatch: dispatch}, input_signal, state) do
     cfg = dispatch || state.default_dispatch
@@ -86,7 +86,7 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Schedule do
   @moduledoc false
 
   alias Jido.AgentServer.Signal.Scheduled
-  alias Jido.Signal.TraceContext
+  alias Jido.Tracing.Context, as: TraceContext
 
   def exec(%{delay_ms: delay, message: message}, input_signal, state) do
     signal =

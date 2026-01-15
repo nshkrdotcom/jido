@@ -4,7 +4,7 @@ defmodule JidoTest.AgentServer.TracePropagationTest do
   alias Jido.AgentServer
   alias Jido.Agent.Directive
   alias Jido.Signal
-  alias Jido.Signal.Trace
+  alias Jido.Tracing.Trace
 
   defmodule IncrementAction do
     @moduledoc false

@@ -125,7 +125,8 @@ defmodule Jido.AgentServer do
   alias Jido.AgentServer.Signal.{ChildExit, ChildStarted, Orphaned}
   alias Jido.Agent.Directive
   alias Jido.Signal
-  alias Jido.Signal.{Trace, TraceContext}
+  alias Jido.Tracing.Trace
+  alias Jido.Tracing.Context, as: TraceContext
   alias Jido.Signal.Router, as: JidoRouter
 
   @type server :: pid() | atom() | {:via, module(), term()} | String.t()

@@ -130,3 +130,5 @@ assert match?([%Directive.Emit{}], directives)
 - [Skills](skills.md) — Composable capability modules
 - [Runtime](runtime.md) — AgentServer and process management
 - [Strategies](strategies.md) — Execution patterns
+
+> **Ecosystem tutorials:** See [agentjido.xyz](https://agentjido.xyz) for recipes combining jido, jido_ai, and jido_memory.

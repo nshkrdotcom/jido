@@ -1,7 +1,7 @@
 defmodule Jido.MixProject do
   use Mix.Project
 
-  @version "1.2.0"
+  @version "2.0.0"
 
   def vsn do
     @version
@@ -74,16 +74,21 @@ defmodule Jido.MixProject do
           "guides/getting-started.livemd",
           "guides/core-concepts.md"
         ],
-        Guides: [
+        Fundamentals: [
           "guides/agents.md",
-          "guides/skills.md",
+          "guides/signals.md",
           "guides/directives.md",
+          "guides/skills.md",
           "guides/strategies.md",
-          "guides/runtime.md",
-          "guides/testing.md"
+          "guides/runtime.md"
         ],
-        "Deep Dives": [
-          "guides/fsm-strategy.livemd"
+        Advanced: [
+          "guides/fsm-strategy.livemd",
+          "guides/errors.md",
+          "guides/configuration.md"
+        ],
+        Operations: [
+          "guides/testing.md"
         ],
         Migration: [
           "guides/migration.md"
@@ -95,23 +100,27 @@ defmodule Jido.MixProject do
         ]
       ],
       extras: [
-        # Home & Project
         {"README.md", title: "Home"},
 
         # Start Here
         {"guides/getting-started.livemd", title: "Quick Start"},
         {"guides/core-concepts.md", title: "Core Concepts"},
 
-        # Guides
+        # Fundamentals
         {"guides/agents.md", title: "Agents"},
-        {"guides/skills.md", title: "Skills"},
+        {"guides/signals.md", title: "Signals & Routing"},
         {"guides/directives.md", title: "Directives"},
+        {"guides/skills.md", title: "Skills"},
         {"guides/strategies.md", title: "Strategies"},
         {"guides/runtime.md", title: "Runtime"},
-        {"guides/testing.md", title: "Testing"},
 
-        # Deep Dives
+        # Advanced
         {"guides/fsm-strategy.livemd", title: "FSM Strategy Deep Dive"},
+        {"guides/errors.md", title: "Error Handling"},
+        {"guides/configuration.md", title: "Configuration"},
+
+        # Operations
+        {"guides/testing.md", title: "Testing"},
 
         # Migration
         {"guides/migration.md", title: "Migrating from 1.x"},
@@ -130,41 +139,62 @@ defmodule Jido.MixProject do
       groups_for_modules: [
         Core: [
           Jido,
-          Jido.Action,
           Jido.Agent,
-          Jido.Agent.Server,
-          Jido.Instruction,
-          Jido.Sensor,
-          Jido.Workflow
+          Jido.AgentServer,
+          Jido.Await
         ],
-        "Actions: Directives": [
-          Jido.Agent.Directive,
-          Jido.Agent.Directive.Enqueue,
-          Jido.Agent.Directive.RegisterAction,
-          Jido.Agent.Directive.DeregisterAction,
-          Jido.Agent.Directive.Kill,
-          Jido.Agent.Directive.Spawn,
-          Jido.Actions.Directives
+        Strategies: [
+          Jido.Agent.Strategy,
+          Jido.Agent.Strategy.Direct,
+          Jido.Agent.Strategy.FSM,
+          Jido.Agent.Strategy.State
         ],
         Skills: [
-          Jido.Skill,
-          Jido.Skills.Arithmetic
+          Jido.Skill
         ],
-        Examples: [
-          Jido.Actions.Arithmetic,
-          Jido.Tools.Basic,
-          Jido.Actions.Files,
-          Jido.Actions.Simplebot,
-          Jido.Sensors.Cron,
-          Jido.Sensors.Heartbeat
+        Directives: [
+          Jido.Agent.Directive,
+          Jido.Agent.Directive.Emit,
+          Jido.Agent.Directive.Error,
+          Jido.Agent.Directive.Spawn,
+          Jido.Agent.Directive.SpawnAgent,
+          Jido.Agent.Directive.StopChild,
+          Jido.Agent.Directive.Schedule,
+          Jido.Agent.Directive.Stop,
+          Jido.Agent.Directive.Cron,
+          Jido.Agent.Directive.CronCancel
+        ],
+        "Agent Components": [
+          Jido.Agent.State,
+          Jido.Agent.Schema,
+          Jido.Agent.Effects,
+          Jido.Agent.Internal,
+          Jido.AgentServer.State,
+          Jido.AgentServer.Status,
+          Jido.AgentServer.Options,
+          Jido.AgentServer.ErrorPolicy,
+          Jido.AgentServer.SignalRouter
+        ],
+        "Built-in Actions": [
+          Jido.Actions.Control,
+          Jido.Actions.Lifecycle,
+          Jido.Actions.Scheduling,
+          Jido.Actions.Status
+        ],
+        Observability: [
+          Jido.Observe,
+          Jido.Observe.Log,
+          Jido.Observe.Tracer,
+          Jido.Observe.NoopTracer,
+          Jido.Observe.SpanCtx,
+          Jido.Telemetry
         ],
         Utilities: [
           Jido.Discovery,
           Jido.Error,
           Jido.Scheduler,
-          Jido.Supervisor,
-          Jido.Agent.Server.State,
-          Jido.Util
+          Jido.Util,
+          Jido.AgentPool
         ]
       ]
     ]
@@ -243,7 +273,7 @@ defmodule Jido.MixProject do
       test: "test --exclude flaky",
 
       # Helper to run docs
-      # docs: "docs -f html --open",
+      docs: "docs -f html --open",
 
       # Run to check the quality of your code
       q: ["quality"],

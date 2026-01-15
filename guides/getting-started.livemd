@@ -2,7 +2,7 @@
 
 ```elixir
 Mix.install([
-  {:jido, "~> 1.2"}
+  {:jido, "~> 2.0"}
 ])
 ```
 
@@ -89,7 +89,7 @@ defmodule IncrementAction do
 
   @impl true
   def run(params, context) do
-    current = context.agent.state[:count] || 0
+    current = context.state[:count] || 0
     {:ok, %{count: current + params.amount}}
   end
 end

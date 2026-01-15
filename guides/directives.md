@@ -6,7 +6,7 @@ Directives are **pure descriptions of external effects**. Agents emit them from 
 
 ```elixir
 def cmd({:notify_user, message}, agent, _context) do
-  signal = Jido.Signal.new!(type: "notification.sent", data: %{message: message})
+  signal = Jido.Signal.new!("notification.sent", %{message: message}, source: "/agent")
   
   {:ok, agent, [Directive.emit(signal)]}
 end

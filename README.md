@@ -2,11 +2,11 @@
 
 [![Hex.pm](https://img.shields.io/hexpm/v/jido.svg)](https://hex.pm/packages/jido)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/jido/)
-[![CI](https://github.com/agentjido/jido/actions/workflows/elixir-ci.yml/badge.svg)](https://github.com/agentjido/jido/actions/workflows/elixir-ci.yml)
+[![CI](https://github.com/agentjido/jido/actions/workflows/ci.yml/badge.svg)](https://github.com/agentjido/jido/actions/workflows/ci.yml)
 [![License](https://img.shields.io/hexpm/l/jido.svg)](https://github.com/agentjido/jido/blob/main/LICENSE)
 [![Coverage Status](https://coveralls.io/repos/github/agentjido/jido/badge.svg?branch=main)](https://coveralls.io/github/agentjido/jido?branch=main)
 
-> **Autonomous Agent Framework for Elixir**
+> **Pure functional agents and OTP runtime for building autonomous multi-agent workflows in Elixir.**
 
 _The name "Jido" (自動) comes from the Japanese word meaning "automatic" or "automated", where 自 (ji) means "self" and 動 (dō) means "movement"._
 
@@ -14,26 +14,52 @@ _Learn more about Jido at [agentjido.xyz](https://agentjido.xyz)._
 
 ## Overview
 
-Jido is a toolkit for building autonomous, distributed agent systems in Elixir. It provides the foundation for creating agents that can plan, execute, and adapt their behavior in distributed applications.
+With Jido, your agents are immutable data structures with a single command function:
 
-This package is designed for agent builders. It contains the core building blocks for creating advanced agentic systems without AI baked into the framework itself. AI capabilities are provided through companion packages in the Jido ecosystem.
+```elixir
+defmodule MyAgent do
+  use Jido.Agent,
+    name: "my_agent",
+    description: "My custom agent",
+    schema: [
+      count: [type: :integer, default: 0]
+    ]
+  end
+end
 
-Whether you're building workflow automation, multi-agent coordination systems, or AI-powered applications, Jido provides the foundation for robust, observable, and scalable agent-driven architecture.
+{agent, directives} = MyAgent.cmd(agent, action)
+```
+
+State changes are pure data transformations; side effects are described as directives and executed by an OTP runtime. You get deterministic agent logic, testability without processes, and a clear path to running those agents in production.
 
 ## The Jido Ecosystem
 
-Jido is the core framework in a family of packages designed to work together:
+Jido is the core package of the Jido ecosystem. The ecosystem is built around the core Jido Agent behavior and offer several opt-in packages to extend the core behavior.
 
 | Package | Description |
 |---------|-------------|
-| [jido](https://github.com/agentjido/jido) | Core agent framework with state management, directives, and runtime |
+| [req_llm](https://github.com/agentjido/req_llm) | HTTP client for LLM APIs |
 | [jido_action](https://github.com/agentjido/jido_action) | Composable, validated actions with AI tool integration |
-| [jido_signal](https://github.com/agentjido/jido_signal) | CloudEvents-based signal routing and pub/sub messaging |
+| [jido_signal](https://github.com/agentjido/jido_signal) | CloudEvents-based message envelope and supporting utilities for routing and pub/sub messaging |
+| [jido](https://github.com/agentjido/jido) | Core agent framework with state management, directives, and runtime |
 | [jido_ai](https://github.com/agentjido/jido_ai) | AI/LLM integration for agents |
-| [jido_chat](https://github.com/agentjido/jido_chat) | Conversational agent capabilities |
-| [jido_memory](https://github.com/agentjido/jido_memory) | Persistent memory and context for agents |
+| [jido_coder](https://github.com/agentjido/jido_coder) | AI coding agent with file operations, git integration, and test execution |
 
-For demos and examples, see the [Jido Workbench](https://github.com/agentjido/jido_workbench).
+For demos and examples of what you can build with the Jido Ecosystem, see [https://agentjido.xyz](https://agentjido.xyz).
+
+## Why Jido?
+
+OTP primitives are excellent. You can build agent systems with raw GenServer. But when building *multiple cooperating agents*, you'll reinvent:
+
+| Raw OTP | Jido Formalizes |
+|---------|-----------------|
+| Ad-hoc message shapes per GenServer | Signals as standard envelope |
+| Business logic mixed in callbacks | Actions as reusable command pattern |
+| Implicit effects scattered in code | Directives as typed effect descriptions |
+| Custom child tracking per server | Built-in parent/child hierarchy |
+| Process exit = completion | State-based completion semantics |
+
+Jido isn't "better GenServer" - it's a formalized agent pattern built *on* GenServer.
 
 ## Key Features
 
@@ -61,6 +87,11 @@ For demos and examples, see the [Jido Workbench](https://github.com/agentjido/ji
 ### Execution Strategies
 - Direct execution for simple workflows
 - FSM (Finite State Machine) strategy for state-driven workflows
+- Extensible strategy protocol for custom execution patterns
+
+### Multi-Agent Orchestration
+- Multi-agent workflows with configurable strategies
+- Plan-based orchestration for complex workflows
 - Extensible strategy protocol for custom execution patterns
 
 ## Installation
@@ -153,8 +184,8 @@ agent.state.count
 # Start the agent server
 {:ok, pid} = MyApp.Jido.start_agent(MyApp.CounterAgent, id: "counter-1")
 
-# Send signals to the running agent
-Jido.AgentServer.signal(pid, Jido.Signal.new!("increment", %{amount: 10}))
+# Send signals to the running agent (synchronous)
+{:ok, agent} = Jido.AgentServer.call(pid, Jido.Signal.new!("increment", %{amount: 10}, source: "/user"))
 
 # Look up the agent by ID
 pid = MyApp.Jido.whereis("counter-1")
@@ -200,13 +231,23 @@ Key invariants:
 
 ## Documentation
 
-- [Getting Started Guide](guides/getting-started.livemd)
-- [Core Concepts](guides/core-concepts.md)
-- [Building Agents](guides/agents.md)
-- [Agent Directives](guides/directives.md)
-- [Runtime and AgentServer](guides/runtime.md)
-- [Skills](guides/skills.md)
-- [Strategies](guides/strategies.md)
+**Start here:**
+- [Quick Start](guides/getting-started.livemd) - Build your first agent in 5 minutes
+- [Core Concepts](guides/core-concepts.md) - Understand the mental model
+
+**Guides:**
+- [Building Agents](guides/agents.md) - Agent definitions and state management
+- [Signals & Routing](guides/signals.md) - Signal-based communication
+- [Agent Directives](guides/directives.md) - Effect descriptions for the runtime
+- [Runtime and AgentServer](guides/runtime.md) - Process-based agent execution
+- [Skills](guides/skills.md) - Composable capability bundles
+- [Strategies](guides/strategies.md) - Execution strategies (Direct, FSM)
+
+**Advanced:**
+- [FSM Strategy Deep Dive](guides/fsm-strategy.livemd) - State machine workflows
+- [Testing Agents](guides/testing.md) - Testing patterns and best practices
+
+**API Reference:** [hexdocs.pm/jido](https://hexdocs.pm/jido)
 
 ## Development
 

@@ -172,11 +172,11 @@ defmodule MyAgent do
     # Directives describe effects, don't execute them
     directives = [
       Directive.emit(
-        Signal.new!("result.processed", result),
+        Signal.new!("result.processed", result, source: "/agent"),
         {:pubsub, topic: "events"}
       ),
       Directive.emit(
-        Signal.new!("webhook.send", result),
+        Signal.new!("webhook.send", result, source: "/agent"),
         {:http, url: "https://api.example.com/webhook"}
       )
     ]
@@ -228,11 +228,11 @@ signal = Signal.new!(
   source: "/workers/processor-1"
 )
 
-# Dispatching to a specific agent
-Jido.Signal.Dispatch.dispatch(signal, {:pid, target: pid})
+# Dispatching to a specific agent (synchronous)
+{:ok, agent} = Jido.AgentServer.call(pid, signal)
 
-# Via the Jido supervisor
-Jido.signal(MyApp.Jido, "agent-1", signal)
+# Or asynchronously
+:ok = Jido.AgentServer.cast(pid, signal)
 
 # Handling in agent (via cmd/2)
 def cmd(agent, %Signal{type: "task.completed"} = signal) do
@@ -467,7 +467,7 @@ def cmd(agent, signal) do
   LegacyNotifier.notify(result)
   
   {%{agent | state: result}, [
-    Directive.emit(Signal.new!("processed", result), :default)
+    Directive.emit(Signal.new!("processed", result, source: "/agent"), :default)
   ]}
 end
 ```

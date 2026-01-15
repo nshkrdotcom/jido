@@ -175,3 +175,5 @@ Each skill maintains its own state slice and routing rules. Skills are mounted i
 ## See Also
 
 See `Jido.Skill` moduledoc for complete API reference and advanced patterns.
+
+> **AI-powered skills:** For LLM-integrated skills, see the [jido_ai documentation](https://hexdocs.pm/jido_ai).

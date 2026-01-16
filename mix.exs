@@ -248,7 +248,7 @@ defmodule Jido.MixProject do
 
       # ReAct example dependency (optional - requires API key)
       # Using GitHub main for upcoming tool call extraction improvements
-      {:req_llm, github: "agentjido/req_llm", branch: "main", optional: true, override: true},
+      {:req_llm, github: "agentjido/req_llm", branch: "main"},
 
       # Development & Test Dependencies
       {:git_ops, "~> 2.9", only: :dev, runtime: false},

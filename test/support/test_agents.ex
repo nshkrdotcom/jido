@@ -2,7 +2,8 @@ defmodule JidoTest.TestAgents do
   @moduledoc false
 
   # Ensure test actions are compiled before this module
-  require JidoTest.SkillTestAction
+  # (required for compile-time validation in use Jido.Skill)
+  Code.ensure_compiled!(JidoTest.SkillTestAction)
 
   defmodule Minimal do
     @moduledoc false

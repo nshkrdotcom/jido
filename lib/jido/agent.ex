@@ -317,40 +317,44 @@ defmodule Jido.Agent do
                              line: __ENV__.line
                        end)
 
-      # Normalize skills: Module or {Module, config}
-      @skills_config Enum.map(@validated_opts[:skills] || [], fn
-                       mod when is_atom(mod) -> {mod, %{}}
-                       {mod, opts} when is_list(opts) -> {mod, Map.new(opts)}
-                       {mod, opts} when is_map(opts) -> {mod, opts}
-                     end)
+      # Normalize skills to Instance structs
+      @skill_instances Enum.map(@validated_opts[:skills] || [], fn skill_decl ->
+                         # Extract module for validation first
+                         mod =
+                           case skill_decl do
+                             m when is_atom(m) -> m
+                             {m, _} -> m
+                           end
 
-      # Validate skills implement behaviour
-      for {mod, _} <- @skills_config do
-        case Code.ensure_compiled(mod) do
-          {:module, _} ->
-            unless function_exported?(mod, :skill_spec, 1) do
-              raise CompileError,
-                description:
-                  "#{inspect(mod)} does not implement Jido.Skill (missing skill_spec/1)",
-                file: __ENV__.file,
-                line: __ENV__.line
-            end
+                         case Code.ensure_compiled(mod) do
+                           {:module, _} ->
+                             unless function_exported?(mod, :skill_spec, 1) do
+                               raise CompileError,
+                                 description:
+                                   "#{inspect(mod)} does not implement Jido.Skill (missing skill_spec/1)",
+                                 file: __ENV__.file,
+                                 line: __ENV__.line
+                             end
 
-          {:error, reason} ->
-            raise CompileError,
-              description: "Skill #{inspect(mod)} could not be compiled: #{inspect(reason)}",
-              file: __ENV__.file,
-              line: __ENV__.line
-        end
-      end
+                           {:error, reason} ->
+                             raise CompileError,
+                               description:
+                                 "Skill #{inspect(mod)} could not be compiled: #{inspect(reason)}",
+                               file: __ENV__.file,
+                               line: __ENV__.line
+                         end
 
-      # Build skill specs at compile time
-      @skill_specs Enum.map(@skills_config, fn {mod, config} ->
-                     mod.skill_spec(config)
+                         Jido.Skill.Instance.new(skill_decl)
+                       end)
+
+      # Build skill specs from instances (for backward compatibility)
+      @skill_specs Enum.map(@skill_instances, fn instance ->
+                     instance.module.skill_spec(instance.config)
+                     |> Map.put(:state_key, instance.state_key)
                    end)
 
-      # Validate unique state_keys
-      @skill_state_keys Enum.map(@skill_specs, & &1.state_key)
+      # Validate unique state_keys (now derived from instances)
+      @skill_state_keys Enum.map(@skill_instances, & &1.state_key)
       @duplicate_keys @skill_state_keys -- Enum.uniq(@skill_state_keys)
       if @duplicate_keys != [] do
         raise CompileError,
@@ -378,6 +382,58 @@ defmodule Jido.Agent do
       # Aggregate actions from skills
       @skill_actions @skill_specs |> Enum.flat_map(& &1.actions) |> Enum.uniq()
 
+      # Expand routes from all skill instances
+      @expanded_skill_routes Enum.flat_map(@skill_instances, &Jido.Skill.Routes.expand_routes/1)
+
+      # Expand schedules from all skill instances
+      @expanded_skill_schedules Enum.flat_map(
+                                  @skill_instances,
+                                  &Jido.Skill.Schedules.expand_schedules/1
+                                )
+
+      # Generate routes for schedule signal types (low priority)
+      @schedule_routes Enum.flat_map(@skill_instances, &Jido.Skill.Schedules.schedule_routes/1)
+
+      # Combine routes and schedule routes for conflict detection
+      @all_skill_routes @expanded_skill_routes ++ @schedule_routes
+
+      @skill_routes_result Jido.Skill.Routes.detect_conflicts(@all_skill_routes)
+      case @skill_routes_result do
+        {:error, conflicts} ->
+          conflict_list = Enum.join(conflicts, "\n  - ")
+
+          raise CompileError,
+            description: "Route conflicts detected:\n  - #{conflict_list}",
+            file: __ENV__.file,
+            line: __ENV__.line
+
+        {:ok, _routes} ->
+          :ok
+      end
+
+      @validated_skill_routes elem(@skill_routes_result, 1)
+
+      # Validate skill requirements at compile time
+      @skill_config_map Enum.reduce(@skill_instances, %{}, fn instance, acc ->
+                          Map.put(acc, instance.state_key, instance.config)
+                        end)
+      @requirements_result Jido.Skill.Requirements.validate_all_requirements(
+                             @skill_instances,
+                             @skill_config_map
+                           )
+      case @requirements_result do
+        {:error, missing_by_skill} ->
+          error_msg = Jido.Skill.Requirements.format_error(missing_by_skill)
+
+          raise CompileError,
+            description: error_msg,
+            file: __ENV__.file,
+            line: __ENV__.line
+
+        {:ok, :valid} ->
+          :ok
+      end
+
       @doc "Returns the agent's name."
       @spec name() :: String.t()
       def name, do: @validated_opts.name
@@ -402,33 +458,128 @@ defmodule Jido.Agent do
       @spec schema() :: Zoi.schema() | keyword()
       def schema, do: @merged_schema
 
-      @doc "Returns the list of skill specs attached to this agent."
-      @spec skills() :: [Jido.Skill.Spec.t()]
-      def skills, do: @skill_specs
+      @doc """
+      Returns the list of skill modules attached to this agent (deduplicated).
+
+      For multi-instance skills, the module appears once regardless of how many
+      instances are mounted.
+
+      ## Examples
+
+          iex> #{inspect(__MODULE__)}.skills()
+          [SlackSkill, OpenAISkill]
+      """
+      @spec skills() :: [module()]
+      def skills do
+        @skill_instances
+        |> Enum.map(& &1.module)
+        |> Enum.uniq()
+      end
 
       @doc "Returns the list of skill specs attached to this agent."
       @spec skill_specs() :: [Jido.Skill.Spec.t()]
       def skill_specs, do: @skill_specs
 
+      @doc "Returns the list of skill instances attached to this agent."
+      @spec skill_instances() :: [Jido.Skill.Instance.t()]
+      def skill_instances, do: @skill_instances
+
       @doc "Returns the list of actions from all attached skills."
       @spec actions() :: [module()]
       def actions, do: @skill_actions
 
-      @doc "Returns the configuration for a specific skill module, or nil if not found."
-      @spec skill_config(module()) :: map() | nil
-      def skill_config(skill_mod) do
-        case Enum.find(@skill_specs, &(&1.module == skill_mod)) do
-          nil -> nil
-          spec -> spec.config
+      @doc """
+      Returns the union of all capabilities from all mounted skill instances.
+
+      Capabilities are atoms describing what the agent can do based on its
+      mounted skills.
+
+      ## Examples
+
+          iex> #{inspect(__MODULE__)}.capabilities()
+          [:messaging, :channel_management, :chat, :embeddings]
+      """
+      @spec capabilities() :: [atom()]
+      def capabilities do
+        @skill_instances
+        |> Enum.flat_map(fn instance -> instance.manifest.capabilities || [] end)
+        |> Enum.uniq()
+      end
+
+      @doc """
+      Returns all expanded route signal types from skill routes.
+
+      These are the fully-prefixed signal types that the agent can handle.
+
+      ## Examples
+
+          iex> #{inspect(__MODULE__)}.signal_types()
+          ["slack.post", "slack.channels.list", "openai.chat", ...]
+      """
+      @spec signal_types() :: [String.t()]
+      def signal_types do
+        @validated_skill_routes
+        |> Enum.map(fn {signal_type, _action, _priority} -> signal_type end)
+      end
+
+      @doc "Returns the expanded and validated skill routes."
+      @spec skill_routes() :: [{String.t(), module(), integer()}]
+      def skill_routes, do: @validated_skill_routes
+
+      @doc "Returns the expanded skill schedules."
+      @spec skill_schedules() :: [Jido.Skill.Schedules.schedule_spec()]
+      def skill_schedules, do: @expanded_skill_schedules
+
+      @doc """
+      Returns the configuration for a specific skill.
+
+      Accepts either a module or a `{module, as_alias}` tuple for multi-instance skills.
+      """
+      @spec skill_config(module() | {module(), atom()}) :: map() | nil
+      def skill_config(skill_mod) when is_atom(skill_mod) do
+        case Enum.find(@skill_instances, &(&1.module == skill_mod and is_nil(&1.as))) do
+          nil ->
+            case Enum.find(@skill_instances, &(&1.module == skill_mod)) do
+              nil -> nil
+              instance -> instance.config
+            end
+
+          instance ->
+            instance.config
         end
       end
 
-      @doc "Returns the state slice for a specific skill module, or nil if not found."
-      @spec skill_state(Agent.t(), module()) :: map() | nil
-      def skill_state(agent, skill_mod) do
-        case Enum.find(@skill_specs, &(&1.module == skill_mod)) do
+      def skill_config({skill_mod, as_alias}) when is_atom(skill_mod) and is_atom(as_alias) do
+        case Enum.find(@skill_instances, &(&1.module == skill_mod and &1.as == as_alias)) do
           nil -> nil
-          spec -> Map.get(agent.state, spec.state_key)
+          instance -> instance.config
+        end
+      end
+
+      @doc """
+      Returns the state slice for a specific skill.
+
+      Accepts either a module or a `{module, as_alias}` tuple for multi-instance skills.
+      """
+      @spec skill_state(Agent.t(), module() | {module(), atom()}) :: map() | nil
+      def skill_state(agent, skill_mod) when is_atom(skill_mod) do
+        case Enum.find(@skill_instances, &(&1.module == skill_mod and is_nil(&1.as))) do
+          nil ->
+            case Enum.find(@skill_instances, &(&1.module == skill_mod)) do
+              nil -> nil
+              instance -> Map.get(agent.state, instance.state_key)
+            end
+
+          instance ->
+            Map.get(agent.state, instance.state_key)
+        end
+      end
+
+      def skill_state(agent, {skill_mod, as_alias})
+          when is_atom(skill_mod) and is_atom(as_alias) do
+        case Enum.find(@skill_instances, &(&1.module == skill_mod and &1.as == as_alias)) do
+          nil -> nil
+          instance -> Map.get(agent.state, instance.state_key)
         end
       end
 
@@ -649,9 +800,14 @@ defmodule Jido.Agent do
                      strategy_opts: 0,
                      skills: 0,
                      skill_specs: 0,
+                     skill_instances: 0,
                      actions: 0,
+                     capabilities: 0,
+                     signal_types: 0,
                      skill_config: 1,
-                     skill_state: 2
+                     skill_state: 2,
+                     skill_routes: 0,
+                     skill_schedules: 0
 
       # Private helper for after hook dispatch
       defp do_after_cmd(agent, msg, directives) do

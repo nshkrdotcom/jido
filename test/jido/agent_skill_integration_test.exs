@@ -194,8 +194,15 @@ defmodule JidoTest.AgentSkillIntegrationTest do
   # =============================================================================
 
   describe "agent with single skill" do
-    test "skills/0 returns the skill spec" do
-      specs = SingleSkillAgent.skills()
+    test "skills/0 returns the skill modules" do
+      modules = SingleSkillAgent.skills()
+
+      assert length(modules) == 1
+      assert CounterSkill in modules
+    end
+
+    test "skill_specs/0 returns the skill spec" do
+      specs = SingleSkillAgent.skill_specs()
 
       assert length(specs) == 1
       [spec] = specs
@@ -240,8 +247,16 @@ defmodule JidoTest.AgentSkillIntegrationTest do
   # =============================================================================
 
   describe "agent with multiple skills" do
-    test "skills/0 returns both skill specs" do
-      specs = MultiSkillAgent.skills()
+    test "skills/0 returns both skill modules (deduplicated)" do
+      modules = MultiSkillAgent.skills()
+
+      assert length(modules) == 2
+      assert CounterSkill in modules
+      assert GreeterSkill in modules
+    end
+
+    test "skill_specs/0 returns both skill specs" do
+      specs = MultiSkillAgent.skill_specs()
 
       assert length(specs) == 2
       modules = Enum.map(specs, & &1.module)
@@ -281,11 +296,10 @@ defmodule JidoTest.AgentSkillIntegrationTest do
   end
 
   describe "agent with three skills" do
-    test "all skill specs are returned" do
-      specs = ThreeSkillAgent.skills()
+    test "all skill modules are returned" do
+      modules = ThreeSkillAgent.skills()
 
-      assert length(specs) == 3
-      modules = Enum.map(specs, & &1.module)
+      assert length(modules) == 3
       assert CounterSkill in modules
       assert GreeterSkill in modules
       assert ModeSkill in modules
@@ -329,7 +343,7 @@ defmodule JidoTest.AgentSkillIntegrationTest do
     end
 
     test "skill_spec contains the config" do
-      [spec] = ConfiguredSkillAgent.skills()
+      [spec] = ConfiguredSkillAgent.skill_specs()
 
       assert spec.config[:enabled] == false
       assert spec.config[:max_retries] == 5
@@ -397,15 +411,19 @@ defmodule JidoTest.AgentSkillIntegrationTest do
   # =============================================================================
 
   describe "introspection APIs" do
-    test "skills/0 returns list of skill specs" do
-      specs = MultiSkillAgent.skills()
+    test "skills/0 returns list of skill modules (deduplicated)" do
+      modules = MultiSkillAgent.skills()
+
+      assert is_list(modules)
+      assert Enum.all?(modules, &is_atom/1)
+      assert length(modules) == 2
+    end
+
+    test "skill_specs/0 returns list of skill specs" do
+      specs = MultiSkillAgent.skill_specs()
 
       assert is_list(specs)
       assert Enum.all?(specs, &match?(%Spec{}, &1))
-    end
-
-    test "skill_specs/0 is alias for skills/0" do
-      assert MultiSkillAgent.skills() == MultiSkillAgent.skill_specs()
     end
 
     test "actions/0 returns list of action modules" do
@@ -449,6 +467,137 @@ defmodule JidoTest.AgentSkillIntegrationTest do
       state = SingleSkillAgent.skill_state(agent, NonExistentModule)
 
       assert state == nil
+    end
+
+    test "capabilities/0 returns empty list for agents without capability-declaring skills" do
+      capabilities = SingleSkillAgent.capabilities()
+
+      assert capabilities == []
+    end
+
+    test "signal_types/0 returns empty list for agents without routes" do
+      signal_types = SingleSkillAgent.signal_types()
+
+      assert signal_types == []
+    end
+  end
+
+  # =============================================================================
+  # Tests: Capabilities and Signal Types
+  # =============================================================================
+
+  describe "capabilities and signal_types introspection" do
+    defmodule SlackCapabilitySkill do
+      @moduledoc false
+      use Jido.Skill,
+        name: "slack_cap",
+        state_key: :slack_cap,
+        actions: [JidoTest.AgentSkillIntegrationTest.SimpleAction],
+        capabilities: [:messaging, :channel_management],
+        routes: [
+          {"post", JidoTest.AgentSkillIntegrationTest.SimpleAction},
+          {"channels.list", JidoTest.AgentSkillIntegrationTest.SimpleAction}
+        ]
+    end
+
+    defmodule OpenAICapabilitySkill do
+      @moduledoc false
+      use Jido.Skill,
+        name: "openai_cap",
+        state_key: :openai_cap,
+        actions: [JidoTest.AgentSkillIntegrationTest.SimpleAction],
+        capabilities: [:chat, :embeddings, :messaging],
+        routes: [
+          {"chat", JidoTest.AgentSkillIntegrationTest.SimpleAction},
+          {"embeddings", JidoTest.AgentSkillIntegrationTest.SimpleAction}
+        ]
+    end
+
+    defmodule CapabilityAgent do
+      @moduledoc false
+      use Jido.Agent,
+        name: "capability_agent",
+        skills: [
+          JidoTest.AgentSkillIntegrationTest.SlackCapabilitySkill,
+          JidoTest.AgentSkillIntegrationTest.OpenAICapabilitySkill
+        ]
+    end
+
+    test "capabilities/0 returns union of all skill capabilities (deduplicated)" do
+      capabilities = CapabilityAgent.capabilities()
+
+      assert is_list(capabilities)
+      assert :messaging in capabilities
+      assert :channel_management in capabilities
+      assert :chat in capabilities
+      assert :embeddings in capabilities
+      assert length(Enum.filter(capabilities, &(&1 == :messaging))) == 1
+    end
+
+    test "signal_types/0 returns all expanded route signal types" do
+      signal_types = CapabilityAgent.signal_types()
+
+      assert is_list(signal_types)
+      assert "slack_cap.post" in signal_types
+      assert "slack_cap.channels.list" in signal_types
+      assert "openai_cap.chat" in signal_types
+      assert "openai_cap.embeddings" in signal_types
+    end
+
+    test "signal_types/0 returns fully-prefixed routes for aliased skills" do
+      defmodule AliasedCapAgent do
+        @moduledoc false
+        use Jido.Agent,
+          name: "aliased_cap_agent",
+          skills: [
+            {JidoTest.AgentSkillIntegrationTest.SlackCapabilitySkill, as: :support},
+            {JidoTest.AgentSkillIntegrationTest.SlackCapabilitySkill, as: :sales}
+          ]
+      end
+
+      signal_types = AliasedCapAgent.signal_types()
+
+      assert "support.slack_cap.post" in signal_types
+      assert "support.slack_cap.channels.list" in signal_types
+      assert "sales.slack_cap.post" in signal_types
+      assert "sales.slack_cap.channels.list" in signal_types
+    end
+
+    test "skills/0 deduplicates modules for multi-instance skills" do
+      defmodule MultiInstanceCapAgent do
+        @moduledoc false
+        use Jido.Agent,
+          name: "multi_instance_cap_agent",
+          skills: [
+            {JidoTest.AgentSkillIntegrationTest.SlackCapabilitySkill, as: :support},
+            {JidoTest.AgentSkillIntegrationTest.SlackCapabilitySkill, as: :sales},
+            JidoTest.AgentSkillIntegrationTest.OpenAICapabilitySkill
+          ]
+      end
+
+      modules = MultiInstanceCapAgent.skills()
+
+      assert length(modules) == 2
+      assert SlackCapabilitySkill in modules
+      assert OpenAICapabilitySkill in modules
+    end
+
+    test "capabilities/0 returns deduplicated capabilities from multiple instances" do
+      defmodule MultiInstanceCapAgent2 do
+        @moduledoc false
+        use Jido.Agent,
+          name: "multi_instance_cap_agent2",
+          skills: [
+            {JidoTest.AgentSkillIntegrationTest.SlackCapabilitySkill, as: :support},
+            {JidoTest.AgentSkillIntegrationTest.SlackCapabilitySkill, as: :sales}
+          ]
+      end
+
+      capabilities = MultiInstanceCapAgent2.capabilities()
+
+      assert :messaging in capabilities
+      assert :channel_management in capabilities
+      assert length(Enum.filter(capabilities, &(&1 == :messaging))) == 1
     end
   end
 
@@ -639,6 +788,155 @@ defmodule JidoTest.AgentSkillIntegrationTest do
 
       assert agent.name == "multi_skill_agent"
       assert is_binary(agent.id)
+    end
+  end
+
+  # =============================================================================
+  # Tests: Multi-Instance Skills (as: option)
+  # =============================================================================
+
+  describe "multi-instance skills with as: option" do
+    defmodule SlackSkill do
+      @moduledoc false
+      use Jido.Skill,
+        name: "slack",
+        state_key: :slack,
+        actions: [JidoTest.AgentSkillIntegrationTest.SimpleAction],
+        schema:
+          Zoi.object(%{
+            token: Zoi.string() |> Zoi.optional(),
+            channel: Zoi.string() |> Zoi.optional()
+          })
+    end
+
+    defmodule MultiSlackAgent do
+      @moduledoc false
+      use Jido.Agent,
+        name: "multi_slack_agent",
+        skills: [
+          {JidoTest.AgentSkillIntegrationTest.SlackSkill, as: :support, token: "support-token"},
+          {JidoTest.AgentSkillIntegrationTest.SlackSkill, as: :sales, token: "sales-token"}
+        ]
+    end
+
+    defmodule MixedInstanceAgent do
+      @moduledoc false
+      use Jido.Agent,
+        name: "mixed_instance_agent",
+        skills: [
+          JidoTest.AgentSkillIntegrationTest.SlackSkill,
+          {JidoTest.AgentSkillIntegrationTest.SlackSkill, as: :support, token: "support-token"}
+        ]
+    end
+
+    test "skill_instances/0 returns Instance structs" do
+      instances = MultiSlackAgent.skill_instances()
+
+      assert length(instances) == 2
+      assert Enum.all?(instances, &match?(%Jido.Skill.Instance{}, &1))
+    end
+
+    test "instances have different derived state_keys" do
+      instances = MultiSlackAgent.skill_instances()
+
+      state_keys = Enum.map(instances, & &1.state_key)
+      assert :slack_support in state_keys
+      assert :slack_sales in state_keys
+    end
+
+    test "instances have different route_prefixes" do
+      instances = MultiSlackAgent.skill_instances()
+
+      prefixes = Enum.map(instances, & &1.route_prefix)
+      assert "support.slack" in prefixes
+      assert "sales.slack" in prefixes
+    end
+
+    test "agent state has separate namespaces per instance" do
+      agent = MultiSlackAgent.new()
+
+      assert Map.has_key?(agent.state, :slack_support)
+      assert Map.has_key?(agent.state, :slack_sales)
+    end
+
+    test "skill_config/1 with {module, alias} tuple returns correct config" do
+      assert MultiSlackAgent.skill_config({SlackSkill, :support}) == %{token: "support-token"}
+      assert MultiSlackAgent.skill_config({SlackSkill, :sales}) == %{token: "sales-token"}
+    end
+
+    test "skill_state/2 with {module, alias} tuple returns correct state" do
+      agent = MultiSlackAgent.new()
+
+      support_state = MultiSlackAgent.skill_state(agent, {SlackSkill, :support})
+      sales_state = MultiSlackAgent.skill_state(agent, {SlackSkill, :sales})
+
+      assert is_map(support_state)
+      assert is_map(sales_state)
+    end
+
+    test "mixed instances (with and without as:) have different state_keys" do
+      instances = MixedInstanceAgent.skill_instances()
+
+      state_keys = Enum.map(instances, & &1.state_key)
+      assert :slack in state_keys
+      assert :slack_support in state_keys
+    end
+
+    test "skill_config/1 with just module finds default instance first" do
+      config = MixedInstanceAgent.skill_config(SlackSkill)
+      assert config == %{}
+    end
+
+    test "skill_state/2 with just module finds default instance first" do
+      agent = MixedInstanceAgent.new()
+      state = MixedInstanceAgent.skill_state(agent, SlackSkill)
+      assert is_map(state)
+    end
+  end
+
+  describe "duplicate state_key detection with as: option" do
+    test "same skill without as: twice raises duplicate error" do
+      assert_raise CompileError, ~r/Duplicate skill state_keys/, fn ->
+        defmodule DuplicateNoAsAgent do
+          use Jido.Agent,
+            name: "duplicate_no_as",
+            skills: [
+              JidoTest.AgentSkillIntegrationTest.CounterSkill,
+              JidoTest.AgentSkillIntegrationTest.CounterSkill
+            ]
+        end
+      end
+    end
+
+    test "same skill with same as: value raises duplicate error" do
+      assert_raise CompileError, ~r/Duplicate skill state_keys/, fn ->
+        defmodule DuplicateSameAsAgent do
+          use Jido.Agent,
+            name: "duplicate_same_as",
+            skills: [
+              {JidoTest.AgentSkillIntegrationTest.CounterSkill, as: :primary},
+              {JidoTest.AgentSkillIntegrationTest.CounterSkill, as: :primary}
+            ]
+        end
+      end
+    end
+
+    test "same skill with different as: values works" do
+      defmodule DifferentAsAgent do
+        use Jido.Agent,
+          name: "different_as_agent",
+          skills: [
+            {JidoTest.AgentSkillIntegrationTest.CounterSkill, as: :primary},
+            {JidoTest.AgentSkillIntegrationTest.CounterSkill, as: :secondary}
+          ]
+      end
+
+      instances = DifferentAsAgent.skill_instances()
+      assert length(instances) == 2
+
+      state_keys = Enum.map(instances, & &1.state_key)
+      assert :counter_skill_primary in state_keys
+      assert :counter_skill_secondary in state_keys
     end
   end
 end

@@ -361,4 +361,42 @@ defmodule JidoTest.AgentTest do
       assert validated.state.count == 5
     end
   end
+
+  describe "skill routes" do
+    test "skill_routes/0 returns expanded routes with prefix" do
+      routes = TestAgents.AgentWithSkillRoutes.skill_routes()
+
+      assert length(routes) == 2
+      assert {"test_routes_skill.post", JidoTest.SkillTestAction, -10} in routes
+      assert {"test_routes_skill.list", JidoTest.SkillTestAction, -10} in routes
+    end
+
+    test "multi-instance skills get unique route prefixes" do
+      routes = TestAgents.AgentWithMultiInstanceSkills.skill_routes()
+
+      assert length(routes) == 4
+      assert {"support.test_routes_skill.post", JidoTest.SkillTestAction, -10} in routes
+      assert {"support.test_routes_skill.list", JidoTest.SkillTestAction, -10} in routes
+      assert {"sales.test_routes_skill.post", JidoTest.SkillTestAction, -10} in routes
+      assert {"sales.test_routes_skill.list", JidoTest.SkillTestAction, -10} in routes
+    end
+
+    test "compile-time conflict detection raises error for duplicate routes" do
+      assert_raise CompileError, ~r/Route conflict|Duplicate skill state_keys/, fn ->
+        defmodule ConflictAgent do
+          use Jido.Agent,
+            name: "conflict_agent",
+            skills: [
+              TestAgents.TestSkillWithRoutes,
+              TestAgents.TestSkillWithRoutes
+            ]
+        end
+      end
+    end
+
+    test "no route conflict when skills use different :as aliases" do
+      routes = TestAgents.AgentWithMultiInstanceSkills.skill_routes()
+      assert length(routes) == 4
+    end
+  end
 end

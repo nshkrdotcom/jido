@@ -119,4 +119,48 @@ defmodule JidoTest.TestAgents do
 
     def signal_routes, do: []
   end
+
+  defmodule TestSkillWithRoutes do
+    @moduledoc false
+    use Jido.Skill,
+      name: "test_routes_skill",
+      state_key: :test_routes,
+      actions: [JidoTest.SkillTestAction],
+      routes: [
+        {"post", JidoTest.SkillTestAction},
+        {"list", JidoTest.SkillTestAction}
+      ]
+  end
+
+  defmodule TestSkillWithPriority do
+    @moduledoc false
+    use Jido.Skill,
+      name: "priority_skill",
+      state_key: :priority,
+      actions: [JidoTest.SkillTestAction],
+      routes: [
+        {"action", JidoTest.SkillTestAction, priority: 5}
+      ]
+  end
+
+  defmodule AgentWithSkillRoutes do
+    @moduledoc false
+    use Jido.Agent,
+      name: "agent_with_skill_routes",
+      skills: [JidoTest.TestAgents.TestSkillWithRoutes]
+
+    def signal_routes, do: []
+  end
+
+  defmodule AgentWithMultiInstanceSkills do
+    @moduledoc false
+    use Jido.Agent,
+      name: "agent_multi_instance",
+      skills: [
+        {JidoTest.TestAgents.TestSkillWithRoutes, as: :support},
+        {JidoTest.TestAgents.TestSkillWithRoutes, as: :sales}
+      ]
+
+    def signal_routes, do: []
+  end
 end

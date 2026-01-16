@@ -47,7 +47,10 @@ defmodule Jido.AgentServer.Options do
                 Zoi.atom(description: "Behavior when parent dies")
                 |> Zoi.default(:stop),
               spawn_fun:
-                Zoi.any(description: "Custom function for spawning children") |> Zoi.optional()
+                Zoi.any(description: "Custom function for spawning children") |> Zoi.optional(),
+              skip_schedules:
+                Zoi.boolean(description: "Skip registering skill schedules (useful for tests)")
+                |> Zoi.default(false)
             },
             coerce: true
           )

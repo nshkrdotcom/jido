@@ -486,6 +486,9 @@ defmodule Jido.AgentServer do
     # Start skill children
     state = start_skill_children(state)
 
+    # Register skill schedules (cron jobs)
+    state = register_skill_schedules(state)
+
     notify_parent_of_startup(state)
 
     state = start_drain_if_idle(state)
@@ -944,6 +947,72 @@ defmodule Jido.AgentServer do
     )
 
     state
+  end
+
+  # ---------------------------------------------------------------------------
+  # Internal: Skill Schedules
+  # ---------------------------------------------------------------------------
+
+  @doc false
+  defp register_skill_schedules(%State{skip_schedules: true} = state) do
+    Logger.debug("AgentServer #{state.id} skipping skill schedules")
+    state
+  end
+
+  defp register_skill_schedules(%State{} = state) do
+    agent_module = state.agent_module
+
+    schedules =
+      if function_exported?(agent_module, :skill_schedules, 0),
+        do: agent_module.skill_schedules(),
+        else: []
+
+    Enum.reduce(schedules, state, fn schedule_spec, acc_state ->
+      register_schedule(acc_state, schedule_spec)
+    end)
+  end
+
+  defp register_schedule(%State{} = state, schedule_spec) do
+    %{
+      cron_expression: cron_expr,
+      action: _action,
+      job_id: job_id,
+      signal_type: signal_type,
+      timezone: timezone
+    } = schedule_spec
+
+    agent_id = state.id
+
+    signal = Signal.new!(signal_type, %{}, source: "/agent/#{agent_id}/schedule")
+
+    opts = if timezone, do: [timezone: timezone], else: []
+
+    result =
+      Jido.Scheduler.run_every(
+        fn ->
+          _ = Jido.AgentServer.cast(agent_id, signal)
+          :ok
+        end,
+        cron_expr,
+        opts
+      )
+
+    case result do
+      {:ok, pid} ->
+        Logger.debug(
+          "AgentServer #{agent_id} registered schedule #{inspect(job_id)}: #{cron_expr}"
+        )
+
+        new_cron_jobs = Map.put(state.cron_jobs, job_id, pid)
+        %{state | cron_jobs: new_cron_jobs}
+
+      {:error, reason} ->
+        Logger.error(
+          "AgentServer #{agent_id} failed to register schedule #{inspect(job_id)}: #{inspect(reason)}"
+        )
+
+        state
+    end
   end
 
   # ---------------------------------------------------------------------------

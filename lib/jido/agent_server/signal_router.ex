@@ -86,8 +86,17 @@ defmodule Jido.AgentServer.SignalRouter do
     end
   end
 
-  # Collects routes from skills via signal_patterns and router/1
+  # Collects routes from skills via skill_routes/0 (pre-expanded) or fallback to router/1
   defp add_skill_routes(routes, %State{agent_module: agent_module}) do
+    # First, try to get pre-expanded routes from skill_routes/0 (Phase 3 approach)
+    pre_expanded_routes =
+      if function_exported?(agent_module, :skill_routes, 0) do
+        agent_module.skill_routes()
+      else
+        []
+      end
+
+    # Get custom routes from skills that define router/1 callback (legacy support)
     skill_specs =
       if function_exported?(agent_module, :skill_specs, 0) do
         agent_module.skill_specs()
@@ -95,22 +104,16 @@ defmodule Jido.AgentServer.SignalRouter do
         []
       end
 
-    skill_routes =
+    custom_routes =
       Enum.flat_map(skill_specs, fn spec ->
-        custom_routes = get_skill_custom_routes(spec)
-
-        pattern_routes =
-          if custom_routes == [] do
-            generate_pattern_routes(spec)
-          else
-            []
-          end
-
-        custom_routes ++ pattern_routes
+        get_skill_custom_routes(spec)
       end)
 
-    normalized = normalize_routes(skill_routes, @skill_default_priority)
-    routes ++ normalized
+    # Combine: pre-expanded routes are already normalized with priority
+    # Custom routes need normalization
+    normalized_custom = normalize_routes(custom_routes, @skill_default_priority)
+
+    routes ++ pre_expanded_routes ++ normalized_custom
   end
 
   defp get_skill_custom_routes(spec) do
@@ -124,15 +127,6 @@ defmodule Jido.AgentServer.SignalRouter do
       end
     else
       []
-    end
-  end
-
-  defp generate_pattern_routes(spec) do
-    patterns = spec.signal_patterns || []
-    actions = spec.actions || []
-
-    for pattern <- patterns, action <- actions do
-      {pattern, action}
     end
   end
 

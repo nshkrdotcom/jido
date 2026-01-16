@@ -41,6 +41,9 @@ defmodule Jido.AgentServer.State do
               # Cron jobs
               cron_jobs:
                 Zoi.map(description: "Map of job_id => scheduler job name") |> Zoi.default(%{}),
+              skip_schedules:
+                Zoi.boolean(description: "Skip registering skill schedules")
+                |> Zoi.default(false),
 
               # Configuration
               jido: Zoi.atom(description: "Jido instance name (required)"),
@@ -103,6 +106,7 @@ defmodule Jido.AgentServer.State do
       registry: opts.registry,
       spawn_fun: opts.spawn_fun,
       cron_jobs: %{},
+      skip_schedules: opts.skip_schedules,
       error_count: 0,
       metrics: %{},
       completion_waiters: %{}

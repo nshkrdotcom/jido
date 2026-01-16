@@ -114,7 +114,10 @@ defmodule JidoTest.AgentServer.SignalRouterTest do
         JidoTest.AgentServer.SignalRouterTest.TestAction,
         JidoTest.AgentServer.SignalRouterTest.AnotherAction
       ],
-      signal_patterns: ["pattern.one", "pattern.two"]
+      routes: [
+        {"pattern.one", JidoTest.AgentServer.SignalRouterTest.TestAction},
+        {"pattern.two", JidoTest.AgentServer.SignalRouterTest.AnotherAction}
+      ]
   end
 
   # =============================================================================
@@ -320,15 +323,15 @@ defmodule JidoTest.AgentServer.SignalRouterTest do
       assert router.route_count == 1
     end
 
-    test "generates pattern routes when skill has no custom router" do
-      # SkillWithPatterns has 2 patterns and 2 actions = 4 routes
+    test "generates routes from skill routes definition" do
+      # SkillWithPatterns has 2 explicit routes, SkillWithRouter has 2 custom router routes
       state = build_test_state(AgentWithSkills)
       router = SignalRouter.build(state)
 
       assert %JidoRouter.Router{} = router
-      # SkillWithRouter has 2 custom routes, SkillWithPatterns has 2x2=4 pattern routes
-      # Total: 2 + 4 = 6 routes
-      assert router.route_count == 6
+      # SkillWithRouter has 2 custom routes, SkillWithPatterns has 2 explicit routes
+      # Total: 2 + 2 = 4 routes
+      assert router.route_count == 4
     end
   end
 

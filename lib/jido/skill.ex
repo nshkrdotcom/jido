@@ -68,8 +68,13 @@ defmodule Jido.Skill do
   - `config_schema` - Optional Zoi schema for per-agent config.
   - `signal_patterns` - List of signal pattern strings (default: []).
   - `tags` - List of tag strings (default: []).
+  - `capabilities` - List of atoms describing what the skill provides (default: []).
+  - `requires` - List of requirements like `{:config, :token}`, `{:app, :req}`, `{:skill, :http}` (default: []).
+  - `routes` - List of route tuples like `{"post", ActionModule}` (default: []).
+  - `schedules` - List of schedule tuples like `{"*/5 * * * *", ActionModule}` (default: []).
   """
 
+  alias Jido.Skill.Manifest
   alias Jido.Skill.Spec
 
   @skill_config_schema Zoi.object(
@@ -94,6 +99,12 @@ defmodule Jido.Skill do
                            vsn:
                              Zoi.string(description: "Version")
                              |> Zoi.optional(),
+                           otp_app:
+                             Zoi.atom(
+                               description:
+                                 "OTP application for loading config from Application.get_env."
+                             )
+                             |> Zoi.optional(),
                            schema:
                              Zoi.any(description: "Zoi schema for skill state.")
                              |> Zoi.optional(),
@@ -105,6 +116,28 @@ defmodule Jido.Skill do
                              |> Zoi.default([]),
                            tags:
                              Zoi.list(Zoi.string(), description: "Tags for categorization.")
+                             |> Zoi.default([]),
+                           capabilities:
+                             Zoi.list(Zoi.atom(),
+                               description: "Capabilities provided by this skill."
+                             )
+                             |> Zoi.default([]),
+                           requires:
+                             Zoi.list(Zoi.any(),
+                               description:
+                                 "Requirements like {:config, :token}, {:app, :req}, {:skill, :http}."
+                             )
+                             |> Zoi.default([]),
+                           routes:
+                             Zoi.list(Zoi.any(),
+                               description: "Route tuples like {\"post\", ActionModule}."
+                             )
+                             |> Zoi.default([]),
+                           schedules:
+                             Zoi.list(Zoi.any(),
+                               description:
+                                 "Schedule tuples like {\"*/5 * * * *\", ActionModule}."
+                             )
                              |> Zoi.default([])
                          },
                          coerce: true
@@ -309,6 +342,10 @@ defmodule Jido.Skill do
       @spec vsn() :: String.t() | nil
       def vsn, do: @validated_opts[:vsn]
 
+      @doc "Returns the OTP application for config resolution."
+      @spec otp_app() :: atom() | nil
+      def otp_app, do: @validated_opts[:otp_app]
+
       @doc "Returns the Zoi schema for skill state."
       @spec schema() :: Zoi.schema() | nil
       def schema, do: @validated_opts[:schema]
@@ -324,6 +361,22 @@ defmodule Jido.Skill do
       @doc "Returns the skill's tags."
       @spec tags() :: [String.t()]
       def tags, do: @validated_opts[:tags] || []
+
+      @doc "Returns the capabilities provided by this skill."
+      @spec capabilities() :: [atom()]
+      def capabilities, do: @validated_opts[:capabilities] || []
+
+      @doc "Returns the requirements for this skill."
+      @spec requires() :: [tuple()]
+      def requires, do: @validated_opts[:requires] || []
+
+      @doc "Returns the routes for this skill."
+      @spec routes() :: [tuple()]
+      def routes, do: @validated_opts[:routes] || []
+
+      @doc "Returns the schedules for this skill."
+      @spec schedules() :: [tuple()]
+      def schedules, do: @validated_opts[:schedules] || []
 
       @doc """
       Returns the skill specification with optional per-agent configuration.
@@ -349,6 +402,51 @@ defmodule Jido.Skill do
           signal_patterns: signal_patterns(),
           tags: tags(),
           actions: actions()
+        }
+      end
+
+      @doc """
+      Returns the skill manifest with all metadata.
+
+      The manifest provides compile-time metadata for discovery
+      and introspection, including capabilities, requirements,
+      routes, and schedules.
+      """
+      @spec manifest() :: Manifest.t()
+      def manifest do
+        %Manifest{
+          module: __MODULE__,
+          name: name(),
+          description: description(),
+          category: category(),
+          tags: tags(),
+          vsn: vsn(),
+          otp_app: otp_app(),
+          capabilities: capabilities(),
+          requires: requires(),
+          state_key: state_key(),
+          schema: schema(),
+          config_schema: config_schema(),
+          actions: actions(),
+          routes: routes(),
+          schedules: schedules(),
+          signal_patterns: signal_patterns()
+        }
+      end
+
+      @doc """
+      Returns metadata for Jido.Discovery integration.
+
+      This function is used by `Jido.Discovery` to index skills
+      for fast lookup and filtering.
+      """
+      @spec __skill_metadata__() :: map()
+      def __skill_metadata__ do
+        %{
+          name: name(),
+          description: description(),
+          category: category(),
+          tags: tags()
         }
       end
 
@@ -391,10 +489,15 @@ defmodule Jido.Skill do
                      description: 0,
                      category: 0,
                      vsn: 0,
+                     otp_app: 0,
                      schema: 0,
                      config_schema: 0,
                      signal_patterns: 0,
-                     tags: 0
+                     tags: 0,
+                     capabilities: 0,
+                     requires: 0,
+                     routes: 0,
+                     schedules: 0
     end
   end
 end

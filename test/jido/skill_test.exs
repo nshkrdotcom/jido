@@ -1,6 +1,7 @@
 defmodule JidoTest.SkillTest do
   use ExUnit.Case, async: true
 
+  alias Jido.Skill.Manifest
   alias Jido.Skill.Spec
 
   # Skill fixtures - these reference action modules from test/support/test_actions.ex
@@ -26,7 +27,11 @@ defmodule JidoTest.SkillTest do
       schema: Zoi.object(%{counter: Zoi.integer() |> Zoi.default(0)}),
       config_schema: Zoi.object(%{enabled: Zoi.boolean() |> Zoi.default(true)}),
       signal_patterns: ["skill.**", "test.*"],
-      tags: ["test", "full"]
+      tags: ["test", "full"],
+      capabilities: [:messaging, :notifications],
+      requires: [{:config, :api_key}, {:app, :req}],
+      routes: [{"post", JidoTest.SkillTestAction}, {"get", JidoTest.SkillTestAnotherAction}],
+      schedules: [{"*/5 * * * *", JidoTest.SkillTestAction}]
   end
 
   defmodule CustomCallbackSkill do
@@ -88,6 +93,10 @@ defmodule JidoTest.SkillTest do
       assert BasicSkill.config_schema() == nil
       assert BasicSkill.signal_patterns() == []
       assert BasicSkill.tags() == []
+      assert BasicSkill.capabilities() == []
+      assert BasicSkill.requires() == []
+      assert BasicSkill.routes() == []
+      assert BasicSkill.schedules() == []
     end
   end
 
@@ -103,6 +112,15 @@ defmodule JidoTest.SkillTest do
       assert FullSkill.config_schema() != nil
       assert FullSkill.signal_patterns() == ["skill.**", "test.*"]
       assert FullSkill.tags() == ["test", "full"]
+      assert FullSkill.capabilities() == [:messaging, :notifications]
+      assert FullSkill.requires() == [{:config, :api_key}, {:app, :req}]
+
+      assert FullSkill.routes() == [
+               {"post", JidoTest.SkillTestAction},
+               {"get", JidoTest.SkillTestAnotherAction}
+             ]
+
+      assert FullSkill.schedules() == [{"*/5 * * * *", JidoTest.SkillTestAction}]
     end
   end
 
@@ -344,6 +362,132 @@ defmodule JidoTest.SkillTest do
     test "returns the Zoi schema for skill configuration" do
       schema = Jido.Skill.config_schema()
       assert is_struct(schema)
+    end
+  end
+
+  describe "manifest/0" do
+    test "returns correct Manifest struct for BasicSkill" do
+      manifest = BasicSkill.manifest()
+
+      assert %Manifest{} = manifest
+      assert manifest.module == BasicSkill
+      assert manifest.name == "basic_skill"
+      assert manifest.state_key == :basic
+      assert manifest.actions == [JidoTest.SkillTestAction]
+      assert manifest.description == nil
+      assert manifest.category == nil
+      assert manifest.vsn == nil
+      assert manifest.schema == nil
+      assert manifest.config_schema == nil
+      assert manifest.signal_patterns == []
+      assert manifest.tags == []
+      assert manifest.capabilities == []
+      assert manifest.requires == []
+      assert manifest.routes == []
+      assert manifest.schedules == []
+    end
+
+    test "returns correct Manifest struct for FullSkill" do
+      manifest = FullSkill.manifest()
+
+      assert %Manifest{} = manifest
+      assert manifest.module == FullSkill
+      assert manifest.name == "full_skill"
+      assert manifest.state_key == :full
+      assert manifest.actions == [JidoTest.SkillTestAction, JidoTest.SkillTestAnotherAction]
+      assert manifest.description == "A fully configured skill"
+      assert manifest.category == "test"
+      assert manifest.vsn == "1.0.0"
+      assert manifest.schema != nil
+      assert manifest.config_schema != nil
+      assert manifest.signal_patterns == ["skill.**", "test.*"]
+      assert manifest.tags == ["test", "full"]
+      assert manifest.capabilities == [:messaging, :notifications]
+      assert manifest.requires == [{:config, :api_key}, {:app, :req}]
+
+      assert manifest.routes == [
+               {"post", JidoTest.SkillTestAction},
+               {"get", JidoTest.SkillTestAnotherAction}
+             ]
+
+      assert manifest.schedules == [{"*/5 * * * *", JidoTest.SkillTestAction}]
+    end
+  end
+
+  describe "__skill_metadata__/0" do
+    test "returns correct metadata map for BasicSkill" do
+      metadata = BasicSkill.__skill_metadata__()
+
+      assert metadata == %{
+               name: "basic_skill",
+               description: nil,
+               category: nil,
+               tags: []
+             }
+    end
+
+    test "returns correct metadata map for FullSkill" do
+      metadata = FullSkill.__skill_metadata__()
+
+      assert metadata == %{
+               name: "full_skill",
+               description: "A fully configured skill",
+               category: "test",
+               tags: ["test", "full"]
+             }
+    end
+
+    test "metadata is compatible with Jido.Discovery expectations" do
+      metadata = FullSkill.__skill_metadata__()
+
+      assert is_binary(metadata.name)
+      assert is_binary(metadata.description) or is_nil(metadata.description)
+      assert is_binary(metadata.category) or is_nil(metadata.category)
+      assert is_list(metadata.tags)
+    end
+  end
+
+  describe "new accessor functions" do
+    test "capabilities/0 returns correct values" do
+      assert BasicSkill.capabilities() == []
+      assert FullSkill.capabilities() == [:messaging, :notifications]
+    end
+
+    test "requires/0 returns correct values" do
+      assert BasicSkill.requires() == []
+      assert FullSkill.requires() == [{:config, :api_key}, {:app, :req}]
+    end
+
+    test "routes/0 returns correct values" do
+      assert BasicSkill.routes() == []
+
+      assert FullSkill.routes() == [
+               {"post", JidoTest.SkillTestAction},
+               {"get", JidoTest.SkillTestAnotherAction}
+             ]
+    end
+
+    test "schedules/0 returns correct values" do
+      assert BasicSkill.schedules() == []
+      assert FullSkill.schedules() == [{"*/5 * * * *", JidoTest.SkillTestAction}]
+    end
+  end
+
+  describe "backward compatibility" do
+    test "existing skills without new options still work" do
+      assert BasicSkill.name() == "basic_skill"
+      assert BasicSkill.state_key() == :basic
+      assert BasicSkill.actions() == [JidoTest.SkillTestAction]
+      assert BasicSkill.signal_patterns() == []
+      assert BasicSkill.router(%{}) == nil
+    end
+
+    test "skill_spec still works correctly" do
+      spec = FullSkill.skill_spec(%{custom: true})
+
+      assert %Spec{} = spec
+      assert spec.module == FullSkill
+      assert spec.config == %{custom: true}
     end
   end
 end

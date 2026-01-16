@@ -874,4 +874,102 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
   end
+
+  describe "skill schedules" do
+    defmodule ScheduledAction do
+      @moduledoc false
+      use Jido.Action,
+        name: "scheduled_action",
+        schema: []
+
+      @impl true
+      def run(_params, _context), do: {:ok, %{scheduled: true}}
+    end
+
+    defmodule ScheduledSkill do
+      @moduledoc false
+      use Jido.Skill,
+        name: "scheduled_skill",
+        state_key: :scheduled_skill,
+        actions: [ScheduledAction],
+        schedules: [
+          {"* * * * *", ScheduledAction}
+        ]
+    end
+
+    defmodule AgentWithScheduledSkill do
+      @moduledoc false
+      use Jido.Agent,
+        name: "agent_with_scheduled_skill",
+        schema: [],
+        skills: [ScheduledSkill]
+    end
+
+    test "registers skill schedules on startup", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: AgentWithScheduledSkill, jido: jido)
+      {:ok, state} = AgentServer.state(pid)
+
+      assert map_size(state.cron_jobs) == 1
+
+      job_id = {:skill_schedule, :scheduled_skill, ScheduledAction}
+      assert Map.has_key?(state.cron_jobs, job_id)
+
+      cron_pid = Map.get(state.cron_jobs, job_id)
+      assert is_pid(cron_pid)
+      assert Process.alive?(cron_pid)
+
+      GenServer.stop(pid)
+    end
+
+    test "skips schedules when skip_schedules option is true", %{jido: jido} do
+      {:ok, pid} =
+        AgentServer.start_link(agent: AgentWithScheduledSkill, jido: jido, skip_schedules: true)
+
+      {:ok, state} = AgentServer.state(pid)
+
+      assert map_size(state.cron_jobs) == 0
+
+      GenServer.stop(pid)
+    end
+
+    test "cleans up cron jobs on termination", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: AgentWithScheduledSkill, jido: jido)
+      {:ok, state} = AgentServer.state(pid)
+
+      job_id = {:skill_schedule, :scheduled_skill, ScheduledAction}
+      cron_pid = Map.get(state.cron_jobs, job_id)
+      assert Process.alive?(cron_pid)
+
+      GenServer.stop(pid)
+      Process.sleep(50)
+
+      refute Process.alive?(cron_pid)
+    end
+
+    test "agent exposes skill_schedules/0 accessor" do
+      schedules = AgentWithScheduledSkill.skill_schedules()
+
+      assert length(schedules) == 1
+      [spec] = schedules
+      assert spec.cron_expression == "* * * * *"
+      assert spec.action == ScheduledAction
+      assert spec.job_id == {:skill_schedule, :scheduled_skill, ScheduledAction}
+      assert spec.signal_type == "scheduled_skill.__schedule__.scheduled_action"
+    end
+
+    test "schedule routes are included in skill_routes/0" do
+      routes = AgentWithScheduledSkill.skill_routes()
+
+      schedule_route =
+        Enum.find(routes, fn {signal_type, _, _} ->
+          String.contains?(signal_type, "__schedule__")
+        end)
+
+      assert schedule_route != nil
+      {signal_type, action, priority} = schedule_route
+      assert signal_type == "scheduled_skill.__schedule__.scheduled_action"
+      assert action == ScheduledAction
+      assert priority < 0
+    end
+  end
 end

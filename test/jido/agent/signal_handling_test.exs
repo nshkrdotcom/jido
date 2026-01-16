@@ -12,7 +12,7 @@ defmodule JidoTest.Agent.SignalHandlingTest do
 
   alias Jido.Agent.Directive
   alias Jido.Signal
-  alias JidoTest.Fixtures
+  alias JidoTest.TestActions
 
   defmodule EmitTestAction do
     @moduledoc false
@@ -36,9 +36,9 @@ defmodule JidoTest.Agent.SignalHandlingTest do
 
     def signal_routes do
       [
-        {"increment", Fixtures.IncrementAction},
-        {"decrement", Fixtures.DecrementAction},
-        {"record", Fixtures.RecordAction},
+        {"increment", TestActions.IncrementAction},
+        {"decrement", TestActions.DecrementAction},
+        {"record", TestActions.RecordAction},
         {"emit_test", EmitTestAction}
       ]
     end
@@ -56,8 +56,8 @@ defmodule JidoTest.Agent.SignalHandlingTest do
 
     def signal_routes do
       [
-        {"increment", Fixtures.IncrementAction},
-        {"decrement", Fixtures.DecrementAction}
+        {"increment", TestActions.IncrementAction},
+        {"decrement", TestActions.DecrementAction}
       ]
     end
 
@@ -176,18 +176,18 @@ defmodule JidoTest.Agent.SignalHandlingTest do
           name: "action_modifying_agent",
           schema: [counter: [type: :integer, default: 0]]
 
-        alias JidoTest.Fixtures
+        alias JidoTest.TestActions
 
         def signal_routes do
           [
-            {"increment", Fixtures.IncrementAction}
+            {"increment", TestActions.IncrementAction}
           ]
         end
 
         # Transform action to always increment by 10
         # Matches on the action module, not string type
-        def on_before_cmd(agent, {Fixtures.IncrementAction, _params}) do
-          {:ok, agent, {Fixtures.IncrementAction, %{amount: 10}}}
+        def on_before_cmd(agent, {TestActions.IncrementAction, _params}) do
+          {:ok, agent, {TestActions.IncrementAction, %{amount: 10}}}
         end
 
         def on_before_cmd(agent, action), do: {:ok, agent, action}
@@ -215,7 +215,7 @@ defmodule JidoTest.Agent.SignalHandlingTest do
       agent = ActionBasedAgent.new()
 
       {updated, _directives} =
-        ActionBasedAgent.cmd(agent, {Fixtures.IncrementAction, %{amount: 5}})
+        ActionBasedAgent.cmd(agent, {TestActions.IncrementAction, %{amount: 5}})
 
       assert updated.state.counter == 5
     end
@@ -224,7 +224,7 @@ defmodule JidoTest.Agent.SignalHandlingTest do
       agent = PreProcessingAgent.new()
 
       {updated, _directives} =
-        PreProcessingAgent.cmd(agent, {Fixtures.IncrementAction, %{amount: 1}})
+        PreProcessingAgent.cmd(agent, {TestActions.IncrementAction, %{amount: 1}})
 
       # on_before_cmd now captures action module name
       assert updated.state.last_action_type == "increment"

@@ -5,7 +5,7 @@ defmodule JidoTest.AgentServer.TracePropagationTest do
   alias Jido.Agent.Directive
   alias Jido.Signal
   alias Jido.Tracing.Trace
-  alias JidoTest.Fixtures
+  alias JidoTest.TestActions
 
   defmodule EmitAction do
     @moduledoc false
@@ -28,7 +28,7 @@ defmodule JidoTest.AgentServer.TracePropagationTest do
 
     def signal_routes do
       [
-        {"increment", Fixtures.IncrementAction},
+        {"increment", TestActions.IncrementAction},
         {"emit", EmitAction}
       ]
     end

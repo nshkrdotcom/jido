@@ -4,7 +4,7 @@ defmodule JidoTest.AgentServer.TelemetryTest do
   alias Jido.AgentServer
   alias Jido.Agent.Directive
   alias Jido.Signal
-  alias JidoTest.Fixtures
+  alias JidoTest.TestActions
 
   defmodule EmitDirectiveAction do
     @moduledoc false
@@ -35,7 +35,7 @@ defmodule JidoTest.AgentServer.TelemetryTest do
 
     def signal_routes do
       [
-        {"increment", Fixtures.IncrementAction},
+        {"increment", TestActions.IncrementAction},
         {"emit_directive", EmitDirectiveAction},
         {"schedule_directive", ScheduleDirectiveAction}
       ]

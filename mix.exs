@@ -222,26 +222,17 @@ defmodule Jido.MixProject do
       {:jido_signal, github: "agentjido/jido_signal", branch: "main"},
 
       # Jido Deps
-      {:backoff, "~> 1.1"},
       {:deep_merge, "~> 1.0"},
       {:jason, "~> 1.4"},
-      {:msgpax, "~> 2.3"},
       {:nimble_options, "~> 1.1"},
-      {:nimble_parsec, "~> 1.4"},
       {:ok, "~> 2.3"},
       {:phoenix_pubsub, "~> 2.1"},
-      {:private, "~> 0.1.2"},
-      {:proper_case, "~> 1.3"},
       {:splode, "~> 0.2.5"},
       {:telemetry, "~> 1.3"},
       {:poolboy, "~> 1.5"},
       {:telemetry_metrics, "~> 1.1"},
-      {:typed_struct, "~> 0.3.0"},
-      {:typed_struct_nimble_options, "~> 0.1.1"},
       {:sched_ex, "~> 1.1"},
       {:uniq, "~> 0.6.1"},
-      # State Machine
-      {:fsmx, "~> 0.5"},
 
       # Skill & Action Dependencies for examples
       {:req, "~> 0.5.16"},

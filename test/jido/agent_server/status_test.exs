@@ -4,7 +4,7 @@ defmodule JidoTest.AgentServer.StatusTest do
   alias Jido.AgentServer
   alias Jido.AgentServer.Status
   alias Jido.Signal
-  alias JidoTest.Fixtures
+  alias JidoTest.TestActions
 
   defmodule CompleteAction do
     @moduledoc false
@@ -27,7 +27,7 @@ defmodule JidoTest.AgentServer.StatusTest do
 
     def signal_routes do
       [
-        {"test_increment", Fixtures.IncrementAction},
+        {"test_increment", TestActions.IncrementAction},
         {"test.complete", CompleteAction}
       ]
     end

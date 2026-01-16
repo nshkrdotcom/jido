@@ -7,7 +7,7 @@ defmodule JidoTest.AgentServerTest do
   alias Jido.AgentServer.State
   alias Jido.Agent.Directive
   alias Jido.Signal
-  alias JidoTest.Fixtures
+  alias JidoTest.TestActions
 
   # Test actions with specific directive behavior (not in common_fixtures)
   defmodule EmitTestAction do
@@ -58,18 +58,18 @@ defmodule JidoTest.AgentServerTest do
         messages: [type: {:list, :any}, default: []]
       ]
 
-    alias JidoTest.Fixtures
+    alias JidoTest.TestActions
 
     def signal_routes do
       [
-        {"increment", Fixtures.IncrementAction},
-        {"decrement", Fixtures.DecrementAction},
-        {"record", Fixtures.RecordAction},
+        {"increment", TestActions.IncrementAction},
+        {"decrement", TestActions.DecrementAction},
+        {"record", TestActions.RecordAction},
         {"emit_test", EmitTestAction},
         {"schedule_test", ScheduleTestAction},
         {"stop_test", StopTestAction},
         {"error_test", ErrorTestAction},
-        {"noop", Fixtures.NoopAction}
+        {"noop", TestActions.NoSchema}
       ]
     end
   end

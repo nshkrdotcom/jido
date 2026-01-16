@@ -8,7 +8,7 @@ defmodule JidoTest.AgentPoolTest do
   alias Jido.AgentPool
   alias Jido.AgentServer
   alias Jido.Signal
-  alias JidoTest.Fixtures
+  alias JidoTest.TestActions
 
   defmodule GetCountAction do
     @moduledoc false
@@ -30,7 +30,7 @@ defmodule JidoTest.AgentPoolTest do
 
     def signal_routes do
       [
-        {"increment", Fixtures.IncrementAction},
+        {"increment", TestActions.IncrementAction},
         {"get_count", GetCountAction}
       ]
     end

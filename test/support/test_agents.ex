@@ -1,9 +1,12 @@
 defmodule JidoTest.TestAgents do
-  @moduledoc false
+  @moduledoc """
+  Shared test agents for Jido test suite.
+  """
 
   # Ensure test actions are compiled before this module
   # (required for compile-time validation in use Jido.Skill)
   Code.ensure_compiled!(JidoTest.SkillTestAction)
+  Code.ensure_compiled!(JidoTest.TestActions.IncrementAction)
 
   defmodule Minimal do
     @moduledoc false
@@ -11,6 +14,36 @@ defmodule JidoTest.TestAgents do
       name: "minimal_agent"
 
     def signal_routes, do: []
+  end
+
+  defmodule Counter do
+    @moduledoc """
+    Standard test agent with counter and messages state.
+
+    Routes:
+      - "increment" -> IncrementAction
+      - "decrement" -> DecrementAction
+      - "record" -> RecordAction
+      - "slow" -> SlowAction
+      - "fail" -> FailingAction
+    """
+    use Jido.Agent,
+      name: "counter_agent",
+      description: "Test agent with counter and message tracking",
+      schema: [
+        counter: [type: :integer, default: 0],
+        messages: [type: {:list, :any}, default: []]
+      ]
+
+    def signal_routes do
+      [
+        {"increment", JidoTest.TestActions.IncrementAction},
+        {"decrement", JidoTest.TestActions.DecrementAction},
+        {"record", JidoTest.TestActions.RecordAction},
+        {"slow", JidoTest.TestActions.SlowAction},
+        {"fail", JidoTest.TestActions.FailingAction}
+      ]
+    end
   end
 
   defmodule Basic do

@@ -29,7 +29,7 @@ defmodule JidoTest.AgentServerCoverageTest do
       ]
 
     def signal_routes do
-      [{"increment", JidoTest.Fixtures.IncrementAction}]
+      [{"increment", JidoTest.TestActions.IncrementAction}]
     end
   end
 
@@ -45,7 +45,7 @@ defmodule JidoTest.AgentServerCoverageTest do
       ]
 
     def signal_routes do
-      [{"increment", JidoTest.Fixtures.IncrementAction}]
+      [{"increment", JidoTest.TestActions.IncrementAction}]
     end
 
     def on_before_cmd(agent, action) do
@@ -69,7 +69,7 @@ defmodule JidoTest.AgentServerCoverageTest do
       ]
 
     def signal_routes do
-      [{"increment", JidoTest.Fixtures.IncrementAction}]
+      [{"increment", JidoTest.TestActions.IncrementAction}]
     end
 
     def on_after_cmd(agent, _action, directives) do
@@ -89,7 +89,7 @@ defmodule JidoTest.AgentServerCoverageTest do
       ]
 
     def signal_routes do
-      [{"increment", JidoTest.Fixtures.IncrementAction}]
+      [{"increment", JidoTest.TestActions.IncrementAction}]
     end
 
     def on_before_cmd(agent, action) do
@@ -201,7 +201,7 @@ defmodule JidoTest.AgentServerCoverageTest do
     test "via tuple that exists works", %{jido: jido} do
       {:ok, _pid} =
         AgentServer.start_link(
-          agent: JidoTest.Fixtures.CounterAgent,
+          agent: JidoTest.TestAgents.Counter,
           id: "via-test-exists",
           jido: jido
         )
@@ -269,20 +269,20 @@ defmodule JidoTest.AgentServerCoverageTest do
 
   describe "pre-built struct with agent_module option" do
     test "uses explicit agent_module for cmd routing", %{jido: jido} do
-      agent = JidoTest.Fixtures.CounterAgent.new(id: "prebuilt-struct-test")
+      agent = JidoTest.TestAgents.Counter.new(id: "prebuilt-struct-test")
       agent = %{agent | state: Map.put(agent.state, :counter, 50)}
 
       {:ok, pid} =
         AgentServer.start_link(
           agent: agent,
-          agent_module: JidoTest.Fixtures.CounterAgent,
+          agent_module: JidoTest.TestAgents.Counter,
           jido: jido
         )
 
       {:ok, state} = AgentServer.state(pid)
       assert state.id == "prebuilt-struct-test"
       assert state.agent.state.counter == 50
-      assert state.agent_module == JidoTest.Fixtures.CounterAgent
+      assert state.agent_module == JidoTest.TestAgents.Counter
 
       signal = Signal.new!("increment", %{}, source: "/test")
       {:ok, updated_agent} = AgentServer.call(pid, signal)
@@ -378,7 +378,7 @@ defmodule JidoTest.AgentServerCoverageTest do
 
   describe "invalid signal handling" do
     test "signal with no matching route returns error", %{jido: jido} do
-      {:ok, pid} = AgentServer.start_link(agent: JidoTest.Fixtures.MinimalAgent, jido: jido)
+      {:ok, pid} = AgentServer.start_link(agent: JidoTest.TestAgents.Minimal, jido: jido)
 
       signal = Signal.new!("nonexistent_action", %{}, source: "/test")
       {:error, :no_matching_route} = AgentServer.call(pid, signal)
@@ -400,7 +400,7 @@ defmodule JidoTest.AgentServerCoverageTest do
     test "alive? returns true for existing via tuple", %{jido: jido} do
       {:ok, _pid} =
         AgentServer.start_link(
-          agent: JidoTest.Fixtures.CounterAgent,
+          agent: JidoTest.TestAgents.Counter,
           id: "alive-via-test",
           jido: jido
         )

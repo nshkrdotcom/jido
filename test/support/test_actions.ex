@@ -22,7 +22,9 @@ defmodule JidoTest.NotAnActionModule do
 end
 
 defmodule JidoTest.TestActions do
-  @moduledoc false
+  @moduledoc """
+  Shared test actions for Jido test suite.
+  """
 
   alias Jido.Action
   alias Jido.Agent.{Directive, StateOp}
@@ -146,6 +148,76 @@ defmodule JidoTest.TestActions do
 
     def run(_params, _context) do
       {:ok, %{}, %StateOp.DeletePath{path: [:nested, :to_remove]}}
+    end
+  end
+
+  defmodule IncrementAction do
+    @moduledoc "Action that increments the :counter state field"
+    use Action,
+      name: "increment",
+      schema: [
+        amount: [type: :integer, default: 1]
+      ]
+
+    def run(%{amount: amount}, context) do
+      count = Map.get(context.state, :counter, 0)
+      {:ok, %{counter: count + amount}}
+    end
+  end
+
+  defmodule DecrementAction do
+    @moduledoc "Action that decrements the :counter state field"
+    use Action,
+      name: "decrement",
+      schema: [
+        amount: [type: :integer, default: 1]
+      ]
+
+    def run(%{amount: amount}, context) do
+      count = Map.get(context.state, :counter, 0)
+      {:ok, %{counter: count - amount}}
+    end
+  end
+
+  defmodule RecordAction do
+    @moduledoc "Action that appends params to the :messages state field"
+    use Action,
+      name: "record",
+      schema: [
+        message: [type: :any, required: false]
+      ]
+
+    def run(params, context) do
+      messages = Map.get(context.state, :messages, [])
+      message = Map.get(params, :message, params)
+      {:ok, %{messages: messages ++ [message]}}
+    end
+  end
+
+  defmodule SlowAction do
+    @moduledoc "Action that sleeps for a configurable delay"
+    use Action,
+      name: "slow",
+      schema: [
+        delay_ms: [type: :integer, default: 100]
+      ]
+
+    def run(%{delay_ms: delay}, _context) do
+      Process.sleep(delay)
+      {:ok, %{processed: true, delay: delay}}
+    end
+  end
+
+  defmodule FailingAction do
+    @moduledoc "Action that always fails with a configurable error message"
+    use Action,
+      name: "failing",
+      schema: [
+        reason: [type: :string, default: "intentional failure"]
+      ]
+
+    def run(%{reason: reason}, _context) do
+      {:error, reason}
     end
   end
 end

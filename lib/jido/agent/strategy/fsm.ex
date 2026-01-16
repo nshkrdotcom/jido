@@ -62,7 +62,7 @@ defmodule Jido.Agent.Strategy.FSM do
 
   alias Jido.Agent
   alias Jido.Agent.Directive
-  alias Jido.Agent.Effects
+  alias Jido.Agent.StateOps
   alias Jido.Agent.Strategy.State, as: StratState
   alias Jido.Error
   alias Jido.Instruction
@@ -190,12 +190,12 @@ defmodule Jido.Agent.Strategy.FSM do
     case Jido.Exec.run(instruction) do
       {:ok, result} when is_map(result) ->
         machine = %{machine | processed_count: machine.processed_count + 1, last_result: result}
-        {Effects.apply_result(agent, result), machine, []}
+        {StateOps.apply_result(agent, result), machine, []}
 
       {:ok, result, effects} when is_map(result) ->
         machine = %{machine | processed_count: machine.processed_count + 1, last_result: result}
-        agent = Effects.apply_result(agent, result)
-        {agent, directives} = Effects.apply_effects(agent, List.wrap(effects))
+        agent = StateOps.apply_result(agent, result)
+        {agent, directives} = StateOps.apply_state_ops(agent, List.wrap(effects))
         {agent, machine, directives}
 
       {:error, reason} ->

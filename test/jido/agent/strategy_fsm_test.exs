@@ -38,11 +38,11 @@ defmodule JidoTest.Agent.StrategyFSMTest do
       name: "effect_action",
       schema: []
 
-    alias Jido.Agent.{Directive, Internal}
+    alias Jido.Agent.{Directive, StateOp}
 
     def run(_params, _context) do
       effects = [
-        %Internal.SetState{attrs: %{extra: "data"}},
+        %StateOp.SetState{attrs: %{extra: "data"}},
         Directive.emit(%{type: "test.event"})
       ]
 
@@ -56,10 +56,10 @@ defmodule JidoTest.Agent.StrategyFSMTest do
       name: "set_path_action",
       schema: []
 
-    alias Jido.Agent.Internal
+    alias Jido.Agent.StateOp
 
     def run(_params, _context) do
-      {:ok, %{}, %Internal.SetPath{path: [:nested, :value], value: 42}}
+      {:ok, %{}, %StateOp.SetPath{path: [:nested, :value], value: 42}}
     end
   end
 
@@ -69,10 +69,10 @@ defmodule JidoTest.Agent.StrategyFSMTest do
       name: "delete_path_action",
       schema: []
 
-    alias Jido.Agent.Internal
+    alias Jido.Agent.StateOp
 
     def run(_params, _context) do
-      {:ok, %{}, %Internal.DeletePath{path: [:to_remove, :nested]}}
+      {:ok, %{}, %StateOp.DeletePath{path: [:to_remove, :nested]}}
     end
   end
 

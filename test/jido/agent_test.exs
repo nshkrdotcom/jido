@@ -300,7 +300,7 @@ defmodule JidoTest.AgentTest do
       assert [%Jido.Agent.Directive.Emit{}, %Jido.Agent.Directive.Schedule{}] = directives
     end
 
-    test "Internal.SetState modifies agent state but is not returned as directive" do
+    test "StateOp.SetState modifies agent state but is not returned as directive" do
       agent = TestAgents.Basic.new()
       {updated, directives} = TestAgents.Basic.cmd(agent, TestActions.SetStateAction)
 
@@ -309,7 +309,7 @@ defmodule JidoTest.AgentTest do
       assert directives == []
     end
 
-    test "Internal.ReplaceState replaces state wholesale" do
+    test "StateOp.ReplaceState replaces state wholesale" do
       agent = TestAgents.Basic.new(state: %{old: "data", counter: 10})
       {updated, directives} = TestAgents.Basic.cmd(agent, TestActions.ReplaceStateAction)
 
@@ -319,7 +319,7 @@ defmodule JidoTest.AgentTest do
       assert directives == []
     end
 
-    test "Internal.DeleteKeys removes top-level keys from state" do
+    test "StateOp.DeleteKeys removes top-level keys from state" do
       agent = TestAgents.Basic.new(state: %{to_delete: 1, also_delete: 2, keep: 3})
       {updated, directives} = TestAgents.Basic.cmd(agent, TestActions.DeleteKeysAction)
 
@@ -329,7 +329,7 @@ defmodule JidoTest.AgentTest do
       assert directives == []
     end
 
-    test "Internal.SetPath sets value at nested path" do
+    test "StateOp.SetPath sets value at nested path" do
       agent = TestAgents.Basic.new(state: %{existing: "value"})
       {updated, directives} = TestAgents.Basic.cmd(agent, TestActions.SetPathAction)
 
@@ -338,7 +338,7 @@ defmodule JidoTest.AgentTest do
       assert directives == []
     end
 
-    test "Internal.DeletePath removes value at nested path" do
+    test "StateOp.DeletePath removes value at nested path" do
       agent = TestAgents.Basic.new(state: %{nested: %{to_remove: "gone", keep: "here"}})
       {updated, directives} = TestAgents.Basic.cmd(agent, TestActions.DeletePathAction)
 

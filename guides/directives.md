@@ -4,6 +4,17 @@ Directives are **pure descriptions of external effects**. Agents emit them from 
 
 **Key principle**: Directives never modify agent state — state changes happen in the returned agent struct.
 
+## Directives vs State Operations
+
+Jido separates two distinct concerns:
+
+| Concept | Module | Purpose | Handled By |
+|---------|--------|---------|------------|
+| **Directives** | `Jido.Agent.Directive` | External effects (emit signals, spawn processes) | Runtime (AgentServer) |
+| **State Operations** | `Jido.Agent.StateOp` | Internal state transitions (set, replace, delete) | Strategy layer |
+
+State operations are applied during `cmd/2` and never leave the strategy layer. Directives are passed through to the runtime for execution.
+
 ```elixir
 def cmd({:notify_user, message}, agent, _context) do
   signal = Jido.Signal.new!("notification.sent", %{message: message}, source: "/agent")

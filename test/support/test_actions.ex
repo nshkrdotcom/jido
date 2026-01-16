@@ -25,7 +25,7 @@ defmodule JidoTest.TestActions do
   @moduledoc false
 
   alias Jido.Action
-  alias Jido.Agent.{Directive, Internal}
+  alias Jido.Agent.{Directive, StateOp}
 
   defmodule BasicAction do
     @moduledoc false
@@ -98,10 +98,10 @@ defmodule JidoTest.TestActions do
     @moduledoc false
     use Action,
       name: "set_state_action",
-      description: "Action that uses Internal.SetState"
+      description: "Action that uses StateOp.SetState"
 
     def run(_params, _context) do
-      {:ok, %{primary: "result"}, %Internal.SetState{attrs: %{extra: "state"}}}
+      {:ok, %{primary: "result"}, %StateOp.SetState{attrs: %{extra: "state"}}}
     end
   end
 
@@ -109,10 +109,10 @@ defmodule JidoTest.TestActions do
     @moduledoc false
     use Action,
       name: "replace_state_action",
-      description: "Action that uses Internal.ReplaceState"
+      description: "Action that uses StateOp.ReplaceState"
 
     def run(_params, _context) do
-      {:ok, %{}, %Internal.ReplaceState{state: %{replaced: true, fresh: "state"}}}
+      {:ok, %{}, %StateOp.ReplaceState{state: %{replaced: true, fresh: "state"}}}
     end
   end
 
@@ -120,10 +120,10 @@ defmodule JidoTest.TestActions do
     @moduledoc false
     use Action,
       name: "delete_keys_action",
-      description: "Action that uses Internal.DeleteKeys"
+      description: "Action that uses StateOp.DeleteKeys"
 
     def run(_params, _context) do
-      {:ok, %{}, %Internal.DeleteKeys{keys: [:to_delete, :also_delete]}}
+      {:ok, %{}, %StateOp.DeleteKeys{keys: [:to_delete, :also_delete]}}
     end
   end
 
@@ -131,10 +131,10 @@ defmodule JidoTest.TestActions do
     @moduledoc false
     use Action,
       name: "set_path_action",
-      description: "Action that uses Internal.SetPath"
+      description: "Action that uses StateOp.SetPath"
 
     def run(_params, _context) do
-      {:ok, %{}, %Internal.SetPath{path: [:nested, :deep, :value], value: 42}}
+      {:ok, %{}, %StateOp.SetPath{path: [:nested, :deep, :value], value: 42}}
     end
   end
 
@@ -142,10 +142,10 @@ defmodule JidoTest.TestActions do
     @moduledoc false
     use Action,
       name: "delete_path_action",
-      description: "Action that uses Internal.DeletePath"
+      description: "Action that uses StateOp.DeletePath"
 
     def run(_params, _context) do
-      {:ok, %{}, %Internal.DeletePath{path: [:nested, :to_remove]}}
+      {:ok, %{}, %StateOp.DeletePath{path: [:nested, :to_remove]}}
     end
   end
 end

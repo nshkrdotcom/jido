@@ -5,7 +5,7 @@ defmodule Jido.Agent.Strategy.Direct do
   This strategy:
   - Executes each instruction via `Jido.Exec.run/1`
   - Merges results into agent state
-  - Applies internal effects (e.g., `SetState`) to the agent
+  - Applies state operations (e.g., `StateOp.SetState`) to the agent
   - Returns only external directives to the caller
 
   This is the default strategy and provides the simplest execution model.
@@ -15,7 +15,7 @@ defmodule Jido.Agent.Strategy.Direct do
 
   alias Jido.Agent
   alias Jido.Agent.Directive
-  alias Jido.Agent.Effects
+  alias Jido.Agent.StateOps
   alias Jido.Error
   alias Jido.Instruction
 
@@ -32,11 +32,11 @@ defmodule Jido.Agent.Strategy.Direct do
 
     case Jido.Exec.run(instruction) do
       {:ok, result} when is_map(result) ->
-        {Effects.apply_result(agent, result), []}
+        {StateOps.apply_result(agent, result), []}
 
       {:ok, result, effects} when is_map(result) ->
-        agent = Effects.apply_result(agent, result)
-        Effects.apply_effects(agent, List.wrap(effects))
+        agent = StateOps.apply_result(agent, result)
+        StateOps.apply_state_ops(agent, List.wrap(effects))
 
       {:error, reason} ->
         error = Error.execution_error("Instruction failed", %{reason: reason})

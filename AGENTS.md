@@ -57,13 +57,35 @@ defstruct Zoi.Struct.struct_fields(@schema)
 
 Single source of truth for fields, types, enforced keys, and validation.
 
-### Actions vs. Directives
+### Actions vs. Directives vs. State Operations
 
-| **Actions** | **Directives** |
-|-------------|----------------|
-| Describe *state transformations* | Describe *external effects* |
-| Executed by `cmd/2`, update `agent.state` | Bare structs emitted by agents |
-| Never perform side effects | Runtime (AgentServer) interprets them |
+| **Actions** | **Directives** | **State Operations** |
+|-------------|----------------|----------------------|
+| Describe *state transformations* | Describe *external effects* | Describe *internal state changes* |
+| Executed by `cmd/2`, update `agent.state` | Bare structs emitted by agents | Applied by strategy layer |
+| Never perform side effects | Runtime (AgentServer) interprets them | Never leave the strategy |
+
+### State Operations (`Jido.Agent.StateOp`)
+
+State operations are internal state transitions handled by the strategy layer during `cmd/2`. Unlike directives, they never reach the runtime.
+
+| StateOp | Purpose |
+|---------|---------|
+| `SetState` | Deep merge attributes into state |
+| `ReplaceState` | Replace state wholesale |
+| `DeleteKeys` | Remove top-level keys |
+| `SetPath` | Set value at nested path |
+| `DeletePath` | Delete value at nested path |
+
+```elixir
+alias Jido.Agent.{Directive, StateOp}
+
+# Actions can return state ops alongside directives
+{:ok, result, [
+  %StateOp.SetState{attrs: %{status: :processing}},
+  %Directive.Emit{signal: my_signal}
+]}
+```
 
 ### Core Directives
 

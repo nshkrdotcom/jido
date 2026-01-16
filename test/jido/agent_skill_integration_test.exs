@@ -13,11 +13,11 @@ defmodule JidoTest.AgentSkillIntegrationTest do
       name: "increment",
       schema: Zoi.object(%{amount: Zoi.integer() |> Zoi.default(1)})
 
-    alias Jido.Agent.Internal
+    alias Jido.Agent.StateOp
 
     def run(%{amount: amount}, %{state: state}) do
       current = get_in(state, [:counter_skill, :count]) || 0
-      {:ok, %{}, %Internal.SetPath{path: [:counter_skill, :count], value: current + amount}}
+      {:ok, %{}, %StateOp.SetPath{path: [:counter_skill, :count], value: current + amount}}
     end
   end
 
@@ -27,11 +27,11 @@ defmodule JidoTest.AgentSkillIntegrationTest do
       name: "decrement",
       schema: Zoi.object(%{amount: Zoi.integer() |> Zoi.default(1)})
 
-    alias Jido.Agent.Internal
+    alias Jido.Agent.StateOp
 
     def run(%{amount: amount}, %{state: state}) do
       current = get_in(state, [:counter_skill, :count]) || 0
-      {:ok, %{}, %Internal.SetPath{path: [:counter_skill, :count], value: current - amount}}
+      {:ok, %{}, %StateOp.SetPath{path: [:counter_skill, :count], value: current - amount}}
     end
   end
 
@@ -41,11 +41,11 @@ defmodule JidoTest.AgentSkillIntegrationTest do
       name: "greet",
       schema: Zoi.object(%{name: Zoi.string() |> Zoi.default("World")})
 
-    alias Jido.Agent.Internal
+    alias Jido.Agent.StateOp
 
     def run(%{name: name}, _context) do
       {:ok, %{},
-       %Internal.SetPath{path: [:greeter_skill, :last_greeting], value: "Hello, #{name}!"}}
+       %StateOp.SetPath{path: [:greeter_skill, :last_greeting], value: "Hello, #{name}!"}}
     end
   end
 
@@ -55,10 +55,10 @@ defmodule JidoTest.AgentSkillIntegrationTest do
       name: "set_mode",
       schema: Zoi.object(%{mode: Zoi.atom()})
 
-    alias Jido.Agent.Internal
+    alias Jido.Agent.StateOp
 
     def run(%{mode: mode}, _context) do
-      {:ok, %{}, %Internal.SetPath{path: [:mode_skill, :current_mode], value: mode}}
+      {:ok, %{}, %StateOp.SetPath{path: [:mode_skill, :current_mode], value: mode}}
     end
   end
 

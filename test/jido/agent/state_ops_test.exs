@@ -1,15 +1,15 @@
-defmodule JidoTest.Agent.EffectsTest do
+defmodule JidoTest.Agent.StateOpsTest do
   use ExUnit.Case, async: true
 
   alias Jido.Agent
-  alias Jido.Agent.Effects
-  alias Jido.Agent.Internal
+  alias Jido.Agent.StateOps
+  alias Jido.Agent.StateOp
   alias Jido.Agent.Directive
 
   describe "apply_result/2" do
     test "merges result into agent state" do
       {:ok, agent} = Agent.new(%{id: "test", state: %{existing: "value"}})
-      updated = Effects.apply_result(agent, %{new: "data"})
+      updated = StateOps.apply_result(agent, %{new: "data"})
 
       assert updated.state.existing == "value"
       assert updated.state.new == "data"
@@ -17,25 +17,25 @@ defmodule JidoTest.Agent.EffectsTest do
 
     test "deep merges nested maps" do
       {:ok, agent} = Agent.new(%{id: "test", state: %{config: %{a: 1, b: 2}}})
-      updated = Effects.apply_result(agent, %{config: %{b: 3, c: 4}})
+      updated = StateOps.apply_result(agent, %{config: %{b: 3, c: 4}})
 
       assert updated.state.config == %{a: 1, b: 3, c: 4}
     end
 
     test "overwrites non-map values" do
       {:ok, agent} = Agent.new(%{id: "test", state: %{value: 1}})
-      updated = Effects.apply_result(agent, %{value: 2})
+      updated = StateOps.apply_result(agent, %{value: 2})
 
       assert updated.state.value == 2
     end
   end
 
-  describe "apply_effects/2 with SetState" do
+  describe "apply_state_ops/2 with SetState" do
     test "merges attributes into state" do
       {:ok, agent} = Agent.new(%{id: "test", state: %{existing: "value"}})
 
       {updated, directives} =
-        Effects.apply_effects(agent, [%Internal.SetState{attrs: %{new: "data"}}])
+        StateOps.apply_state_ops(agent, [%StateOp.SetState{attrs: %{new: "data"}}])
 
       assert updated.state.existing == "value"
       assert updated.state.new == "data"
@@ -46,18 +46,18 @@ defmodule JidoTest.Agent.EffectsTest do
       {:ok, agent} = Agent.new(%{id: "test", state: %{config: %{a: 1}}})
 
       {updated, _} =
-        Effects.apply_effects(agent, [%Internal.SetState{attrs: %{config: %{b: 2}}}])
+        StateOps.apply_state_ops(agent, [%StateOp.SetState{attrs: %{config: %{b: 2}}}])
 
       assert updated.state.config == %{a: 1, b: 2}
     end
   end
 
-  describe "apply_effects/2 with ReplaceState" do
+  describe "apply_state_ops/2 with ReplaceState" do
     test "replaces state wholesale" do
       {:ok, agent} = Agent.new(%{id: "test", state: %{old: "data", to_remove: true}})
 
       {updated, directives} =
-        Effects.apply_effects(agent, [%Internal.ReplaceState{state: %{fresh: "state"}}])
+        StateOps.apply_state_ops(agent, [%StateOp.ReplaceState{state: %{fresh: "state"}}])
 
       assert updated.state == %{fresh: "state"}
       refute Map.has_key?(updated.state, :old)
@@ -65,12 +65,12 @@ defmodule JidoTest.Agent.EffectsTest do
     end
   end
 
-  describe "apply_effects/2 with DeleteKeys" do
+  describe "apply_state_ops/2 with DeleteKeys" do
     test "removes top-level keys" do
       {:ok, agent} = Agent.new(%{id: "test", state: %{keep: 1, remove: 2, also_remove: 3}})
 
       {updated, directives} =
-        Effects.apply_effects(agent, [%Internal.DeleteKeys{keys: [:remove, :also_remove]}])
+        StateOps.apply_state_ops(agent, [%StateOp.DeleteKeys{keys: [:remove, :also_remove]}])
 
       assert updated.state.keep == 1
       refute Map.has_key?(updated.state, :remove)
@@ -82,19 +82,19 @@ defmodule JidoTest.Agent.EffectsTest do
       {:ok, agent} = Agent.new(%{id: "test", state: %{keep: 1}})
 
       {updated, _} =
-        Effects.apply_effects(agent, [%Internal.DeleteKeys{keys: [:not_here]}])
+        StateOps.apply_state_ops(agent, [%StateOp.DeleteKeys{keys: [:not_here]}])
 
       assert updated.state.keep == 1
     end
   end
 
-  describe "apply_effects/2 with SetPath" do
+  describe "apply_state_ops/2 with SetPath" do
     test "sets value at nested path" do
       {:ok, agent} = Agent.new(%{id: "test", state: %{existing: "value"}})
 
       {updated, directives} =
-        Effects.apply_effects(agent, [
-          %Internal.SetPath{path: [:nested, :deep, :value], value: 42}
+        StateOps.apply_state_ops(agent, [
+          %StateOp.SetPath{path: [:nested, :deep, :value], value: 42}
         ])
 
       assert updated.state.nested.deep.value == 42
@@ -106,7 +106,7 @@ defmodule JidoTest.Agent.EffectsTest do
       {:ok, agent} = Agent.new(%{id: "test", state: %{}})
 
       {updated, _} =
-        Effects.apply_effects(agent, [%Internal.SetPath{path: [:a, :b, :c], value: "deep"}])
+        StateOps.apply_state_ops(agent, [%StateOp.SetPath{path: [:a, :b, :c], value: "deep"}])
 
       assert updated.state.a.b.c == "deep"
     end
@@ -115,7 +115,7 @@ defmodule JidoTest.Agent.EffectsTest do
       {:ok, agent} = Agent.new(%{id: "test", state: %{nested: %{value: "old"}}})
 
       {updated, _} =
-        Effects.apply_effects(agent, [%Internal.SetPath{path: [:nested, :value], value: "new"}])
+        StateOps.apply_state_ops(agent, [%StateOp.SetPath{path: [:nested, :value], value: "new"}])
 
       assert updated.state.nested.value == "new"
     end
@@ -124,19 +124,19 @@ defmodule JidoTest.Agent.EffectsTest do
       {:ok, agent} = Agent.new(%{id: "test", state: %{}})
 
       {updated, _} =
-        Effects.apply_effects(agent, [%Internal.SetPath{path: [:key], value: "value"}])
+        StateOps.apply_state_ops(agent, [%StateOp.SetPath{path: [:key], value: "value"}])
 
       assert updated.state.key == "value"
     end
   end
 
-  describe "apply_effects/2 with DeletePath" do
+  describe "apply_state_ops/2 with DeletePath" do
     test "deletes value at nested path" do
       {:ok, agent} =
         Agent.new(%{id: "test", state: %{nested: %{to_remove: "gone", keep: "here"}}})
 
       {updated, directives} =
-        Effects.apply_effects(agent, [%Internal.DeletePath{path: [:nested, :to_remove]}])
+        StateOps.apply_state_ops(agent, [%StateOp.DeletePath{path: [:nested, :to_remove]}])
 
       refute Map.has_key?(updated.state.nested, :to_remove)
       assert updated.state.nested.keep == "here"
@@ -147,20 +147,20 @@ defmodule JidoTest.Agent.EffectsTest do
       {:ok, agent} = Agent.new(%{id: "test", state: %{keep: 1}})
 
       {updated, _} =
-        Effects.apply_effects(agent, [%Internal.DeletePath{path: [:not, :here]}])
+        StateOps.apply_state_ops(agent, [%StateOp.DeletePath{path: [:not, :here]}])
 
       assert updated.state.keep == 1
     end
   end
 
-  describe "apply_effects/2 with external directives" do
+  describe "apply_state_ops/2 with external directives" do
     test "passes through external directives unchanged" do
       {:ok, agent} = Agent.new(%{id: "test", state: %{}})
 
       emit = %Directive.Emit{signal: %{type: "test"}}
       schedule = %Directive.Schedule{delay_ms: 1000, message: :tick}
 
-      {_updated, directives} = Effects.apply_effects(agent, [emit, schedule])
+      {_updated, directives} = StateOps.apply_state_ops(agent, [emit, schedule])
 
       assert directives == [emit, schedule]
     end
@@ -172,24 +172,24 @@ defmodule JidoTest.Agent.EffectsTest do
       d2 = %Directive.Emit{signal: %{type: "second"}}
       d3 = %Directive.Emit{signal: %{type: "third"}}
 
-      {_, directives} = Effects.apply_effects(agent, [d1, d2, d3])
+      {_, directives} = StateOps.apply_state_ops(agent, [d1, d2, d3])
 
       assert directives == [d1, d2, d3]
     end
   end
 
-  describe "apply_effects/2 with mixed effects" do
+  describe "apply_state_ops/2 with mixed effects" do
     test "applies internal effects and collects external directives" do
       {:ok, agent} = Agent.new(%{id: "test", state: %{initial: true}})
 
       effects = [
-        %Internal.SetState{attrs: %{added: "by_set_state"}},
+        %StateOp.SetState{attrs: %{added: "by_set_state"}},
         %Directive.Emit{signal: %{type: "event.1"}},
-        %Internal.SetPath{path: [:nested, :value], value: 123},
+        %StateOp.SetPath{path: [:nested, :value], value: 123},
         %Directive.Schedule{delay_ms: 5000, message: :timeout}
       ]
 
-      {updated, directives} = Effects.apply_effects(agent, effects)
+      {updated, directives} = StateOps.apply_state_ops(agent, effects)
 
       assert updated.state.initial == true
       assert updated.state.added == "by_set_state"
@@ -204,12 +204,12 @@ defmodule JidoTest.Agent.EffectsTest do
       {:ok, agent} = Agent.new(%{id: "test", state: %{counter: 0}})
 
       effects = [
-        %Internal.SetState{attrs: %{counter: 1}},
-        %Internal.SetState{attrs: %{counter: 2}},
-        %Internal.SetState{attrs: %{counter: 3}}
+        %StateOp.SetState{attrs: %{counter: 1}},
+        %StateOp.SetState{attrs: %{counter: 2}},
+        %StateOp.SetState{attrs: %{counter: 3}}
       ]
 
-      {updated, _} = Effects.apply_effects(agent, effects)
+      {updated, _} = StateOps.apply_state_ops(agent, effects)
 
       assert updated.state.counter == 3
     end
@@ -217,24 +217,24 @@ defmodule JidoTest.Agent.EffectsTest do
 
   describe "deep_put_in/3" do
     test "sets value at single-level path" do
-      result = Effects.deep_put_in(%{}, [:key], "value")
+      result = StateOps.deep_put_in(%{}, [:key], "value")
       assert result == %{key: "value"}
     end
 
     test "sets value at multi-level path" do
-      result = Effects.deep_put_in(%{}, [:a, :b, :c], "deep")
+      result = StateOps.deep_put_in(%{}, [:a, :b, :c], "deep")
       assert result == %{a: %{b: %{c: "deep"}}}
     end
 
     test "preserves existing values" do
       map = %{a: %{existing: true}}
-      result = Effects.deep_put_in(map, [:a, :new], "value")
+      result = StateOps.deep_put_in(map, [:a, :new], "value")
       assert result == %{a: %{existing: true, new: "value"}}
     end
 
     test "overwrites existing nested values" do
       map = %{a: %{b: "old"}}
-      result = Effects.deep_put_in(map, [:a, :b], "new")
+      result = StateOps.deep_put_in(map, [:a, :b], "new")
       assert result == %{a: %{b: "new"}}
     end
   end

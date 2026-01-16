@@ -26,12 +26,12 @@ defmodule JidoTest.SkillLifecycleTest do
           content: Zoi.string()
         })
 
-    alias Jido.Agent.Internal
+    alias Jido.Agent.StateOp
 
     def run(%{role: role, content: content}, %{state: state}) do
       messages = get_in(state, [:chat, :messages]) || []
       new_message = %{role: role, content: content, timestamp: DateTime.utc_now()}
-      {:ok, %{}, %Internal.SetPath{path: [:chat, :messages], value: messages ++ [new_message]}}
+      {:ok, %{}, %StateOp.SetPath{path: [:chat, :messages], value: messages ++ [new_message]}}
     end
   end
 
@@ -41,10 +41,10 @@ defmodule JidoTest.SkillLifecycleTest do
       name: "clear_messages",
       schema: []
 
-    alias Jido.Agent.Internal
+    alias Jido.Agent.StateOp
 
     def run(_params, _context) do
-      {:ok, %{}, %Internal.SetPath{path: [:chat, :messages], value: []}}
+      {:ok, %{}, %StateOp.SetPath{path: [:chat, :messages], value: []}}
     end
   end
 
@@ -54,14 +54,14 @@ defmodule JidoTest.SkillLifecycleTest do
       name: "get_stats",
       schema: []
 
-    alias Jido.Agent.Internal
+    alias Jido.Agent.StateOp
 
     def run(_params, %{state: state}) do
       messages = get_in(state, [:chat, :messages]) || []
       message_count = length(messages)
 
       {:ok, %{},
-       %Internal.SetPath{
+       %StateOp.SetPath{
          path: [:chat, :last_stats],
          value: %{
            message_count: message_count,

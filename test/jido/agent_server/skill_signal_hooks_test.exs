@@ -10,11 +10,11 @@ defmodule JidoTest.AgentServer.SkillSignalHooksTest do
       name: "increment",
       schema: Zoi.object(%{amount: Zoi.integer() |> Zoi.default(1)})
 
-    alias Jido.Agent.Internal
+    alias Jido.Agent.StateOp
 
     def run(%{amount: amount}, %{state: state}) do
       current = get_in(state, [:counter]) || 0
-      {:ok, %{}, %Internal.SetPath{path: [:counter], value: current + amount}}
+      {:ok, %{}, %StateOp.SetPath{path: [:counter], value: current + amount}}
     end
   end
 
@@ -25,10 +25,10 @@ defmodule JidoTest.AgentServer.SkillSignalHooksTest do
       name: "override_action",
       schema: []
 
-    alias Jido.Agent.Internal
+    alias Jido.Agent.StateOp
 
     def run(_params, _context) do
-      {:ok, %{}, %Internal.SetPath{path: [:overridden], value: true}}
+      {:ok, %{}, %StateOp.SetPath{path: [:overridden], value: true}}
     end
   end
 

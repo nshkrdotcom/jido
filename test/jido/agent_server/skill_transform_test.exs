@@ -10,10 +10,10 @@ defmodule JidoTest.AgentServer.SkillTransformTest do
       name: "set_value",
       schema: Zoi.object(%{value: Zoi.integer() |> Zoi.default(42)})
 
-    alias Jido.Agent.Internal
+    alias Jido.Agent.StateOp
 
     def run(%{value: value}, _context) do
-      {:ok, %{}, %Internal.SetPath{path: [:value], value: value}}
+      {:ok, %{}, %StateOp.SetPath{path: [:value], value: value}}
     end
   end
 

@@ -167,8 +167,8 @@ defmodule Jido.MixProject do
         "Agent Components": [
           Jido.Agent.State,
           Jido.Agent.Schema,
-          Jido.Agent.Effects,
-          Jido.Agent.Internal,
+          Jido.Agent.StateOps,
+          Jido.Agent.StateOp,
           Jido.AgentServer.State,
           Jido.AgentServer.Status,
           Jido.AgentServer.Options,

@@ -1,14 +1,14 @@
-defmodule Jido.Agent.Internal do
+defmodule Jido.Agent.StateOp do
   @moduledoc """
-  Internal effects that strategies handle to update agent state.
+  State operations that strategies handle to update agent state.
 
   These are **not** directives - they never leave the strategy layer.
   They are separated from directives to maintain a clean boundary:
 
-  - **Internal effects** → modify agent state within the strategy
+  - **State operations** → modify agent state within the strategy
   - **Directives** → external effects for the runtime to execute
 
-  ## Available Effects
+  ## Available State Operations
 
   - `SetState` - Deep merge attributes into state
   - `ReplaceState` - Replace state wholesale (no merge)
@@ -18,22 +18,22 @@ defmodule Jido.Agent.Internal do
 
   ## Usage
 
-  Actions can return internal effects alongside directives:
+  Actions can return state operations alongside directives:
 
-      alias Jido.Agent.{Directive, Internal}
+      alias Jido.Agent.{Directive, StateOp}
 
       {:ok, result, [
-        %Internal.SetState{attrs: %{status: :processing}},
+        %StateOp.SetState{attrs: %{status: :processing}},
         %Directive.Emit{signal: my_signal}
       ]}
 
-  The strategy applies internal effects to the agent and passes through
+  The strategy applies state operations to the agent and passes through
   directives to the runtime.
   """
 
   alias __MODULE__.{SetState, ReplaceState, DeleteKeys, SetPath, DeletePath}
 
-  @typedoc "Any internal effect struct."
+  @typedoc "Any state operation struct."
   @type t :: SetState.t() | ReplaceState.t() | DeleteKeys.t() | SetPath.t() | DeletePath.t()
 
   # ============================================================================
@@ -197,23 +197,23 @@ defmodule Jido.Agent.Internal do
   # Helper Constructors
   # ============================================================================
 
-  @doc "Creates a SetState effect."
+  @doc "Creates a SetState state operation."
   @spec set_state(map()) :: SetState.t()
   def set_state(attrs) when is_map(attrs), do: %SetState{attrs: attrs}
 
-  @doc "Creates a ReplaceState effect."
+  @doc "Creates a ReplaceState state operation."
   @spec replace_state(map()) :: ReplaceState.t()
   def replace_state(state) when is_map(state), do: %ReplaceState{state: state}
 
-  @doc "Creates a DeleteKeys effect."
+  @doc "Creates a DeleteKeys state operation."
   @spec delete_keys([atom()]) :: DeleteKeys.t()
   def delete_keys(keys) when is_list(keys), do: %DeleteKeys{keys: keys}
 
-  @doc "Creates a SetPath effect."
+  @doc "Creates a SetPath state operation."
   @spec set_path([atom()], term()) :: SetPath.t()
   def set_path(path, value) when is_list(path), do: %SetPath{path: path, value: value}
 
-  @doc "Creates a DeletePath effect."
+  @doc "Creates a DeletePath state operation."
   @spec delete_path([atom()]) :: DeletePath.t()
   def delete_path(path) when is_list(path), do: %DeletePath{path: path}
 end

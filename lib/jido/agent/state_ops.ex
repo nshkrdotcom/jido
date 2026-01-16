@@ -1,23 +1,23 @@
-defmodule Jido.Agent.Effects do
+defmodule Jido.Agent.StateOps do
   @moduledoc """
-  Centralized effect application for strategies.
+  Centralized state operation application for strategies.
 
-  Separates internal effects (state mutations) from external directives.
+  Separates state operations (state mutations) from external directives.
   All strategies should use these helpers to ensure consistent behavior.
 
-  ## Effect Types
+  ## State Operation Types
 
-  - `Internal.SetState` - Deep merge attributes into state
-  - `Internal.ReplaceState` - Replace state wholesale
-  - `Internal.DeleteKeys` - Remove top-level keys
-  - `Internal.SetPath` - Set value at nested path
-  - `Internal.DeletePath` - Delete value at nested path
+  - `StateOp.SetState` - Deep merge attributes into state
+  - `StateOp.ReplaceState` - Replace state wholesale
+  - `StateOp.DeleteKeys` - Remove top-level keys
+  - `StateOp.SetPath` - Set value at nested path
+  - `StateOp.DeletePath` - Delete value at nested path
 
   Any other struct is treated as an external directive and passed through.
   """
 
   alias Jido.Agent
-  alias Jido.Agent.Internal
+  alias Jido.Agent.StateOp
 
   @doc """
   Merges action result into agent state.
@@ -31,32 +31,32 @@ defmodule Jido.Agent.Effects do
   end
 
   @doc """
-  Applies a list of effects to the agent.
+  Applies a list of state operations to the agent.
 
-  Internal effects modify agent state. External directives are collected
+  State operations modify agent state. External directives are collected
   and returned for the runtime to process.
 
   Returns `{updated_agent, external_directives}`.
   """
-  @spec apply_effects(Agent.t(), [struct()]) :: {Agent.t(), [struct()]}
-  def apply_effects(%Agent{} = agent, effects) do
+  @spec apply_state_ops(Agent.t(), [struct()]) :: {Agent.t(), [struct()]}
+  def apply_state_ops(%Agent{} = agent, effects) do
     Enum.reduce(effects, {agent, []}, fn
-      %Internal.SetState{attrs: attrs}, {a, directives} ->
+      %StateOp.SetState{attrs: attrs}, {a, directives} ->
         new_state = Jido.Agent.State.merge(a.state, attrs)
         {%{a | state: new_state}, directives}
 
-      %Internal.ReplaceState{state: new_state}, {a, directives} ->
+      %StateOp.ReplaceState{state: new_state}, {a, directives} ->
         {%{a | state: new_state}, directives}
 
-      %Internal.DeleteKeys{keys: keys}, {a, directives} ->
+      %StateOp.DeleteKeys{keys: keys}, {a, directives} ->
         new_state = Map.drop(a.state, keys)
         {%{a | state: new_state}, directives}
 
-      %Internal.SetPath{path: path, value: value}, {a, directives} ->
+      %StateOp.SetPath{path: path, value: value}, {a, directives} ->
         new_state = deep_put_in(a.state, path, value)
         {%{a | state: new_state}, directives}
 
-      %Internal.DeletePath{path: path}, {a, directives} ->
+      %StateOp.DeletePath{path: path}, {a, directives} ->
         {_, new_state} = pop_in(a.state, path)
         {%{a | state: new_state}, directives}
 

@@ -272,7 +272,49 @@ defmodule Jido.Skill do
   @callback child_spec(config :: map()) ::
               nil | Supervisor.child_spec() | [Supervisor.child_spec()]
 
-  @optional_callbacks [mount: 2, router: 1, handle_signal: 2, transform_result: 3, child_spec: 1]
+  @doc """
+  Returns sensor subscriptions for this skill.
+
+  Called during `AgentServer.post_init/1` to determine which sensors
+  should be started for this skill. Each sensor is started with the
+  provided configuration.
+
+  ## Parameters
+
+  - `config` - Per-agent configuration for this skill
+  - `context` - Map containing:
+    - `:agent_ref` - The agent reference (name or PID)
+    - `:agent_id` - The agent's unique identifier
+    - `:agent_module` - The agent module
+    - `:skill_spec` - The skill specification
+    - `:jido_instance` - The Jido instance name
+
+  ## Returns
+
+  A list of `{sensor_module, sensor_config}` tuples where:
+  - `sensor_module` - A module implementing sensor behavior
+  - `sensor_config` - Keyword list or map of sensor configuration
+
+  ## Example
+
+      def subscriptions(_config, context) do
+        [
+          {MyApp.Sensors.FileSensor, [path: "/tmp/watch", target: context.agent_ref]},
+          {MyApp.Sensors.TimerSensor, %{interval: 5000, target: context.agent_ref}}
+        ]
+      end
+  """
+  @callback subscriptions(config :: map(), context :: map()) ::
+              [{module(), keyword() | map()}]
+
+  @optional_callbacks [
+    mount: 2,
+    router: 1,
+    handle_signal: 2,
+    transform_result: 3,
+    child_spec: 1,
+    subscriptions: 2
+  ]
 
   defmacro __using__(opts) do
     quote location: :keep do
@@ -478,11 +520,17 @@ defmodule Jido.Skill do
       @impl Jido.Skill
       def child_spec(_config), do: nil
 
+      @doc false
+      @spec subscriptions(map(), map()) :: [{module(), keyword() | map()}]
+      @impl Jido.Skill
+      def subscriptions(_config, _context), do: []
+
       defoverridable mount: 2,
                      router: 1,
                      handle_signal: 2,
                      transform_result: 3,
                      child_spec: 1,
+                     subscriptions: 2,
                      name: 0,
                      state_key: 0,
                      actions: 0,

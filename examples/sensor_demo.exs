@@ -357,7 +357,7 @@ defmodule SensorDemoRunner do
 
     # 6. Check final state
     IO.puts("\n[6] Checking agent state...")
-    {:ok, state} = Jido.state(SensorDemoRunner.Jido, agent_pid)
+    {:ok, state} = Jido.AgentServer.state(agent_pid)
     
     IO.puts("\n" <> String.duplicate("-", 60))
     IO.puts("FINAL STATE:")

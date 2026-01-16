@@ -24,6 +24,7 @@ defmodule Jido.Skill.Manifest do
   - `routes` - List of route tuples like `{"post", ActionModule}`
   - `schedules` - List of schedule tuples like `{"*/5 * * * *", ActionModule}`
   - `signal_patterns` - Legacy signal patterns for routing
+  - `subscriptions` - Sensor subscriptions provided by this skill
   """
 
   @schema Zoi.struct(
@@ -60,6 +61,9 @@ defmodule Jido.Skill.Manifest do
                 |> Zoi.default([]),
               signal_patterns:
                 Zoi.list(Zoi.string(), description: "Legacy signal patterns")
+                |> Zoi.default([]),
+              subscriptions:
+                Zoi.list(Zoi.any(), description: "Sensor subscriptions provided by this skill")
                 |> Zoi.default([])
             },
             coerce: true

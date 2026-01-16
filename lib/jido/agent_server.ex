@@ -486,6 +486,9 @@ defmodule Jido.AgentServer do
     # Start skill children
     state = start_skill_children(state)
 
+    # Start skill subscription sensors
+    state = start_skill_subscriptions(state)
+
     # Register skill schedules (cron jobs)
     state = register_skill_schedules(state)
 
@@ -947,6 +950,81 @@ defmodule Jido.AgentServer do
     )
 
     state
+  end
+
+  # ---------------------------------------------------------------------------
+  # Internal: Skill Subscriptions
+  # ---------------------------------------------------------------------------
+
+  @doc false
+  defp start_skill_subscriptions(%State{} = state) do
+    agent_module = state.agent_module
+
+    skill_specs =
+      if function_exported?(agent_module, :skill_specs, 0),
+        do: agent_module.skill_specs(),
+        else: []
+
+    Enum.reduce(skill_specs, state, fn spec, acc_state ->
+      context = %{
+        agent_ref: via_tuple(acc_state.id, acc_state.registry),
+        agent_id: acc_state.id,
+        agent_module: agent_module,
+        skill_spec: spec,
+        jido_instance: acc_state.jido
+      }
+
+      config = spec.config || %{}
+
+      subscriptions =
+        if function_exported?(spec.module, :subscriptions, 2),
+          do: spec.module.subscriptions(config, context),
+          else: []
+
+      Enum.reduce(subscriptions, acc_state, fn {sensor_module, sensor_config}, inner_state ->
+        start_subscription_sensor(inner_state, spec.module, sensor_module, sensor_config, context)
+      end)
+    end)
+  end
+
+  defp start_subscription_sensor(
+         %State{} = state,
+         skill_module,
+         sensor_module,
+         sensor_config,
+         context
+       ) do
+    opts = [
+      sensor: sensor_module,
+      config: sensor_config,
+      context: context
+    ]
+
+    case Jido.Sensor.Runtime.start_link(opts) do
+      {:ok, pid} ->
+        ref = Process.monitor(pid)
+        tag = {:sensor, skill_module, sensor_module}
+
+        child_info =
+          ChildInfo.new!(%{
+            pid: pid,
+            ref: ref,
+            module: sensor_module,
+            id: "#{skill_module}-#{sensor_module}-#{inspect(pid)}",
+            tag: tag,
+            meta: %{skill: skill_module, sensor: sensor_module}
+          })
+
+        new_children = Map.put(state.children, tag, child_info)
+        %{state | children: new_children}
+
+      {:error, reason} ->
+        Logger.warning(
+          "Failed to start subscription sensor #{inspect(sensor_module)} for skill #{inspect(skill_module)}: #{inspect(reason)}"
+        )
+
+        state
+    end
   end
 
   # ---------------------------------------------------------------------------

@@ -226,6 +226,8 @@ defmodule JidoTest.AgentServer.SignalRouterTest do
   defp build_test_state(agent_module) do
     agent = agent_module.new(%{id: "test-#{System.unique_integer([:positive])}"})
 
+    {:ok, lifecycle} = Jido.AgentServer.State.Lifecycle.new([])
+
     attrs = %{
       id: agent.id,
       agent_module: agent_module,
@@ -245,7 +247,8 @@ defmodule JidoTest.AgentServer.SignalRouterTest do
       cron_jobs: %{},
       error_count: 0,
       metrics: %{},
-      completion_waiters: %{}
+      completion_waiters: %{},
+      lifecycle: lifecycle
     }
 
     {:ok, state} = Zoi.parse(State.schema(), attrs)

@@ -194,7 +194,7 @@ defmodule Jido.MixProject do
           Jido.Error,
           Jido.Scheduler,
           Jido.Util,
-          Jido.AgentPool
+          Jido.Agent.WorkerPool
         ]
       ]
     ]

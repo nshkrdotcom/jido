@@ -50,7 +50,26 @@ defmodule Jido.AgentServer.Options do
                 Zoi.any(description: "Custom function for spawning children") |> Zoi.optional(),
               skip_schedules:
                 Zoi.boolean(description: "Skip registering skill schedules (useful for tests)")
-                |> Zoi.default(false)
+                |> Zoi.default(false),
+
+              # InstanceManager integration (set by Jido.Agent.InstanceManager)
+              lifecycle_mod:
+                Zoi.atom(description: "Lifecycle module implementing Jido.AgentServer.Lifecycle")
+                |> Zoi.default(Jido.AgentServer.Lifecycle.Noop),
+              pool:
+                Zoi.atom(description: "Manager name if started via Jido.Agent.InstanceManager")
+                |> Zoi.optional(),
+              pool_key:
+                Zoi.any(description: "Manager key if started via Jido.Agent.InstanceManager")
+                |> Zoi.optional(),
+              idle_timeout:
+                Zoi.any(
+                  description: "Idle timeout in ms before hibernate/stop (:infinity to disable)"
+                )
+                |> Zoi.default(:infinity),
+              persistence:
+                Zoi.any(description: "Persistence config [store: {Module, opts}]")
+                |> Zoi.optional()
             },
             coerce: true
           )

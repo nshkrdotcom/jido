@@ -45,7 +45,10 @@ defmodule JidoExampleTest.SpawnAgentTest do
 
     def run(%{tag: tag} = params, _context) do
       meta = Map.get(params, :meta, %{})
-      directive = Directive.spawn_agent(JidoExampleTest.SpawnAgentTest.WorkerAgent, tag, meta: meta)
+
+      directive =
+        Directive.spawn_agent(JidoExampleTest.SpawnAgentTest.WorkerAgent, tag, meta: meta)
+
       {:ok, %{last_spawned: tag}, [directive]}
     end
   end
@@ -121,14 +124,17 @@ defmodule JidoExampleTest.SpawnAgentTest do
     def run(%{task: task}, context) do
       result = "Completed: #{task}"
 
+      parent_ref = Map.get(context.state, :__parent__)
+      from_tag = if parent_ref, do: parent_ref.tag, else: :unknown
+
       reply_signal =
         Signal.new!(
           "worker.result",
-          %{result: result, from_tag: context.state.__parent__.tag},
+          %{result: result, from_tag: from_tag},
           source: "/worker"
         )
 
-      emit_directive = Directive.emit_to_parent(context.agent, reply_signal)
+      emit_directive = Directive.emit_to_parent(%{state: context.state}, reply_signal)
 
       {:ok, %{last_task: task, status: :completed}, List.wrap(emit_directive)}
     end
@@ -170,7 +176,7 @@ defmodule JidoExampleTest.SpawnAgentTest do
 
     def signal_routes do
       [
-        {"do_work", DoWorkAction}
+        {"do_work", JidoExampleTest.SpawnAgentTest.DoWorkAction}
       ]
     end
   end
@@ -305,16 +311,14 @@ defmodule JidoExampleTest.SpawnAgentTest do
 
       child_info = await_child(parent_pid, :emitter_worker)
 
+      eventually(fn -> Process.alive?(child_info.pid) end, timeout: 1000)
+
       work_signal = Signal.new!("do_work", %{task: "process data"}, source: "/test")
-      {:ok, _child_agent} = AgentServer.call(child_info.pid, work_signal)
+      result = AgentServer.call(child_info.pid, work_signal)
 
-      eventually_state(child_info.pid, fn state ->
-        state.agent.state.status == :completed
-      end)
-
-      {:ok, child_state} = AgentServer.state(child_info.pid)
-      assert child_state.agent.state.status == :completed
-      assert child_state.agent.state.last_task == "process data"
+      {:ok, child_agent} = result
+      assert child_agent.state.status == :completed
+      assert child_agent.state.last_task == "process data"
 
       eventually_state(parent_pid, fn state ->
         length(state.agent.state.worker_results) > 0

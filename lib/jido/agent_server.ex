@@ -173,7 +173,23 @@ defmodule Jido.AgentServer do
   """
   @spec start_link(keyword() | map()) :: GenServer.on_start()
   def start_link(opts) when is_list(opts) or is_map(opts) do
-    GenServer.start_link(__MODULE__, opts)
+    # Extract GenServer options (like :name) from agent opts
+    {genserver_opts, agent_opts} = extract_genserver_opts(opts)
+    GenServer.start_link(__MODULE__, agent_opts, genserver_opts)
+  end
+
+  defp extract_genserver_opts(opts) when is_list(opts) do
+    case Keyword.pop(opts, :name) do
+      {nil, agent_opts} -> {[], agent_opts}
+      {name, agent_opts} -> {[name: name], agent_opts}
+    end
+  end
+
+  defp extract_genserver_opts(opts) when is_map(opts) do
+    case Map.pop(opts, :name) do
+      {nil, agent_opts} -> {[], agent_opts}
+      {name, agent_opts} -> {[name: name], agent_opts}
+    end
   end
 
   @doc """
@@ -427,6 +443,73 @@ defmodule Jido.AgentServer do
   end
 
   # ---------------------------------------------------------------------------
+  # Attachment API (for Jido.Agent.InstanceManager integration)
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Attaches a process to this agent, tracking it as an active consumer.
+
+  When attached, the agent will not idle-timeout. The agent monitors the
+  attached process and automatically detaches it on exit.
+
+  Used by `Jido.Agent.InstanceManager` to track LiveView sockets, WebSocket handlers,
+  or any process that needs the agent to stay alive.
+
+  ## Examples
+
+      {:ok, pid} = Jido.Agent.InstanceManager.get(:sessions, key)
+      :ok = Jido.AgentServer.attach(pid)
+
+      # With explicit owner
+      :ok = Jido.AgentServer.attach(pid, socket_pid)
+  """
+  @spec attach(server(), pid()) :: :ok | {:error, term()}
+  def attach(server, owner_pid \\ self()) do
+    with {:ok, pid} <- resolve_server(server) do
+      GenServer.call(pid, {:attach, owner_pid})
+    end
+  end
+
+  @doc """
+  Detaches a process from this agent.
+
+  If this was the last attachment and `idle_timeout` is configured,
+  the idle timer starts.
+
+  Note: You don't need to call this explicitly if the attached process
+  exits normally — the monitor will handle cleanup automatically.
+
+  ## Examples
+
+      :ok = Jido.AgentServer.detach(pid)
+  """
+  @spec detach(server(), pid()) :: :ok | {:error, term()}
+  def detach(server, owner_pid \\ self()) do
+    with {:ok, pid} <- resolve_server(server) do
+      GenServer.call(pid, {:detach, owner_pid})
+    end
+  end
+
+  @doc """
+  Touches the agent to reset the idle timer.
+
+  Use this for request-based activity tracking (e.g., HTTP requests)
+  where you don't want to maintain a persistent attachment.
+
+  ## Examples
+
+      # In a controller
+      {:ok, pid} = Jido.Agent.InstanceManager.get(:sessions, key)
+      :ok = Jido.AgentServer.touch(pid)
+  """
+  @spec touch(server()) :: :ok | {:error, term()}
+  def touch(server) do
+    with {:ok, pid} <- resolve_server(server) do
+      GenServer.cast(pid, :touch)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # GenServer Callbacks
   # ---------------------------------------------------------------------------
 
@@ -496,6 +579,16 @@ defmodule Jido.AgentServer do
 
     state = start_drain_if_idle(state)
 
+    # Initialize lifecycle module (starts idle timer if needed)
+    lifecycle_opts = [
+      idle_timeout: state.lifecycle.idle_timeout,
+      pool: state.lifecycle.pool,
+      pool_key: state.lifecycle.pool_key,
+      persistence: state.lifecycle.persistence
+    ]
+
+    state = state.lifecycle.mod.init(lifecycle_opts, state)
+
     Logger.debug("AgentServer #{state.id} initialized, status: idle")
     {:noreply, State.set_status(state, :idle)}
   end
@@ -553,11 +646,26 @@ defmodule Jido.AgentServer do
     end
   end
 
+  def handle_call({:attach, owner_pid}, _from, state) do
+    {:cont, state} = state.lifecycle.mod.handle_event({:attach, owner_pid}, state)
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:detach, owner_pid}, _from, state) do
+    {:cont, state} = state.lifecycle.mod.handle_event({:detach, owner_pid}, state)
+    {:reply, :ok, state}
+  end
+
   def handle_call(_msg, _from, state) do
     {:reply, {:error, :unknown_call}, state}
   end
 
   @impl true
+  def handle_cast(:touch, state) do
+    {:cont, state} = state.lifecycle.mod.handle_event(:touch, state)
+    {:noreply, state}
+  end
+
   def handle_cast({:signal, %Signal{} = signal}, state) do
     {traced_signal, _ctx} = TraceContext.ensure_from_signal(signal)
 
@@ -614,20 +722,40 @@ defmodule Jido.AgentServer do
     end
   end
 
-  def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
-    new_waiters =
-      state.completion_waiters
-      |> Enum.reject(fn {_ref, %{from: {from_pid, _tag}}} -> from_pid == pid end)
-      |> Map.new()
+  def handle_info({:DOWN, ref, :process, pid, reason}, state) do
+    # First check if this is an attachment monitor
+    case Map.get(state.lifecycle.attachment_monitors, ref) do
+      ^pid ->
+        # Attachment process died, delegate to lifecycle
+        case state.lifecycle.mod.handle_event({:down, ref, pid}, state) do
+          {:cont, state} -> {:noreply, state}
+          {:stop, reason, state} -> {:stop, reason, state}
+        end
 
-    state = %{state | completion_waiters: new_waiters}
+      _ ->
+        # Not an attachment, check other monitors
+        new_waiters =
+          state.completion_waiters
+          |> Enum.reject(fn {_ref, %{from: {from_pid, _tag}}} -> from_pid == pid end)
+          |> Map.new()
 
-    cond do
-      match?(%{parent: %ParentRef{pid: ^pid}}, state) ->
-        handle_parent_down(state, pid, reason)
+        state = %{state | completion_waiters: new_waiters}
 
-      true ->
-        handle_child_down(state, pid, reason)
+        cond do
+          match?(%{parent: %ParentRef{pid: ^pid}}, state) ->
+            handle_parent_down(state, pid, reason)
+
+          true ->
+            handle_child_down(state, pid, reason)
+        end
+    end
+  end
+
+  def handle_info(:lifecycle_idle_timeout, state) do
+    # Delegate to lifecycle module
+    case state.lifecycle.mod.handle_event(:idle_timeout, state) do
+      {:cont, state} -> {:noreply, state}
+      {:stop, reason, state} -> {:stop, reason, state}
     end
   end
 
@@ -644,6 +772,9 @@ defmodule Jido.AgentServer do
 
   @impl true
   def terminate(reason, state) do
+    # Delegate to lifecycle module for persistence/hibernation
+    state.lifecycle.mod.terminate(reason, state)
+
     # Clean up all cron jobs owned by this agent
     Enum.each(state.cron_jobs, fn {_job_id, pid} ->
       if is_pid(pid) and Process.alive?(pid) do

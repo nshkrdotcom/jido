@@ -11,6 +11,7 @@ defmodule Jido.AgentServer.State do
   """
 
   alias Jido.AgentServer.{ChildInfo, Options}
+  alias Jido.AgentServer.State.Lifecycle, as: LifecycleState
 
   @type status :: :initializing | :idle | :processing | :stopping
 
@@ -66,7 +67,10 @@ defmodule Jido.AgentServer.State do
               metrics: Zoi.map(description: "Runtime metrics") |> Zoi.default(%{}),
               completion_waiters:
                 Zoi.map(description: "Map of ref => waiter for completion notifications")
-                |> Zoi.default(%{})
+                |> Zoi.default(%{}),
+
+              # Lifecycle (InstanceManager integration: attachment tracking, idle timeout, persistence)
+              lifecycle: Zoi.any(description: "Lifecycle state (State.Lifecycle.t())")
             },
             coerce: true
           )
@@ -89,30 +93,41 @@ defmodule Jido.AgentServer.State do
   def from_options(%Options{} = opts, agent_module, agent) do
     agent = inject_parent_into_agent(agent, opts.parent)
 
-    attrs = %{
-      id: opts.id,
-      agent_module: agent_module,
-      agent: agent,
-      status: :initializing,
-      processing: false,
-      queue: :queue.new(),
-      parent: opts.parent,
-      children: %{},
-      on_parent_death: opts.on_parent_death,
-      jido: opts.jido,
-      default_dispatch: opts.default_dispatch,
-      error_policy: opts.error_policy,
-      max_queue_size: opts.max_queue_size,
-      registry: opts.registry,
-      spawn_fun: opts.spawn_fun,
-      cron_jobs: %{},
-      skip_schedules: opts.skip_schedules,
-      error_count: 0,
-      metrics: %{},
-      completion_waiters: %{}
-    }
+    lifecycle_opts = [
+      lifecycle_mod: opts.lifecycle_mod,
+      pool: opts.pool,
+      pool_key: opts.pool_key,
+      idle_timeout: opts.idle_timeout,
+      persistence: opts.persistence
+    ]
 
-    Zoi.parse(@schema, attrs)
+    with {:ok, lifecycle} <- LifecycleState.new(lifecycle_opts) do
+      attrs = %{
+        id: opts.id,
+        agent_module: agent_module,
+        agent: agent,
+        status: :initializing,
+        processing: false,
+        queue: :queue.new(),
+        parent: opts.parent,
+        children: %{},
+        on_parent_death: opts.on_parent_death,
+        jido: opts.jido,
+        default_dispatch: opts.default_dispatch,
+        error_policy: opts.error_policy,
+        max_queue_size: opts.max_queue_size,
+        registry: opts.registry,
+        spawn_fun: opts.spawn_fun,
+        cron_jobs: %{},
+        skip_schedules: opts.skip_schedules,
+        error_count: 0,
+        metrics: %{},
+        completion_waiters: %{},
+        lifecycle: lifecycle
+      }
+
+      Zoi.parse(@schema, attrs)
+    end
   end
 
   defp inject_parent_into_agent(agent, nil), do: agent

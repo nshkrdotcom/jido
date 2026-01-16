@@ -44,6 +44,7 @@ defmodule JidoExampleTest.ParentChildTest do
 
   alias Jido.Signal
   alias Jido.Agent.Directive
+  alias Jido.Agent.StateOp
   alias Jido.AgentServer
 
   # ===========================================================================
@@ -60,11 +61,12 @@ defmodule JidoExampleTest.ParentChildTest do
       ]
 
     def run(%{worker_tag: tag, work_data: work_data}, _context) do
-      spawn_directive = Directive.spawn_agent(
-        JidoExampleTest.ParentChildTest.WorkerAgent,
-        tag,
-        meta: %{work_data: work_data}
-      )
+      spawn_directive =
+        Directive.spawn_agent(
+          JidoExampleTest.ParentChildTest.WorkerAgent,
+          tag,
+          meta: %{work_data: work_data}
+        )
 
       {:ok, %{}, [spawn_directive]}
     end
@@ -75,9 +77,11 @@ defmodule JidoExampleTest.ParentChildTest do
     use Jido.Action,
       name: "handle_child_started",
       schema: [
-        pid: [type: :any, required: true],
+        parent_id: [type: :string, required: true],
         child_id: [type: :string, required: true],
-        tag: [type: :atom, required: true],
+        child_module: [type: :any, required: true],
+        tag: [type: :any, required: true],
+        pid: [type: :any, required: true],
         meta: [type: :map, default: %{}]
       ]
 
@@ -86,13 +90,16 @@ defmodule JidoExampleTest.ParentChildTest do
       request_id = "req-#{System.unique_integer([:positive])}"
 
       pending = Map.get(context.state, :pending_requests, %{})
-      updated_pending = Map.put(pending, request_id, %{tag: tag, pid: pid, started_at: DateTime.utc_now()})
 
-      work_signal = Signal.new!(
-        "work.request",
-        Map.merge(work_data, %{request_id: request_id}),
-        source: "/coordinator"
-      )
+      updated_pending =
+        Map.put(pending, request_id, %{tag: tag, pid: pid, started_at: DateTime.utc_now()})
+
+      work_signal =
+        Signal.new!(
+          "work.request",
+          Map.merge(work_data, %{request_id: request_id}),
+          source: "/coordinator"
+        )
 
       emit_directive = Directive.emit_to_pid(work_signal, pid)
 
@@ -111,22 +118,27 @@ defmodule JidoExampleTest.ParentChildTest do
       ]
 
     def run(%{request_id: request_id, value: value, operation: operation}, context) do
-      result = case operation do
-        :double -> value * 2
-        :square -> value * value
-        :increment -> value + 1
-        _ -> value
-      end
+      result =
+        case operation do
+          :double -> value * 2
+          :square -> value * value
+          :increment -> value + 1
+          _ -> value
+        end
 
-      result_signal = Signal.new!(
-        "work.result",
-        %{request_id: request_id, result: result, operation: operation},
-        source: "/worker"
-      )
+      result_signal =
+        Signal.new!(
+          "work.result",
+          %{request_id: request_id, result: result, operation: operation},
+          source: "/worker"
+        )
 
-      emit_directive = Directive.emit_to_parent(context.agent, result_signal)
+      # Use %{state: context.state} to match emit_to_parent's expected pattern
+      agent_like = %{state: context.state}
+      emit_directive = Directive.emit_to_parent(agent_like, result_signal)
 
-      {:ok, %{last_processed: %{request_id: request_id, result: result}}, List.wrap(emit_directive)}
+      {:ok, %{last_processed: %{request_id: request_id, result: result}},
+       List.wrap(emit_directive)}
     end
   end
 
@@ -154,10 +166,10 @@ defmodule JidoExampleTest.ParentChildTest do
         completed_at: DateTime.utc_now()
       }
 
-      {:ok, %{
-        pending_requests: remaining_pending,
-        completed_responses: [response_entry | responses]
-      }}
+      # Use SetPath to properly replace pending_requests (deep merge doesn't remove keys)
+      set_pending_op = StateOp.set_path([:pending_requests], remaining_pending)
+
+      {:ok, %{completed_responses: [response_entry | responses]}, [set_pending_op]}
     end
   end
 
@@ -206,22 +218,27 @@ defmodule JidoExampleTest.ParentChildTest do
 
   describe "parent spawns worker" do
     test "coordinator spawns worker and worker starts", %{jido: jido} do
-      {:ok, coordinator_pid} = Jido.start_agent(jido, CoordinatorAgent, id: unique_id("coordinator"))
+      {:ok, coordinator_pid} =
+        Jido.start_agent(jido, CoordinatorAgent, id: unique_id("coordinator"))
 
-      signal = Signal.new!(
-        "spawn_worker",
-        %{worker_tag: :worker_1, work_data: %{value: 5, operation: :double}},
-        source: "/test"
-      )
+      signal =
+        Signal.new!(
+          "spawn_worker",
+          %{worker_tag: :worker_1, work_data: %{value: 5, operation: :double}},
+          source: "/test"
+        )
 
       {:ok, _agent} = AgentServer.call(coordinator_pid, signal)
 
-      eventually(fn ->
-        case AgentServer.state(coordinator_pid) do
-          {:ok, %{children: children}} -> Map.has_key?(children, :worker_1)
-          _ -> false
-        end
-      end, timeout: 5_000)
+      eventually(
+        fn ->
+          case AgentServer.state(coordinator_pid) do
+            {:ok, %{children: children}} -> Map.has_key?(children, :worker_1)
+            _ -> false
+          end
+        end,
+        timeout: 5_000
+      )
 
       {:ok, state} = AgentServer.state(coordinator_pid)
       assert Map.has_key?(state.children, :worker_1)
@@ -231,23 +248,30 @@ defmodule JidoExampleTest.ParentChildTest do
 
   describe "request/response with correlation" do
     test "parent sends work request with correlation ID, child responds", %{jido: jido} do
-      {:ok, coordinator_pid} = Jido.start_agent(jido, CoordinatorAgent, id: unique_id("coordinator"))
+      {:ok, coordinator_pid} =
+        Jido.start_agent(jido, CoordinatorAgent, id: unique_id("coordinator"))
 
-      signal = Signal.new!(
-        "spawn_worker",
-        %{worker_tag: :math_worker, work_data: %{value: 7, operation: :double}},
-        source: "/test"
-      )
+      signal =
+        Signal.new!(
+          "spawn_worker",
+          %{worker_tag: :math_worker, work_data: %{value: 7, operation: :double}},
+          source: "/test"
+        )
 
       {:ok, _agent} = AgentServer.call(coordinator_pid, signal)
 
-      eventually(fn ->
-        case AgentServer.state(coordinator_pid) do
-          {:ok, %{agent: %{state: %{completed_responses: responses}}}} ->
-            length(responses) >= 1
-          _ -> false
-        end
-      end, timeout: 10_000)
+      eventually(
+        fn ->
+          case AgentServer.state(coordinator_pid) do
+            {:ok, %{agent: %{state: %{completed_responses: responses}}}} ->
+              length(responses) >= 1
+
+            _ ->
+              false
+          end
+        end,
+        timeout: 10_000
+      )
 
       {:ok, final_state} = AgentServer.state(coordinator_pid)
       [response | _] = final_state.agent.state.completed_responses
@@ -259,36 +283,46 @@ defmodule JidoExampleTest.ParentChildTest do
     end
 
     test "correlation IDs match between request and response", %{jido: jido} do
-      {:ok, coordinator_pid} = Jido.start_agent(jido, CoordinatorAgent, id: unique_id("coordinator"))
+      {:ok, coordinator_pid} =
+        Jido.start_agent(jido, CoordinatorAgent, id: unique_id("coordinator"))
 
-      signal = Signal.new!(
-        "spawn_worker",
-        %{worker_tag: :square_worker, work_data: %{value: 4, operation: :square}},
-        source: "/test"
-      )
+      signal =
+        Signal.new!(
+          "spawn_worker",
+          %{worker_tag: :square_worker, work_data: %{value: 4, operation: :square}},
+          source: "/test"
+        )
 
       {:ok, _agent} = AgentServer.call(coordinator_pid, signal)
 
-      eventually(fn ->
-        case AgentServer.state(coordinator_pid) do
-          {:ok, %{agent: %{state: %{completed_responses: responses}}}} ->
-            length(responses) >= 1
-          _ -> false
-        end
-      end, timeout: 10_000)
+      eventually(
+        fn ->
+          case AgentServer.state(coordinator_pid) do
+            {:ok, %{agent: %{state: %{completed_responses: responses}}}} ->
+              length(responses) >= 1
+
+            _ ->
+              false
+          end
+        end,
+        timeout: 10_000
+      )
 
       {:ok, final_state} = AgentServer.state(coordinator_pid)
-      assert final_state.agent.state.pending_requests == %{}
-      
+
       [response | _] = final_state.agent.state.completed_responses
       assert response.result == 16
       assert response.request_id =~ ~r/^req-\d+$/
+
+      # Verify that the pending request was cleared when the response was processed
+      refute Map.has_key?(final_state.agent.state.pending_requests, response.request_id)
     end
   end
 
   describe "aggregating results from multiple workers" do
     test "parent aggregates results from multiple workers", %{jido: jido} do
-      {:ok, coordinator_pid} = Jido.start_agent(jido, CoordinatorAgent, id: unique_id("coordinator"))
+      {:ok, coordinator_pid} =
+        Jido.start_agent(jido, CoordinatorAgent, id: unique_id("coordinator"))
 
       work_configs = [
         {:worker_a, %{value: 2, operation: :double}},
@@ -297,21 +331,28 @@ defmodule JidoExampleTest.ParentChildTest do
       ]
 
       for {tag, work_data} <- work_configs do
-        signal = Signal.new!(
-          "spawn_worker",
-          %{worker_tag: tag, work_data: work_data},
-          source: "/test"
-        )
+        signal =
+          Signal.new!(
+            "spawn_worker",
+            %{worker_tag: tag, work_data: work_data},
+            source: "/test"
+          )
+
         {:ok, _} = AgentServer.call(coordinator_pid, signal)
       end
 
-      eventually(fn ->
-        case AgentServer.state(coordinator_pid) do
-          {:ok, %{agent: %{state: %{completed_responses: responses}}}} ->
-            length(responses) >= 3
-          _ -> false
-        end
-      end, timeout: 15_000)
+      eventually(
+        fn ->
+          case AgentServer.state(coordinator_pid) do
+            {:ok, %{agent: %{state: %{completed_responses: responses}}}} ->
+              length(responses) >= 3
+
+            _ ->
+              false
+          end
+        end,
+        timeout: 15_000
+      )
 
       {:ok, final_state} = AgentServer.state(coordinator_pid)
       responses = final_state.agent.state.completed_responses
@@ -324,28 +365,41 @@ defmodule JidoExampleTest.ParentChildTest do
       assert results_by_tag[:worker_b] == 9
       assert results_by_tag[:worker_c] == 11
 
-      assert final_state.agent.state.pending_requests == %{}
+      # Verify all processed request_ids were cleared from pending
+      processed_request_ids = Enum.map(responses, & &1.request_id)
+
+      for req_id <- processed_request_ids do
+        refute Map.has_key?(final_state.agent.state.pending_requests, req_id)
+      end
     end
 
     test "each worker result has unique correlation ID", %{jido: jido} do
-      {:ok, coordinator_pid} = Jido.start_agent(jido, CoordinatorAgent, id: unique_id("coordinator"))
+      {:ok, coordinator_pid} =
+        Jido.start_agent(jido, CoordinatorAgent, id: unique_id("coordinator"))
 
       for i <- 1..3 do
-        signal = Signal.new!(
-          "spawn_worker",
-          %{worker_tag: :"worker_#{i}", work_data: %{value: i, operation: :double}},
-          source: "/test"
-        )
+        signal =
+          Signal.new!(
+            "spawn_worker",
+            %{worker_tag: :"worker_#{i}", work_data: %{value: i, operation: :double}},
+            source: "/test"
+          )
+
         {:ok, _} = AgentServer.call(coordinator_pid, signal)
       end
 
-      eventually(fn ->
-        case AgentServer.state(coordinator_pid) do
-          {:ok, %{agent: %{state: %{completed_responses: responses}}}} ->
-            length(responses) >= 3
-          _ -> false
-        end
-      end, timeout: 15_000)
+      eventually(
+        fn ->
+          case AgentServer.state(coordinator_pid) do
+            {:ok, %{agent: %{state: %{completed_responses: responses}}}} ->
+              length(responses) >= 3
+
+            _ ->
+              false
+          end
+        end,
+        timeout: 15_000
+      )
 
       {:ok, final_state} = AgentServer.state(coordinator_pid)
       responses = final_state.agent.state.completed_responses
@@ -359,11 +413,12 @@ defmodule JidoExampleTest.ParentChildTest do
     test "worker without parent returns nil for emit_to_parent", %{jido: jido} do
       {:ok, orphan_pid} = Jido.start_agent(jido, WorkerAgent, id: unique_id("orphan"))
 
-      signal = Signal.new!(
-        "work.request",
-        %{request_id: "orphan-req", value: 5, operation: :double},
-        source: "/test"
-      )
+      signal =
+        Signal.new!(
+          "work.request",
+          %{request_id: "orphan-req", value: 5, operation: :double},
+          source: "/test"
+        )
 
       {:ok, agent} = AgentServer.call(orphan_pid, signal)
 
@@ -372,27 +427,34 @@ defmodule JidoExampleTest.ParentChildTest do
     end
 
     test "child with parent successfully emits to parent", %{jido: jido} do
-      {:ok, coordinator_pid} = Jido.start_agent(jido, CoordinatorAgent, id: unique_id("coordinator"))
+      {:ok, coordinator_pid} =
+        Jido.start_agent(jido, CoordinatorAgent, id: unique_id("coordinator"))
 
-      signal = Signal.new!(
-        "spawn_worker",
-        %{worker_tag: :emit_test_worker, work_data: %{value: 100, operation: :increment}},
-        source: "/test"
-      )
+      signal =
+        Signal.new!(
+          "spawn_worker",
+          %{worker_tag: :emit_test_worker, work_data: %{value: 100, operation: :increment}},
+          source: "/test"
+        )
 
       {:ok, _agent} = AgentServer.call(coordinator_pid, signal)
 
-      eventually(fn ->
-        case AgentServer.state(coordinator_pid) do
-          {:ok, %{agent: %{state: %{completed_responses: responses}}}} ->
-            Enum.any?(responses, fn r -> r.result == 101 end)
-          _ -> false
-        end
-      end, timeout: 10_000)
+      eventually(
+        fn ->
+          case AgentServer.state(coordinator_pid) do
+            {:ok, %{agent: %{state: %{completed_responses: responses}}}} ->
+              Enum.any?(responses, fn r -> r.result == 101 end)
+
+            _ ->
+              false
+          end
+        end,
+        timeout: 10_000
+      )
 
       {:ok, final_state} = AgentServer.state(coordinator_pid)
       [response | _] = final_state.agent.state.completed_responses
-      
+
       assert response.result == 101
       assert response.worker_tag == :emit_test_worker
     end

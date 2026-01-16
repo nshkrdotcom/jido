@@ -5,7 +5,7 @@ defmodule JidoTest.AgentPoolTest do
 
   @moduletag :capture_log
 
-  alias Jido.AgentPool
+  alias Jido.Agent.WorkerPool, as: AgentPool
   alias Jido.AgentServer
   alias Jido.Signal
   alias JidoTest.TestActions

@@ -142,11 +142,23 @@ defmodule JidoExampleTest.ErrorHandlingTest do
     def run(%{max_attempts: max, succeed_on: succeed_on}, context) do
       attempts = Map.get(context.state, :attempts, 0) + 1
 
+      stored_max =
+        case Map.get(context.state, :stored_max_attempts) do
+          nil -> max
+          val -> val
+        end
+
+      stored_succeed =
+        case Map.get(context.state, :stored_succeed_on) do
+          nil -> succeed_on
+          val -> val
+        end
+
       cond do
-        attempts >= succeed_on ->
+        attempts >= stored_succeed ->
           {:ok, %{status: :success, attempts: attempts, result: "finally succeeded"}}
 
-        attempts >= max ->
+        attempts >= stored_max ->
           {:ok, %{status: :exhausted, attempts: attempts, result: :max_retries_reached}}
 
         true ->
@@ -157,7 +169,13 @@ defmodule JidoExampleTest.ErrorHandlingTest do
             message: retry_signal
           }
 
-          {:ok, %{status: :retrying, attempts: attempts}, schedule}
+          {:ok,
+           %{
+             status: :retrying,
+             attempts: attempts,
+             stored_max_attempts: stored_max,
+             stored_succeed_on: stored_succeed
+           }, schedule}
       end
     end
   end
@@ -175,6 +193,8 @@ defmodule JidoExampleTest.ErrorHandlingTest do
         validated: [type: :boolean, default: false],
         amount: [type: :integer, default: 0],
         attempts: [type: :integer, default: 0],
+        stored_max_attempts: [type: :integer, default: nil],
+        stored_succeed_on: [type: :integer, default: nil],
         result: [type: :any, default: nil],
         error: [type: :any, default: nil],
         error_context: [type: :atom, default: nil]

@@ -1,10 +1,11 @@
-defmodule Jido.AgentPool do
+defmodule Jido.Agent.WorkerPool do
   @moduledoc """
-  Pooled, pre-warmed Jido agents for performance-critical use cases.
+  Poolboy-based checkout/checkin worker pool for pre-warmed Jido agents.
 
-  AgentPool provides a transaction-style API for working with pools of pre-initialized
-  agents. This is useful when agent initialization is expensive (loading models,
-  establishing connections, etc.) and you want to reuse agents across requests.
+  WorkerPool provides a transaction-style API for working with pools of pre-initialized
+  agents using poolboy's checkout/checkin pattern. This is useful when agent initialization
+  is expensive (loading models, establishing connections, etc.) and you want to reuse
+  agents across requests.
 
   ## Configuration
 
@@ -31,10 +32,10 @@ defmodule Jido.AgentPool do
   The recommended approach is to use `with_agent/4` or `call/4`:
 
       # Simple call - handles checkout/checkin automatically
-      {:ok, result} = Jido.AgentPool.call(MyApp.Jido, :fast_search, signal)
+      {:ok, result} = Jido.Agent.WorkerPool.call(MyApp.Jido, :fast_search, signal)
 
       # Transaction-style for multiple operations
-      Jido.AgentPool.with_agent(MyApp.Jido, :fast_search, fn pid ->
+      Jido.Agent.WorkerPool.with_agent(MyApp.Jido, :fast_search, fn pid ->
         Jido.AgentServer.call(pid, signal1)
         Jido.AgentServer.call(pid, signal2)
       end)
@@ -50,11 +51,11 @@ defmodule Jido.AgentPool do
 
   For advanced use cases, `checkout/3` and `checkin/3` are available but not recommended:
 
-      pid = Jido.AgentPool.checkout(MyApp.Jido, :fast_search)
+      pid = Jido.Agent.WorkerPool.checkout(MyApp.Jido, :fast_search)
       try do
         # work with pid
       after
-        Jido.AgentPool.checkin(MyApp.Jido, :fast_search, pid)
+        Jido.Agent.WorkerPool.checkin(MyApp.Jido, :fast_search, pid)
       end
   """
 
@@ -72,12 +73,12 @@ defmodule Jido.AgentPool do
 
   ## Examples
 
-      Jido.AgentPool.with_agent(MyApp.Jido, :fast_search, fn pid ->
+      Jido.Agent.WorkerPool.with_agent(MyApp.Jido, :fast_search, fn pid ->
         Jido.AgentServer.call(pid, signal)
       end)
 
       # With timeout
-      Jido.AgentPool.with_agent(MyApp.Jido, :fast_search, fn pid ->
+      Jido.Agent.WorkerPool.with_agent(MyApp.Jido, :fast_search, fn pid ->
         Jido.AgentServer.call(pid, signal)
       end, timeout: 10_000)
   """
@@ -108,8 +109,8 @@ defmodule Jido.AgentPool do
 
   ## Examples
 
-      {:ok, result} = Jido.AgentPool.call(MyApp.Jido, :fast_search, signal)
-      {:ok, result} = Jido.AgentPool.call(MyApp.Jido, :fast_search, signal, timeout: 10_000)
+      {:ok, result} = Jido.Agent.WorkerPool.call(MyApp.Jido, :fast_search, signal)
+      {:ok, result} = Jido.Agent.WorkerPool.call(MyApp.Jido, :fast_search, signal, timeout: 10_000)
   """
   @spec call(instance(), pool_name(), term(), keyword()) :: term()
   def call(jido_instance, pool_name, signal, opts \\ []) do
@@ -133,7 +134,7 @@ defmodule Jido.AgentPool do
 
   ## Examples
 
-      :ok = Jido.AgentPool.cast(MyApp.Jido, :fast_search, signal)
+      :ok = Jido.Agent.WorkerPool.cast(MyApp.Jido, :fast_search, signal)
   """
   @spec cast(instance(), pool_name(), term(), keyword()) :: :ok
   def cast(jido_instance, pool_name, signal, opts \\ []) do
@@ -162,11 +163,11 @@ defmodule Jido.AgentPool do
 
   ## Examples
 
-      pid = Jido.AgentPool.checkout(MyApp.Jido, :fast_search)
+      pid = Jido.Agent.WorkerPool.checkout(MyApp.Jido, :fast_search)
       try do
         Jido.AgentServer.call(pid, signal)
       after
-        Jido.AgentPool.checkin(MyApp.Jido, :fast_search, pid)
+        Jido.Agent.WorkerPool.checkin(MyApp.Jido, :fast_search, pid)
       end
   """
   @spec checkout(instance(), pool_name(), keyword()) :: pid()
@@ -182,7 +183,7 @@ defmodule Jido.AgentPool do
 
   ## Examples
 
-      Jido.AgentPool.checkin(MyApp.Jido, :fast_search, pid)
+      Jido.Agent.WorkerPool.checkin(MyApp.Jido, :fast_search, pid)
   """
   @spec checkin(instance(), pool_name(), pid()) :: :ok
   def checkin(jido_instance, pool_name, pid) do
@@ -195,7 +196,7 @@ defmodule Jido.AgentPool do
 
   ## Examples
 
-      status = Jido.AgentPool.status(MyApp.Jido, :fast_search)
+      status = Jido.Agent.WorkerPool.status(MyApp.Jido, :fast_search)
       # => %{size: 8, overflow: 0, available: 5, waiting: 0}
   """
   @spec status(instance(), pool_name()) :: map()

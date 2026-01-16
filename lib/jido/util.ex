@@ -239,6 +239,7 @@ defmodule Jido.Util do
   end
 
   @doc false
+  @spec pluck(Enumerable.t(), atom()) :: list()
   def pluck(enumerable, field) do
     Enum.map(enumerable, &Map.get(&1, field))
   end
@@ -369,6 +370,7 @@ defmodule Jido.Util do
       iex> cond_log(:debug, :info, "test message")
       :ok
   """
+  @spec cond_log(Logger.level(), Logger.level(), Logger.message(), keyword()) :: :ok
   def cond_log(threshold_level, message_level, message, opts \\ []) do
     cond do
       threshold_level not in @valid_levels or message_level not in @valid_levels ->

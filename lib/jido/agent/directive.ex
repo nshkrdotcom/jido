@@ -105,6 +105,7 @@ defmodule Jido.Agent.Directive do
     defstruct Zoi.Struct.struct_fields(@schema)
 
     @doc "Returns the Zoi schema for Error."
+    @spec schema() :: Zoi.schema()
     def schema, do: @schema
   end
 
@@ -161,6 +162,7 @@ defmodule Jido.Agent.Directive do
     defstruct Zoi.Struct.struct_fields(@schema)
 
     @doc "Returns the Zoi schema for Emit."
+    @spec schema() :: Zoi.schema()
     def schema, do: @schema
   end
 
@@ -202,6 +204,7 @@ defmodule Jido.Agent.Directive do
     defstruct Zoi.Struct.struct_fields(@schema)
 
     @doc "Returns the Zoi schema for Spawn."
+    @spec schema() :: Zoi.schema()
     def schema, do: @schema
   end
 
@@ -264,6 +267,7 @@ defmodule Jido.Agent.Directive do
     defstruct Zoi.Struct.struct_fields(@schema)
 
     @doc "Returns the Zoi schema for SpawnAgent."
+    @spec schema() :: Zoi.schema()
     def schema, do: @schema
   end
 
@@ -316,6 +320,7 @@ defmodule Jido.Agent.Directive do
     defstruct Zoi.Struct.struct_fields(@schema)
 
     @doc "Returns the Zoi schema for StopChild."
+    @spec schema() :: Zoi.schema()
     def schema, do: @schema
   end
 
@@ -349,6 +354,7 @@ defmodule Jido.Agent.Directive do
     defstruct Zoi.Struct.struct_fields(@schema)
 
     @doc "Returns the Zoi schema for Schedule."
+    @spec schema() :: Zoi.schema()
     def schema, do: @schema
   end
 
@@ -378,6 +384,7 @@ defmodule Jido.Agent.Directive do
     defstruct Zoi.Struct.struct_fields(@schema)
 
     @doc "Returns the Zoi schema for Stop."
+    @spec schema() :: Zoi.schema()
     def schema, do: @schema
   end
 

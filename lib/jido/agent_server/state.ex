@@ -73,6 +73,7 @@ defmodule Jido.AgentServer.State do
   defstruct Zoi.Struct.struct_fields(@schema)
 
   @doc false
+  @spec schema() :: Zoi.schema()
   def schema, do: @schema
 
   @doc """

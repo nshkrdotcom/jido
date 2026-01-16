@@ -60,6 +60,7 @@ defmodule Jido.Agent.Internal do
     defstruct Zoi.Struct.struct_fields(@schema)
 
     @doc "Returns the Zoi schema for SetState."
+    @spec schema() :: Zoi.schema()
     def schema, do: @schema
   end
 
@@ -90,6 +91,7 @@ defmodule Jido.Agent.Internal do
     defstruct Zoi.Struct.struct_fields(@schema)
 
     @doc "Returns the Zoi schema for ReplaceState."
+    @spec schema() :: Zoi.schema()
     def schema, do: @schema
   end
 
@@ -120,6 +122,7 @@ defmodule Jido.Agent.Internal do
     defstruct Zoi.Struct.struct_fields(@schema)
 
     @doc "Returns the Zoi schema for DeleteKeys."
+    @spec schema() :: Zoi.schema()
     def schema, do: @schema
   end
 
@@ -153,6 +156,7 @@ defmodule Jido.Agent.Internal do
     defstruct Zoi.Struct.struct_fields(@schema)
 
     @doc "Returns the Zoi schema for SetPath."
+    @spec schema() :: Zoi.schema()
     def schema, do: @schema
   end
 
@@ -185,6 +189,7 @@ defmodule Jido.Agent.Internal do
     defstruct Zoi.Struct.struct_fields(@schema)
 
     @doc "Returns the Zoi schema for DeletePath."
+    @spec schema() :: Zoi.schema()
     def schema, do: @schema
   end
 

@@ -177,6 +177,7 @@ defmodule Jido.Agent do
   defstruct Zoi.Struct.struct_fields(@schema)
 
   @doc "Returns the Zoi schema for Agent."
+  @spec schema() :: Zoi.schema()
   def schema, do: @schema
 
   # Action input types
@@ -232,6 +233,7 @@ defmodule Jido.Agent do
                        )
 
   @doc false
+  @spec config_schema() :: Zoi.schema()
   def config_schema, do: @agent_config_schema
 
   # Callbacks
@@ -377,33 +379,43 @@ defmodule Jido.Agent do
       @skill_actions @skill_specs |> Enum.flat_map(& &1.actions) |> Enum.uniq()
 
       @doc "Returns the agent's name."
+      @spec name() :: String.t()
       def name, do: @validated_opts.name
 
       @doc "Returns the agent's description."
+      @spec description() :: String.t() | nil
       def description, do: @validated_opts[:description]
 
       @doc "Returns the agent's category."
+      @spec category() :: String.t() | nil
       def category, do: @validated_opts[:category]
 
       @doc "Returns the agent's tags."
+      @spec tags() :: [String.t()]
       def tags, do: @validated_opts[:tags] || []
 
       @doc "Returns the agent's version."
+      @spec vsn() :: String.t() | nil
       def vsn, do: @validated_opts[:vsn]
 
       @doc "Returns the merged schema (base + skill schemas)."
+      @spec schema() :: Zoi.schema() | keyword()
       def schema, do: @merged_schema
 
       @doc "Returns the list of skill specs attached to this agent."
+      @spec skills() :: [Jido.Skill.Spec.t()]
       def skills, do: @skill_specs
 
       @doc "Returns the list of skill specs attached to this agent."
+      @spec skill_specs() :: [Jido.Skill.Spec.t()]
       def skill_specs, do: @skill_specs
 
       @doc "Returns the list of actions from all attached skills."
+      @spec actions() :: [module()]
       def actions, do: @skill_actions
 
       @doc "Returns the configuration for a specific skill module, or nil if not found."
+      @spec skill_config(module()) :: map() | nil
       def skill_config(skill_mod) do
         case Enum.find(@skill_specs, &(&1.module == skill_mod)) do
           nil -> nil
@@ -412,6 +424,7 @@ defmodule Jido.Agent do
       end
 
       @doc "Returns the state slice for a specific skill module, or nil if not found."
+      @spec skill_state(Agent.t(), module()) :: map() | nil
       def skill_state(agent, skill_mod) do
         case Enum.find(@skill_specs, &(&1.module == skill_mod)) do
           nil -> nil
@@ -420,6 +433,7 @@ defmodule Jido.Agent do
       end
 
       @doc "Returns the execution strategy module for this agent."
+      @spec strategy() :: module()
       def strategy do
         case @validated_opts[:strategy] do
           {mod, _opts} -> mod
@@ -428,6 +442,7 @@ defmodule Jido.Agent do
       end
 
       @doc "Returns the strategy options for this agent."
+      @spec strategy_opts() :: keyword()
       def strategy_opts do
         case @validated_opts[:strategy] do
           {_mod, opts} -> opts
@@ -611,8 +626,14 @@ defmodule Jido.Agent do
 
       # Default callback implementations
 
+      @spec on_before_cmd(Agent.t(), Agent.action()) :: {:ok, Agent.t(), Agent.action()}
       def on_before_cmd(agent, action), do: {:ok, agent, action}
+
+      @spec on_after_cmd(Agent.t(), Agent.action(), [Agent.directive()]) ::
+              {:ok, Agent.t(), [Agent.directive()]}
       def on_after_cmd(agent, _action, directives), do: {:ok, agent, directives}
+
+      @spec signal_routes() :: list()
       def signal_routes, do: []
 
       defoverridable on_before_cmd: 2,

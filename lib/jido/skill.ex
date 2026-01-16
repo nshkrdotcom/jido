@@ -111,6 +111,7 @@ defmodule Jido.Skill do
                        )
 
   @doc false
+  @spec config_schema() :: Zoi.schema()
   def config_schema, do: @skill_config_schema
 
   # Callbacks
@@ -285,33 +286,43 @@ defmodule Jido.Skill do
       end)
 
       @doc "Returns the skill's name."
+      @spec name() :: String.t()
       def name, do: @validated_opts.name
 
       @doc "Returns the key used to store skill state in the agent."
+      @spec state_key() :: atom()
       def state_key, do: @validated_opts.state_key
 
       @doc "Returns the list of action modules provided by this skill."
+      @spec actions() :: [module()]
       def actions, do: @validated_opts.actions
 
       @doc "Returns the skill's description."
+      @spec description() :: String.t() | nil
       def description, do: @validated_opts[:description]
 
       @doc "Returns the skill's category."
+      @spec category() :: String.t() | nil
       def category, do: @validated_opts[:category]
 
       @doc "Returns the skill's version."
+      @spec vsn() :: String.t() | nil
       def vsn, do: @validated_opts[:vsn]
 
       @doc "Returns the Zoi schema for skill state."
+      @spec schema() :: Zoi.schema() | nil
       def schema, do: @validated_opts[:schema]
 
       @doc "Returns the Zoi schema for per-agent configuration."
+      @spec config_schema() :: Zoi.schema() | nil
       def config_schema, do: @validated_opts[:config_schema]
 
       @doc "Returns the signal patterns this skill handles."
+      @spec signal_patterns() :: [String.t()]
       def signal_patterns, do: @validated_opts[:signal_patterns] || []
 
       @doc "Returns the skill's tags."
+      @spec tags() :: [String.t()]
       def tags, do: @validated_opts[:tags] || []
 
       @doc """
@@ -322,6 +333,7 @@ defmodule Jido.Skill do
           spec = #{inspect(__MODULE__)}.skill_spec(%{})
           spec = #{inspect(__MODULE__)}.skill_spec(%{custom_option: true})
       """
+      @spec skill_spec(map()) :: Spec.t()
       @impl Jido.Skill
       def skill_spec(config \\ %{}) do
         %Spec{
@@ -343,22 +355,28 @@ defmodule Jido.Skill do
       # Default implementations for optional callbacks
 
       @doc false
+      @spec mount(term(), map()) :: {:ok, map() | nil} | {:error, term()}
       @impl Jido.Skill
       def mount(_agent, _config), do: {:ok, %{}}
 
       @doc false
+      @spec router(map()) :: term()
       @impl Jido.Skill
       def router(_config), do: nil
 
       @doc false
+      @spec handle_signal(term(), map()) ::
+              {:ok, term()} | {:ok, {:override, term()}} | {:error, term()}
       @impl Jido.Skill
       def handle_signal(_signal, _context), do: {:ok, nil}
 
       @doc false
+      @spec transform_result(module() | String.t(), term(), map()) :: term()
       @impl Jido.Skill
       def transform_result(_action, result, _context), do: result
 
       @doc false
+      @spec child_spec(map()) :: nil | Supervisor.child_spec() | [Supervisor.child_spec()]
       @impl Jido.Skill
       def child_spec(_config), do: nil
 

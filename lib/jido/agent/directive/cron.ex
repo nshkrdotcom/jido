@@ -45,6 +45,7 @@ defmodule Jido.Agent.Directive.Cron do
   defstruct Zoi.Struct.struct_fields(@schema)
 
   @doc "Returns the Zoi schema for Cron."
+  @spec schema() :: Zoi.schema()
   def schema, do: @schema
 end
 

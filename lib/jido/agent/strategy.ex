@@ -389,12 +389,18 @@ defmodule Jido.Agent.Strategy do
       @behaviour Jido.Agent.Strategy
 
       @impl true
+      @spec init(Jido.Agent.t(), Jido.Agent.Strategy.context()) ::
+              {Jido.Agent.t(), [Jido.Agent.directive()]}
       def init(agent, _ctx), do: {agent, []}
 
       @impl true
+      @spec tick(Jido.Agent.t(), Jido.Agent.Strategy.context()) ::
+              {Jido.Agent.t(), [Jido.Agent.directive()]}
       def tick(agent, _ctx), do: {agent, []}
 
       @impl true
+      @spec snapshot(Jido.Agent.t(), Jido.Agent.Strategy.context()) ::
+              Jido.Agent.Strategy.Snapshot.t()
       def snapshot(agent, _ctx), do: Jido.Agent.Strategy.default_snapshot(agent)
 
       defoverridable init: 2, tick: 2, snapshot: 2

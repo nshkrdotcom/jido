@@ -214,6 +214,7 @@ defmodule Jido.AgentPool do
   end
 
   @doc false
+  @spec build_pool_child_specs(instance(), [{pool_name(), module(), keyword()}]) :: [tuple()]
   def build_pool_child_specs(jido_instance, pool_configs) do
     Enum.map(pool_configs, fn {pool_name, agent_module, pool_opts} ->
       build_pool_child_spec(jido_instance, pool_name, agent_module, pool_opts)
@@ -221,6 +222,7 @@ defmodule Jido.AgentPool do
   end
 
   @doc false
+  @spec build_pool_child_spec(instance(), pool_name(), module(), keyword()) :: tuple()
   def build_pool_child_spec(jido_instance, pool_name, agent_module, pool_opts) do
     pool_id = Jido.agent_pool_name(jido_instance, pool_name)
 

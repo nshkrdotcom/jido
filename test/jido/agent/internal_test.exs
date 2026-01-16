@@ -112,4 +112,31 @@ defmodule JidoTest.Agent.InternalTest do
       assert effect.path == [:q, :r]
     end
   end
+
+  describe "schema functions" do
+    test "SetState.schema/0 returns Zoi schema" do
+      assert %{__struct__: Zoi.Types.Struct, module: Internal.SetState} =
+               Internal.SetState.schema()
+    end
+
+    test "ReplaceState.schema/0 returns Zoi schema" do
+      assert %{__struct__: Zoi.Types.Struct, module: Internal.ReplaceState} =
+               Internal.ReplaceState.schema()
+    end
+
+    test "DeleteKeys.schema/0 returns Zoi schema" do
+      assert %{__struct__: Zoi.Types.Struct, module: Internal.DeleteKeys} =
+               Internal.DeleteKeys.schema()
+    end
+
+    test "SetPath.schema/0 returns Zoi schema" do
+      assert %{__struct__: Zoi.Types.Struct, module: Internal.SetPath} =
+               Internal.SetPath.schema()
+    end
+
+    test "DeletePath.schema/0 returns Zoi schema" do
+      assert %{__struct__: Zoi.Types.Struct, module: Internal.DeletePath} =
+               Internal.DeletePath.schema()
+    end
+  end
 end

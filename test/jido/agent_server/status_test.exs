@@ -4,17 +4,7 @@ defmodule JidoTest.AgentServer.StatusTest do
   alias Jido.AgentServer
   alias Jido.AgentServer.Status
   alias Jido.Signal
-
-  # Test actions
-  defmodule IncrementAction do
-    @moduledoc false
-    use Jido.Action, name: "test_increment", schema: []
-
-    def run(_params, context) do
-      count = Map.get(context.state, :counter, 0)
-      {:ok, %{counter: count + 1}}
-    end
-  end
+  alias JidoTest.Fixtures
 
   defmodule CompleteAction do
     @moduledoc false
@@ -37,7 +27,7 @@ defmodule JidoTest.AgentServer.StatusTest do
 
     def signal_routes do
       [
-        {"test_increment", IncrementAction},
+        {"test_increment", Fixtures.IncrementAction},
         {"test.complete", CompleteAction}
       ]
     end
@@ -147,9 +137,10 @@ defmodule JidoTest.AgentServer.StatusTest do
       # Send increment signal
       signal = Signal.new!("test_increment", %{}, source: "test")
       AgentServer.cast(pid, signal)
-      Process.sleep(50)
 
-      # Check updated state
+      # Wait for updated state
+      eventually_state(pid, fn state -> state.agent.state.counter == 1 end)
+
       {:ok, status2} = AgentServer.status(pid)
       assert status2.raw_state.counter == 1
     end
@@ -158,7 +149,9 @@ defmodule JidoTest.AgentServer.StatusTest do
       # Complete the agent
       signal = Signal.new!("test.complete", %{}, source: "test")
       AgentServer.cast(pid, signal)
-      Process.sleep(50)
+
+      # Wait for completion
+      eventually_state(pid, fn state -> state.agent.state.status == :completed end)
 
       {:ok, status} = AgentServer.status(pid)
       assert status.raw_state.status == :completed
@@ -211,13 +204,14 @@ defmodule JidoTest.AgentServer.StatusTest do
           end
         end)
 
-      # Send increments while streaming
-      Process.sleep(50)
+      # Wait for stream task to start
+      eventually(fn -> Task.yield(task, 0) == nil end)
 
-      for _i <- 1..3 do
+      # Send increments while streaming, waiting for each to be processed
+      for i <- 1..3 do
         signal = Signal.new!("test_increment", %{}, source: "test")
         AgentServer.cast(pid, signal)
-        Process.sleep(50)
+        eventually_state(pid, fn state -> state.agent.state[:counter] >= i end)
       end
 
       # Check we saw the progression
@@ -250,8 +244,8 @@ defmodule JidoTest.AgentServer.StatusTest do
           end)
         end)
 
-      # Let stream start
-      Process.sleep(50)
+      # Wait for stream task to start
+      eventually(fn -> Task.yield(task, 0) == nil end)
 
       # Send completion signal
       signal = Signal.new!("test.complete", %{}, source: "test")

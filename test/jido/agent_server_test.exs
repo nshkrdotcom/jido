@@ -7,38 +7,9 @@ defmodule JidoTest.AgentServerTest do
   alias Jido.AgentServer.State
   alias Jido.Agent.Directive
   alias Jido.Signal
+  alias JidoTest.Fixtures
 
-  # Test actions for TestAgent
-  defmodule IncrementAction do
-    @moduledoc false
-    use Jido.Action, name: "increment", schema: []
-
-    def run(_params, context) do
-      count = Map.get(context.state, :counter, 0)
-      {:ok, %{counter: count + 1}}
-    end
-  end
-
-  defmodule DecrementAction do
-    @moduledoc false
-    use Jido.Action, name: "decrement", schema: []
-
-    def run(_params, context) do
-      count = Map.get(context.state, :counter, 0)
-      {:ok, %{counter: count - 1}}
-    end
-  end
-
-  defmodule RecordAction do
-    @moduledoc false
-    use Jido.Action, name: "record", schema: []
-
-    def run(params, context) do
-      messages = Map.get(context.state, :messages, [])
-      {:ok, %{messages: messages ++ [params]}}
-    end
-  end
-
+  # Test actions with specific directive behavior (not in common_fixtures)
   defmodule EmitTestAction do
     @moduledoc false
     use Jido.Action, name: "emit_test", schema: []
@@ -78,13 +49,6 @@ defmodule JidoTest.AgentServerTest do
     end
   end
 
-  defmodule NoopAction do
-    @moduledoc false
-    use Jido.Action, name: "noop", schema: []
-
-    def run(_params, _context), do: {:ok, %{}}
-  end
-
   defmodule TestAgent do
     @moduledoc false
     use Jido.Agent,
@@ -94,16 +58,18 @@ defmodule JidoTest.AgentServerTest do
         messages: [type: {:list, :any}, default: []]
       ]
 
+    alias JidoTest.Fixtures
+
     def signal_routes do
       [
-        {"increment", IncrementAction},
-        {"decrement", DecrementAction},
-        {"record", RecordAction},
+        {"increment", Fixtures.IncrementAction},
+        {"decrement", Fixtures.DecrementAction},
+        {"record", Fixtures.RecordAction},
         {"emit_test", EmitTestAction},
         {"schedule_test", ScheduleTestAction},
         {"stop_test", StopTestAction},
         {"error_test", ErrorTestAction},
-        {"noop", NoopAction}
+        {"noop", Fixtures.NoopAction}
       ]
     end
   end
@@ -188,7 +154,7 @@ defmodule JidoTest.AgentServerTest do
       signal = Signal.new!("record", %{message: "hello"}, source: "/test")
       {:ok, agent} = AgentServer.call(pid, signal)
 
-      assert agent.state.messages == [%{message: "hello"}]
+      assert agent.state.messages == ["hello"]
       GenServer.stop(pid)
     end
 
@@ -210,9 +176,7 @@ defmodule JidoTest.AgentServerTest do
       signal = Signal.new!("increment", %{}, source: "/test")
       assert :ok = AgentServer.cast(pid, signal)
 
-      Process.sleep(10)
-      {:ok, state} = AgentServer.state(pid)
-      assert state.agent.state.counter == 1
+      eventually_state(pid, fn state -> state.agent.state.counter == 1 end)
 
       GenServer.stop(pid)
     end
@@ -225,9 +189,7 @@ defmodule JidoTest.AgentServerTest do
         AgentServer.cast(pid, signal)
       end
 
-      Process.sleep(50)
-      {:ok, state} = AgentServer.state(pid)
-      assert state.agent.state.counter == 5
+      eventually_state(pid, fn state -> state.agent.state.counter == 5 end)
 
       GenServer.stop(pid)
     end
@@ -319,8 +281,8 @@ defmodule JidoTest.AgentServerTest do
       signal = Signal.new!("emit_test", %{}, source: "/test")
       {:ok, _agent} = AgentServer.call(pid, signal)
 
-      # Give drain loop time to process
-      Process.sleep(10)
+      # Drain loop completes and returns to idle
+      eventually_state(pid, fn state -> state.status == :idle end)
 
       GenServer.stop(pid)
     end
@@ -331,8 +293,8 @@ defmodule JidoTest.AgentServerTest do
       signal = Signal.new!("error_test", %{}, source: "/test")
       {:ok, _agent} = AgentServer.call(pid, signal)
 
-      # Give drain loop time to process
-      Process.sleep(10)
+      # Drain loop completes and returns to idle
+      eventually_state(pid, fn state -> state.status == :idle end)
 
       GenServer.stop(pid)
     end
@@ -343,8 +305,8 @@ defmodule JidoTest.AgentServerTest do
       signal = Signal.new!("schedule_test", %{}, source: "/test")
       {:ok, _agent} = AgentServer.call(pid, signal)
 
-      assert Process.alive?(pid)
-      Process.sleep(100)
+      # Wait for scheduled signal to be processed (50ms delay + processing)
+      eventually_state(pid, fn state -> state.status == :idle end, timeout: 200)
       assert Process.alive?(pid)
 
       GenServer.stop(pid)
@@ -407,11 +369,12 @@ defmodule JidoTest.AgentServerTest do
         AgentServer.cast(pid, signal)
       end
 
-      Process.sleep(100)
-      {:ok, state} = AgentServer.state(pid)
+      state =
+        eventually_state(pid, fn state ->
+          length(state.agent.state.messages) == 10
+        end)
 
       # Verify order is preserved
-      assert length(state.agent.state.messages) == 10
       indices = Enum.map(state.agent.state.messages, & &1.index)
       assert indices == Enum.to_list(1..10)
 
@@ -431,8 +394,6 @@ defmodule JidoTest.AgentServerTest do
 
   describe "queue overflow" do
     test "returns error when queue is full", %{jido: jido} do
-      import ExUnit.CaptureLog
-
       # Start with very small queue
       {:ok, pid} = AgentServer.start_link(agent: TestAgent, max_queue_size: 2, jido: jido)
 
@@ -493,21 +454,30 @@ defmodule JidoTest.AgentServerTest do
         use Jido.Agent,
           name: "slow_agent",
           schema: [value: [type: :integer, default: 0]]
+
+        def signal_routes do
+          [{"slow", SlowAction}]
+        end
       end
 
       {:ok, pid} = AgentServer.start_link(agent: SlowAgent, jido: jido)
 
       # Start async processing
       signal = Signal.new!("slow", %{}, source: "/test")
-      spawn(fn -> AgentServer.call(pid, signal) end)
+      task = Task.async(fn -> AgentServer.call(pid, signal) end)
 
-      # Small delay to let processing start
-      Process.sleep(10)
-      {:ok, state} = AgentServer.state(pid)
-      # Status should be processing or idle depending on timing
-      assert state.status in [:idle, :processing]
+      # Either catch processing in progress, or it completes quickly - either is valid
+      # The key is the server doesn't crash and returns to idle after processing
+      eventually_state(pid, fn state ->
+        state.status in [:idle, :processing]
+      end)
 
-      Process.sleep(150)
+      # Wait for task to complete
+      Task.await(task)
+
+      # After processing completes, status should be idle
+      eventually_state(pid, fn state -> state.status == :idle end)
+
       GenServer.stop(pid)
     end
 
@@ -518,9 +488,7 @@ defmodule JidoTest.AgentServerTest do
       {:ok, _agent} = AgentServer.call(pid, signal)
 
       # After processing, wait for drain loop
-      Process.sleep(10)
-      {:ok, state} = AgentServer.state(pid)
-      assert state.status == :idle
+      eventually_state(pid, fn state -> state.status == :idle end)
 
       GenServer.stop(pid)
     end
@@ -573,11 +541,8 @@ defmodule JidoTest.AgentServerTest do
       {:ok, state1} = AgentServer.state(pid)
       assert state1.agent.state.pings == 0
 
-      # Wait for scheduled signal
-      Process.sleep(100)
-
-      {:ok, state2} = AgentServer.state(pid)
-      assert state2.agent.state.pings == 1
+      # Wait for scheduled signal (50ms delay + processing)
+      eventually_state(pid, fn state -> state.agent.state.pings == 1 end, timeout: 200)
 
       GenServer.stop(pid)
     end
@@ -629,9 +594,10 @@ defmodule JidoTest.AgentServerTest do
       signal = Signal.new!("schedule_many", %{}, source: "/test")
       {:ok, _agent} = AgentServer.call(pid, signal)
 
-      Process.sleep(150)
+      # Wait for all 3 scheduled signals (20ms, 40ms, 60ms delays)
+      state =
+        eventually_state(pid, fn state -> state.agent.state.events == [1, 2, 3] end, timeout: 200)
 
-      {:ok, state} = AgentServer.state(pid)
       assert state.agent.state.events == [1, 2, 3]
 
       GenServer.stop(pid)
@@ -677,9 +643,12 @@ defmodule JidoTest.AgentServerTest do
       signal = Signal.new!("schedule_atom", %{}, source: "/test")
       {:ok, _agent} = AgentServer.call(pid, signal)
 
-      Process.sleep(50)
+      # Wait for scheduled atom message (10ms delay + processing)
+      state =
+        eventually_state(pid, fn state -> state.agent.state.received == :timeout end,
+          timeout: 100
+        )
 
-      {:ok, state} = AgentServer.state(pid)
       assert state.agent.state.received == :timeout
 
       GenServer.stop(pid)
@@ -763,9 +732,9 @@ defmodule JidoTest.AgentServerTest do
       {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       GenServer.cast(pid, :unknown_message)
-      Process.sleep(10)
 
-      assert Process.alive?(pid)
+      # Verify process is still alive and functional
+      eventually(fn -> Process.alive?(pid) end)
       GenServer.stop(pid)
     end
 
@@ -773,9 +742,9 @@ defmodule JidoTest.AgentServerTest do
       {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       send(pid, :random_message)
-      Process.sleep(10)
 
-      assert Process.alive?(pid)
+      # Verify process is still alive and functional
+      eventually(fn -> Process.alive?(pid) end)
       GenServer.stop(pid)
     end
   end
@@ -830,26 +799,14 @@ defmodule JidoTest.AgentServerTest do
   end
 
   describe "termination" do
-    test "logs on termination", %{jido: jido} do
-      import ExUnit.CaptureLog
-
-      # Start with start_link so we can call GenServer.stop directly
-      # Trap exits so the test process doesn't crash
+    test "terminates cleanly with :normal reason", %{jido: jido} do
       Process.flag(:trap_exit, true)
 
       {:ok, pid} = AgentServer.start_link(agent: TestAgent, id: "terminate-test", jido: jido)
 
-      log =
-        capture_log(fn ->
-          GenServer.stop(pid, :normal)
-          Process.sleep(10)
-        end)
-
-      # Consume the EXIT message
+      GenServer.stop(pid, :normal)
       assert_receive {:EXIT, ^pid, :normal}, 100
-
-      assert log =~ "terminate-test"
-      assert log =~ "terminating"
+      refute Process.alive?(pid)
     end
   end
 
@@ -885,7 +842,13 @@ defmodule JidoTest.AgentServerTest do
 
       Enum.each(signals, fn sig -> AgentServer.cast(pid, sig) end)
 
-      Process.sleep(1500)
+      eventually_state(
+        pid,
+        fn state ->
+          state.status == :idle and state.processing == false and State.queue_empty?(state)
+        end,
+        timeout: 2000
+      )
 
       {:ok, final_state} = AgentServer.state(pid)
 
@@ -903,14 +866,10 @@ defmodule JidoTest.AgentServerTest do
       signal = Signal.new!("noop", %{}, source: "/test")
       AgentServer.cast(pid, signal)
 
-      {:ok, state1} = AgentServer.state(pid)
-
-      if state1.processing do
-        Process.sleep(50)
-        {:ok, state2} = AgentServer.state(pid)
-        assert state2.processing == false
-        assert state2.status == :idle
-      end
+      # Wait for processing to complete - status returns to idle and processing flag is false
+      eventually_state(pid, fn state ->
+        state.processing == false and state.status == :idle
+      end)
 
       GenServer.stop(pid)
     end

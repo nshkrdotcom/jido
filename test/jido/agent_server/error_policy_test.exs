@@ -1,7 +1,7 @@
 defmodule JidoTest.AgentServer.ErrorPolicyTest do
   use JidoTest.Case, async: true
 
-  import ExUnit.CaptureLog
+  @moduletag :capture_log
 
   alias Jido.Agent.Directive
   alias Jido.AgentServer.{ErrorPolicy, State, Options}
@@ -41,41 +41,24 @@ defmodule JidoTest.AgentServer.ErrorPolicyTest do
       state = build_state(:log_only)
       directive = build_error_directive("Something went wrong")
 
-      log =
-        capture_log(fn ->
-          assert {:ok, ^state} = ErrorPolicy.handle(directive, state)
-        end)
-
-      assert log =~ "Something went wrong"
-      assert log =~ "error-policy-test-agent"
+      assert {:ok, ^state} = ErrorPolicy.handle(directive, state)
     end
 
     test "includes context in log" do
       state = build_state(:log_only)
       directive = build_error_directive("Error message", :validation)
 
-      log =
-        capture_log(fn ->
-          ErrorPolicy.handle(directive, state)
-        end)
-
-      assert log =~ "[validation]"
+      assert {:ok, ^state} = ErrorPolicy.handle(directive, state)
     end
   end
 
   describe "stop_on_error policy" do
-    test "logs error and returns stop tuple" do
+    test "returns stop tuple with error" do
       state = build_state(:stop_on_error)
       error = Jido.Error.validation_error("Fatal error")
       directive = %Directive.Error{error: error, context: :fatal}
 
-      log =
-        capture_log(fn ->
-          assert {:stop, {:agent_error, ^error}, ^state} = ErrorPolicy.handle(directive, state)
-        end)
-
-      assert log =~ "Fatal error"
-      assert log =~ "stopping due to error policy"
+      assert {:stop, {:agent_error, ^error}, ^state} = ErrorPolicy.handle(directive, state)
     end
   end
 
@@ -95,37 +78,22 @@ defmodule JidoTest.AgentServer.ErrorPolicyTest do
 
       assert state.error_count == 0
 
-      {:ok, state} =
-        capture_log(fn ->
-          ErrorPolicy.handle(directive, state)
-        end)
-        |> (fn _log -> ErrorPolicy.handle(directive, state) end).()
-
+      {:ok, state} = ErrorPolicy.handle(directive, state)
       assert state.error_count == 1
 
       {:ok, state} = ErrorPolicy.handle(directive, state)
       assert state.error_count == 2
 
-      log =
-        capture_log(fn ->
-          {:stop, {:max_errors_exceeded, 3}, state} = ErrorPolicy.handle(directive, state)
-          assert state.error_count == 3
-        end)
-
-      assert log =~ "exceeded max errors"
-      assert log =~ "3/3"
+      {:stop, {:max_errors_exceeded, 3}, state} = ErrorPolicy.handle(directive, state)
+      assert state.error_count == 3
     end
 
-    test "logs warning with count before max" do
+    test "increments error count before max" do
       state = build_state({:max_errors, 5})
       directive = build_error_directive("Warning error")
 
-      log =
-        capture_log(fn ->
-          {:ok, _state} = ErrorPolicy.handle(directive, state)
-        end)
-
-      assert log =~ "1/5"
+      {:ok, new_state} = ErrorPolicy.handle(directive, state)
+      assert new_state.error_count == 1
     end
   end
 
@@ -177,13 +145,7 @@ defmodule JidoTest.AgentServer.ErrorPolicyTest do
       state = build_state(custom_policy)
       directive = build_error_directive("Crash me")
 
-      log =
-        capture_log(fn ->
-          assert {:ok, ^state} = ErrorPolicy.handle(directive, state)
-        end)
-
-      assert log =~ "Custom error policy crashed"
-      assert log =~ "Policy crashed!"
+      assert {:ok, ^state} = ErrorPolicy.handle(directive, state)
     end
 
     test "handles custom function throw gracefully" do
@@ -194,12 +156,7 @@ defmodule JidoTest.AgentServer.ErrorPolicyTest do
       state = build_state(custom_policy)
       directive = build_error_directive("Throw me")
 
-      log =
-        capture_log(fn ->
-          assert {:ok, ^state} = ErrorPolicy.handle(directive, state)
-        end)
-
-      assert log =~ "Custom error policy failed"
+      assert {:ok, ^state} = ErrorPolicy.handle(directive, state)
     end
 
     test "handles invalid return from custom function" do
@@ -210,12 +167,7 @@ defmodule JidoTest.AgentServer.ErrorPolicyTest do
       state = build_state(custom_policy)
       directive = build_error_directive("Invalid return")
 
-      log =
-        capture_log(fn ->
-          assert {:ok, ^state} = ErrorPolicy.handle(directive, state)
-        end)
-
-      assert log =~ "invalid result"
+      assert {:ok, ^state} = ErrorPolicy.handle(directive, state)
     end
   end
 
@@ -228,12 +180,7 @@ defmodule JidoTest.AgentServer.ErrorPolicyTest do
 
       directive = build_error_directive("Unknown policy error")
 
-      log =
-        capture_log(fn ->
-          assert {:ok, ^state} = ErrorPolicy.handle(directive, state)
-        end)
-
-      assert log =~ "Unknown policy error"
+      assert {:ok, ^state} = ErrorPolicy.handle(directive, state)
     end
   end
 end

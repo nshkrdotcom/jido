@@ -12,41 +12,7 @@ defmodule JidoTest.Agent.SignalHandlingTest do
 
   alias Jido.Agent.Directive
   alias Jido.Signal
-
-  # Test actions
-  defmodule IncrementAction do
-    @moduledoc false
-    use Jido.Action,
-      name: "increment",
-      schema: [
-        amount: [type: :integer, default: 1]
-      ]
-
-    def run(params, context) do
-      current = Map.get(context.state, :counter, 0)
-      {:ok, %{counter: current + params.amount}}
-    end
-  end
-
-  defmodule DecrementAction do
-    @moduledoc false
-    use Jido.Action, name: "decrement", schema: []
-
-    def run(_params, context) do
-      count = Map.get(context.state, :counter, 0)
-      {:ok, %{counter: count - 1}}
-    end
-  end
-
-  defmodule RecordAction do
-    @moduledoc false
-    use Jido.Action, name: "record", schema: []
-
-    def run(params, context) do
-      messages = Map.get(context.state, :messages, [])
-      {:ok, %{messages: messages ++ [params]}}
-    end
-  end
+  alias JidoTest.Fixtures
 
   defmodule EmitTestAction do
     @moduledoc false
@@ -70,9 +36,9 @@ defmodule JidoTest.Agent.SignalHandlingTest do
 
     def signal_routes do
       [
-        {"increment", IncrementAction},
-        {"decrement", DecrementAction},
-        {"record", RecordAction},
+        {"increment", Fixtures.IncrementAction},
+        {"decrement", Fixtures.DecrementAction},
+        {"record", Fixtures.RecordAction},
         {"emit_test", EmitTestAction}
       ]
     end
@@ -90,8 +56,8 @@ defmodule JidoTest.Agent.SignalHandlingTest do
 
     def signal_routes do
       [
-        {"increment", IncrementAction},
-        {"decrement", DecrementAction}
+        {"increment", Fixtures.IncrementAction},
+        {"decrement", Fixtures.DecrementAction}
       ]
     end
 
@@ -149,7 +115,8 @@ defmodule JidoTest.Agent.SignalHandlingTest do
       signal = Signal.new!("record", %{message: "hello"}, source: "/test")
       {:ok, agent} = Jido.AgentServer.call(pid, signal)
 
-      assert agent.state.messages == [%{message: "hello"}]
+      # Fixtures.RecordAction stores the :message value when present
+      assert agent.state.messages == ["hello"]
 
       GenServer.stop(pid)
     end
@@ -209,16 +176,18 @@ defmodule JidoTest.Agent.SignalHandlingTest do
           name: "action_modifying_agent",
           schema: [counter: [type: :integer, default: 0]]
 
+        alias JidoTest.Fixtures
+
         def signal_routes do
           [
-            {"increment", IncrementAction}
+            {"increment", Fixtures.IncrementAction}
           ]
         end
 
         # Transform action to always increment by 10
         # Matches on the action module, not string type
-        def on_before_cmd(agent, {IncrementAction, _params}) do
-          {:ok, agent, {IncrementAction, %{amount: 10}}}
+        def on_before_cmd(agent, {Fixtures.IncrementAction, _params}) do
+          {:ok, agent, {Fixtures.IncrementAction, %{amount: 10}}}
         end
 
         def on_before_cmd(agent, action), do: {:ok, agent, action}
@@ -245,7 +214,8 @@ defmodule JidoTest.Agent.SignalHandlingTest do
     test "cmd/2 works directly with action module tuples" do
       agent = ActionBasedAgent.new()
 
-      {updated, _directives} = ActionBasedAgent.cmd(agent, {IncrementAction, %{amount: 5}})
+      {updated, _directives} =
+        ActionBasedAgent.cmd(agent, {Fixtures.IncrementAction, %{amount: 5}})
 
       assert updated.state.counter == 5
     end
@@ -253,7 +223,8 @@ defmodule JidoTest.Agent.SignalHandlingTest do
     test "cmd/2 calls on_before_cmd with action module" do
       agent = PreProcessingAgent.new()
 
-      {updated, _directives} = PreProcessingAgent.cmd(agent, {IncrementAction, %{amount: 1}})
+      {updated, _directives} =
+        PreProcessingAgent.cmd(agent, {Fixtures.IncrementAction, %{amount: 1}})
 
       # on_before_cmd now captures action module name
       assert updated.state.last_action_type == "increment"

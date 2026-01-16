@@ -9,8 +9,21 @@ defmodule Jido.Observe do
 
   - Automatic telemetry event emission (start/stop/exception)
   - Duration measurement for all spans (nanoseconds)
+  - Automatic correlation ID enrichment from `Jido.Tracing.Context`
   - Extension point for future OpenTelemetry integration via `Jido.Observe.Tracer`
   - Threshold-based logging via `Jido.Observe.Log`
+
+  ## Correlation Tracing Integration
+
+  When `Jido.Tracing.Context` has an active trace context (set via signal processing),
+  all spans automatically include correlation metadata:
+
+  - `:jido_trace_id` - shared trace identifier across the call chain
+  - `:jido_span_id` - unique span identifier for the current signal
+  - `:jido_parent_span_id` - parent span that triggered this signal
+  - `:jido_causation_id` - signal ID that caused this signal
+
+  This connects timed telemetry spans with signal causation tracking automatically.
 
   ## Configuration
 
@@ -143,15 +156,17 @@ defmodule Jido.Observe do
     start_time = System.monotonic_time(:nanosecond)
     start_system_time = System.system_time(:nanosecond)
 
+    enriched_metadata = enrich_with_correlation(metadata)
+
     :telemetry.execute(
       event_prefix ++ [:start],
       %{system_time: start_system_time},
-      metadata
+      enriched_metadata
     )
 
     tracer_ctx =
       try do
-        tracer().span_start(event_prefix, metadata)
+        tracer().span_start(event_prefix, enriched_metadata)
       rescue
         e ->
           Logger.warning("Jido.Observe tracer span_start/2 failed: #{inspect(e)}")
@@ -162,7 +177,7 @@ defmodule Jido.Observe do
       event_prefix: event_prefix,
       start_time: start_time,
       start_system_time: start_system_time,
-      metadata: metadata,
+      metadata: enriched_metadata,
       tracer_ctx: tracer_ctx
     }
   end
@@ -384,5 +399,20 @@ defmodule Jido.Observe do
 
   defp observability_config do
     Application.get_env(:jido, :observability, [])
+  end
+
+  defp enrich_with_correlation(metadata) do
+    case correlation_metadata() do
+      empty when empty == %{} -> metadata
+      correlation -> Map.merge(correlation, metadata)
+    end
+  end
+
+  defp correlation_metadata do
+    if Code.ensure_loaded?(Jido.Tracing.Context) do
+      Jido.Tracing.Context.to_telemetry_metadata()
+    else
+      %{}
+    end
   end
 end

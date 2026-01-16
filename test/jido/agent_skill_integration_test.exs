@@ -216,7 +216,7 @@ defmodule JidoTest.AgentSkillIntegrationTest do
     test "schema/0 returns merged schema with skill nested under state_key" do
       schema = SingleSkillAgent.schema()
 
-      assert schema != nil
+      assert is_struct(schema)
       keys = Jido.Agent.Schema.known_keys(schema)
       assert :counter_skill in keys
     end
@@ -489,7 +489,7 @@ defmodule JidoTest.AgentSkillIntegrationTest do
     test "agent schema/0 returns the merged schema" do
       schema = SingleSkillAgent.schema()
 
-      assert schema != nil
+      assert is_struct(schema)
     end
   end
 

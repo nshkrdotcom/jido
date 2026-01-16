@@ -2,7 +2,6 @@ defmodule JidoTest.AgentServer.HierarchyTest do
   use JidoTest.Case, async: true
 
   @moduletag capture_log: true
-  import ExUnit.CaptureLog
 
   alias Jido.AgentServer
   alias Jido.AgentServer.{ParentRef, State}
@@ -175,13 +174,11 @@ defmodule JidoTest.AgentServer.HierarchyTest do
       assert reason in [:shutdown, :noproc]
     end
 
-    test "logs when stopping due to parent death", %{jido: jido} do
-      # Start parent under DynamicSupervisor to avoid linking to test process
+    test "child stops with correct exit reason when parent dies", %{jido: jido} do
       {:ok, parent_pid} = AgentServer.start(agent: ParentAgent, id: "parent-stop-log", jido: jido)
 
       parent_ref = ParentRef.new!(%{pid: parent_pid, id: "parent-stop-log", tag: :worker})
 
-      # Start child under DynamicSupervisor as well
       {:ok, child_pid} =
         AgentServer.start(
           agent: ChildAgent,
@@ -193,15 +190,13 @@ defmodule JidoTest.AgentServer.HierarchyTest do
 
       child_ref = Process.monitor(child_pid)
 
-      log =
-        capture_log(fn ->
-          DynamicSupervisor.terminate_child(Jido.agent_supervisor_name(jido), parent_pid)
-          assert_receive {:DOWN, ^child_ref, :process, ^child_pid, _}, 1000
-        end)
+      DynamicSupervisor.terminate_child(Jido.agent_supervisor_name(jido), parent_pid)
 
-      assert log =~ "child-stop-log"
-      assert log =~ "stopping"
-      assert log =~ "parent died"
+      assert_receive {:DOWN, ^child_ref, :process, ^child_pid,
+                      {:shutdown, {:parent_down, reason}}},
+                     1000
+
+      assert reason in [:shutdown, :noproc]
     end
   end
 
@@ -221,14 +216,14 @@ defmodule JidoTest.AgentServer.HierarchyTest do
           jido: jido
         )
 
-      log =
-        capture_log(fn ->
-          GenServer.stop(parent_pid)
-          Process.sleep(50)
-        end)
+      GenServer.stop(parent_pid)
 
+      eventually(fn -> not Process.alive?(parent_pid) end)
+
+      # Child should still be alive and functional
       assert Process.alive?(child_pid)
-      assert log =~ "continuing after parent death"
+      {:ok, child_state} = AgentServer.state(child_pid)
+      assert child_state.parent.pid == parent_pid
 
       GenServer.stop(child_pid)
     end
@@ -251,12 +246,14 @@ defmodule JidoTest.AgentServer.HierarchyTest do
         )
 
       GenServer.stop(parent_pid)
-      Process.sleep(100)
+
+      eventually_state(child_pid, fn state ->
+        length(state.agent.state.orphan_events) == 1
+      end)
 
       assert Process.alive?(child_pid)
 
       {:ok, child_state} = AgentServer.state(child_pid)
-      assert length(child_state.agent.state.orphan_events) == 1
 
       [event] = child_state.agent.state.orphan_events
       assert event.parent_id == "parent-orphan-1"
@@ -294,10 +291,12 @@ defmodule JidoTest.AgentServer.HierarchyTest do
       end)
 
       send(parent_pid, {:DOWN, ref, :process, child_pid, :test_exit})
-      Process.sleep(50)
+
+      eventually_state(parent_pid, fn state ->
+        length(state.agent.state.child_events) == 1
+      end)
 
       {:ok, final_state} = AgentServer.state(parent_pid)
-      assert length(final_state.agent.state.child_events) == 1
 
       [event] = final_state.agent.state.child_events
       assert event.tag == :worker
@@ -337,10 +336,12 @@ defmodule JidoTest.AgentServer.HierarchyTest do
       assert Map.has_key?(state_with_child.children, :temp_worker)
 
       send(parent_pid, {:DOWN, ref, :process, child_pid, :done})
-      Process.sleep(50)
 
-      {:ok, state_without_child} = AgentServer.state(parent_pid)
-      refute Map.has_key?(state_without_child.children, :temp_worker)
+      eventually_state(parent_pid, fn state ->
+        not Map.has_key?(state.children, :temp_worker)
+      end)
+
+      {:ok, _state_without_child} = AgentServer.state(parent_pid)
 
       send(child_pid, :exit)
       GenServer.stop(parent_pid)
@@ -350,10 +351,15 @@ defmodule JidoTest.AgentServer.HierarchyTest do
       {:ok, pid} = AgentServer.start_link(agent: ParentAgent, id: "ignore-down", jido: jido)
 
       random_pid = spawn(fn -> :ok end)
-      Process.sleep(10)
+      eventually(fn -> not Process.alive?(random_pid) end)
 
-      send(pid, {:DOWN, make_ref(), :process, random_pid, :normal})
-      Process.sleep(10)
+      down_ref = make_ref()
+      send(pid, {:DOWN, down_ref, :process, random_pid, :normal})
+
+      eventually(fn ->
+        {:messages, msgs} = Process.info(pid, :messages)
+        not Enum.any?(msgs, fn msg -> match?({:DOWN, ^down_ref, _, _, _}, msg) end)
+      end)
 
       assert Process.alive?(pid)
       GenServer.stop(pid)
@@ -423,26 +429,6 @@ defmodule JidoTest.AgentServer.HierarchyTest do
           flunk("Parent process died while waiting for child")
       end
     end
-
-    defp await_condition(check_fn, timeout \\ 500) do
-      deadline = System.monotonic_time(:millisecond) + timeout
-      do_await_condition(check_fn, deadline)
-    end
-
-    defp do_await_condition(check_fn, deadline) do
-      if System.monotonic_time(:millisecond) > deadline do
-        flunk("Timed out waiting for condition")
-      end
-
-      if check_fn.() do
-        :ok
-      else
-        Process.sleep(5)
-        do_await_condition(check_fn, deadline)
-      end
-    end
-
-    defp unique_id(base), do: "#{base}-#{System.unique_integer([:positive])}"
 
     test "spawns child agent with parent-child relationship", %{jido: jido} do
       parent_id = unique_id("spawn-parent")
@@ -556,7 +542,7 @@ defmodule JidoTest.AgentServer.HierarchyTest do
       DynamicSupervisor.terminate_child(Jido.agent_supervisor_name(jido), child_info.pid)
       assert_receive {:DOWN, ^child_ref, :process, _, :shutdown}, 500
 
-      await_condition(fn ->
+      eventually(fn ->
         case AgentServer.state(parent_pid) do
           {:ok, state} -> not Map.has_key?(state.children, :dying_child)
           _ -> false

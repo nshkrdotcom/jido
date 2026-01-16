@@ -1,6 +1,8 @@
 defmodule JidoTest.InstanceTest do
   use ExUnit.Case, async: false
 
+  import JidoTest.Eventually
+
   alias JidoTest.TestAgents.Minimal
 
   defmodule TestInstance do
@@ -140,11 +142,16 @@ defmodule JidoTest.InstanceTest do
     test "stop_agent/1 stops an agent by ID" do
       {:ok, _sup_pid} = TestInstance.start_link()
 
-      {:ok, _} = TestInstance.start_agent(Minimal, id: "stop-test")
+      {:ok, pid} = TestInstance.start_agent(Minimal, id: "stop-test")
 
       assert TestInstance.whereis("stop-test") != nil
+      # Monitor before stopping to ensure we catch the DOWN
+      ref = Process.monitor(pid)
       assert :ok = TestInstance.stop_agent("stop-test")
-      assert TestInstance.whereis("stop-test") == nil
+      # Wait for the process to actually terminate
+      assert_receive {:DOWN, ^ref, :process, ^pid, _}, 1000
+      # Use eventually to wait for registry to update
+      eventually(fn -> TestInstance.whereis("stop-test") == nil end)
     end
 
     test "stop_agent/1 stops an agent by pid" do

@@ -174,12 +174,8 @@ defmodule JidoTest.AgentServer.SkillChildrenTest do
       # Manually stop the child
       Agent.stop(child_info.pid)
 
-      # Give time for DOWN message to be processed
-      Process.sleep(50)
-
       # Child should be removed from state
-      {:ok, new_state} = Jido.AgentServer.state(pid)
-      assert map_size(new_state.children) == 0
+      eventually_state(pid, fn state -> map_size(state.children) == 0 end)
 
       GenServer.stop(pid)
     end
@@ -229,10 +225,7 @@ defmodule JidoTest.AgentServer.SkillChildrenTest do
       # Stop the AgentServer
       GenServer.stop(pid)
 
-      # Give time for cleanup
-      Process.sleep(50)
-
-      refute Process.alive?(pid)
+      eventually(fn -> not Process.alive?(pid) end)
     end
   end
 end

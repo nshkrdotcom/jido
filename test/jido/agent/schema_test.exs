@@ -89,6 +89,25 @@ defmodule JidoTest.Agent.SchemaTest do
       assert :count in keys
     end
 
+    test "returns keys from Zoi Map type with map fields" do
+      schema = Zoi.map(%{name: Zoi.string(), age: Zoi.integer()})
+      keys = Schema.known_keys(schema)
+      assert :name in keys
+      assert :age in keys
+    end
+
+    test "returns keys from Zoi Struct type with map fields" do
+      schema =
+        Zoi.struct(
+          JidoTest.Agent.SchemaTest.TestStruct,
+          %{field_a: Zoi.string(), field_b: Zoi.integer()}
+        )
+
+      keys = Schema.known_keys(schema)
+      assert :field_a in keys
+      assert :field_b in keys
+    end
+
     test "returns empty list for unknown schema type" do
       assert Schema.known_keys("not a schema") == []
       assert Schema.known_keys(123) == []
@@ -132,6 +151,31 @@ defmodule JidoTest.Agent.SchemaTest do
 
       defaults = Schema.defaults_from_zoi_schema(schema)
       assert defaults == %{}
+    end
+
+    test "extracts defaults from Zoi Map type" do
+      schema =
+        Zoi.map(%{
+          name: Zoi.string() |> Zoi.default("unknown"),
+          count: Zoi.integer()
+        })
+
+      defaults = Schema.defaults_from_zoi_schema(schema)
+      assert defaults == %{name: "unknown"}
+    end
+
+    test "extracts defaults from Zoi Struct type" do
+      schema =
+        Zoi.struct(
+          JidoTest.Agent.SchemaTest.TestStruct,
+          %{
+            field_a: Zoi.string() |> Zoi.default("default_a"),
+            field_b: Zoi.integer()
+          }
+        )
+
+      defaults = Schema.defaults_from_zoi_schema(schema)
+      assert defaults == %{field_a: "default_a"}
     end
 
     test "returns empty map for unknown schema type" do

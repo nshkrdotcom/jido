@@ -166,11 +166,7 @@ defmodule JidoTest.AgentServer.SkillTransformTest do
       signal = Signal.new!("value.set", %{value: 33}, source: "/test")
       :ok = Jido.AgentServer.cast(pid, signal)
 
-      # Give time for async processing
-      Process.sleep(50)
-
-      {:ok, state} = Jido.AgentServer.state(pid)
-      assert state.agent.state[:value] == 33
+      state = eventually_state(pid, fn state -> state.agent.state[:value] == 33 end)
       # No transform applied because it was cast, not call
       refute Map.has_key?(state.agent.state, :transformed_by)
     end

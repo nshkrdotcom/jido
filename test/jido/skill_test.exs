@@ -155,54 +155,38 @@ defmodule JidoTest.SkillTest do
   end
 
   describe "metadata accessors" do
-    test "name/0 returns skill name" do
-      assert BasicSkill.name() == "basic_skill"
-      assert FullSkill.name() == "full_skill"
+    @metadata_cases [
+      # {function, BasicSkill expected, FullSkill expected}
+      {:name, "basic_skill", "full_skill"},
+      {:state_key, :basic, :full},
+      {:description, nil, "A fully configured skill"},
+      {:category, nil, "test"},
+      {:vsn, nil, "1.0.0"},
+      {:signal_patterns, [], ["skill.**", "test.*"]},
+      {:tags, [], ["test", "full"]},
+      {:actions, [JidoTest.SkillTestAction],
+       [JidoTest.SkillTestAction, JidoTest.SkillTestAnotherAction]}
+    ]
+
+    for {fun, basic_expected, full_expected} <- @metadata_cases do
+      @fun fun
+      @basic_expected basic_expected
+      @full_expected full_expected
+
+      test "#{@fun}/0 returns correct value for BasicSkill and FullSkill" do
+        assert apply(BasicSkill, @fun, []) == @basic_expected
+        assert apply(FullSkill, @fun, []) == @full_expected
+      end
     end
 
-    test "state_key/0 returns skill state key" do
-      assert BasicSkill.state_key() == :basic
-      assert FullSkill.state_key() == :full
-    end
-
-    test "description/0 returns skill description" do
-      assert BasicSkill.description() == nil
-      assert FullSkill.description() == "A fully configured skill"
-    end
-
-    test "category/0 returns skill category" do
-      assert BasicSkill.category() == nil
-      assert FullSkill.category() == "test"
-    end
-
-    test "vsn/0 returns skill version" do
-      assert BasicSkill.vsn() == nil
-      assert FullSkill.vsn() == "1.0.0"
-    end
-
-    test "schema/0 returns skill state schema" do
+    test "schema/0 returns nil for BasicSkill and Zoi schema for FullSkill" do
       assert BasicSkill.schema() == nil
       assert FullSkill.schema() != nil
     end
 
-    test "config_schema/0 returns skill config schema" do
+    test "config_schema/0 returns nil for BasicSkill and Zoi schema for FullSkill" do
       assert BasicSkill.config_schema() == nil
       assert FullSkill.config_schema() != nil
-    end
-
-    test "signal_patterns/0 returns skill signal patterns" do
-      assert BasicSkill.signal_patterns() == []
-      assert FullSkill.signal_patterns() == ["skill.**", "test.*"]
-    end
-
-    test "tags/0 returns skill tags" do
-      assert BasicSkill.tags() == []
-      assert FullSkill.tags() == ["test", "full"]
-    end
-
-    test "actions/0 returns skill actions" do
-      assert BasicSkill.actions() == [JidoTest.SkillTestAction]
-      assert FullSkill.actions() == [JidoTest.SkillTestAction, JidoTest.SkillTestAnotherAction]
     end
   end
 

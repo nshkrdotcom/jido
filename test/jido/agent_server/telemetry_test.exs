@@ -4,17 +4,7 @@ defmodule JidoTest.AgentServer.TelemetryTest do
   alias Jido.AgentServer
   alias Jido.Agent.Directive
   alias Jido.Signal
-
-  # Test actions for TelemetryAgent
-  defmodule IncrementAction do
-    @moduledoc false
-    use Jido.Action, name: "increment", schema: []
-
-    def run(_params, context) do
-      count = Map.get(context.state, :counter, 0)
-      {:ok, %{counter: count + 1}}
-    end
-  end
+  alias JidoTest.Fixtures
 
   defmodule EmitDirectiveAction do
     @moduledoc false
@@ -45,7 +35,7 @@ defmodule JidoTest.AgentServer.TelemetryTest do
 
     def signal_routes do
       [
-        {"increment", IncrementAction},
+        {"increment", Fixtures.IncrementAction},
         {"emit_directive", EmitDirectiveAction},
         {"schedule_directive", ScheduleDirectiveAction}
       ]

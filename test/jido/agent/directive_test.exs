@@ -183,46 +183,62 @@ defmodule JidoTest.Agent.DirectiveTest do
     end
   end
 
-  describe "directive structs" do
-    test "Emit struct fields" do
-      emit = %Directive.Emit{signal: %{type: "test"}, dispatch: nil}
-      assert emit.signal == %{type: "test"}
-      assert emit.dispatch == nil
+  describe "cron/3" do
+    test "creates Cron directive with defaults" do
+      directive = Directive.cron("* * * * *", :tick)
+      assert %Directive.Cron{} = directive
+      assert directive.cron == "* * * * *"
+      assert directive.message == :tick
+      assert directive.job_id == nil
+      assert directive.timezone == nil
     end
 
-    test "Error struct fields" do
-      error = %Directive.Error{error: %{msg: "fail"}, context: :test}
-      assert error.error == %{msg: "fail"}
-      assert error.context == :test
+    test "creates Cron directive with job_id" do
+      directive = Directive.cron("@daily", :cleanup, job_id: :daily_cleanup)
+      assert directive.cron == "@daily"
+      assert directive.message == :cleanup
+      assert directive.job_id == :daily_cleanup
     end
 
-    test "Schedule struct fields" do
-      schedule = %Directive.Schedule{delay_ms: 100, message: :tick}
-      assert schedule.delay_ms == 100
-      assert schedule.message == :tick
+    test "creates Cron directive with timezone" do
+      directive = Directive.cron("0 9 * * MON", :weekly, timezone: "America/New_York")
+      assert directive.timezone == "America/New_York"
     end
 
-    test "Stop struct fields" do
-      stop = %Directive.Stop{reason: :normal}
-      assert stop.reason == :normal
+    test "creates Cron directive with all options" do
+      directive = Directive.cron("*/5 * * * *", :check, job_id: :health, timezone: "UTC")
+      assert directive.job_id == :health
+      assert directive.timezone == "UTC"
     end
+  end
 
-    test "Spawn struct fields" do
-      spawn_d = %Directive.Spawn{child_spec: {MyWorker, []}, tag: :w1}
-      assert spawn_d.child_spec == {MyWorker, []}
-      assert spawn_d.tag == :w1
+  describe "cron_cancel/1" do
+    test "creates CronCancel directive" do
+      directive = Directive.cron_cancel(:heartbeat)
+      assert %Directive.CronCancel{} = directive
+      assert directive.job_id == :heartbeat
     end
+  end
 
-    test "SpawnAgent struct fields" do
-      spawn_a = %Directive.SpawnAgent{agent: MyAgent, tag: :child, opts: %{}, meta: %{}}
-      assert spawn_a.agent == MyAgent
-      assert spawn_a.tag == :child
-    end
+  describe "schema functions" do
+    @schema_modules [
+      Directive.Emit,
+      Directive.Error,
+      Directive.Spawn,
+      Directive.SpawnAgent,
+      Directive.StopChild,
+      Directive.Schedule,
+      Directive.Stop,
+      Directive.Cron,
+      Directive.CronCancel
+    ]
 
-    test "StopChild struct fields" do
-      stop_c = %Directive.StopChild{tag: :child, reason: :normal}
-      assert stop_c.tag == :child
-      assert stop_c.reason == :normal
+    for module <- @schema_modules do
+      @module module
+      test "#{inspect(@module)}.schema/0 returns Zoi schema" do
+        schema = @module.schema()
+        assert is_struct(schema)
+      end
     end
   end
 end

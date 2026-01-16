@@ -193,7 +193,36 @@ defmodule JidoTest.ErrorTest do
   end
 
   describe "to_map/1" do
-    test "converts validation error to map" do
+    @to_map_cases [
+      # {description, error_expr, expected_type}
+      {"validation error with field", Error.validation_error("Invalid", field: :email),
+       :validation_error},
+      {"validation error with kind: :action",
+       Error.validation_error("Bad action", action: SomeAction), :invalid_action},
+      {"validation error with kind: :sensor",
+       Error.validation_error("Bad sensor", sensor: SomeSensor), :invalid_sensor},
+      {"validation error with kind: :config", Error.validation_error("Bad config", kind: :config),
+       :config_error},
+      {"execution error", Error.execution_error("Failed"), :execution_error},
+      {"execution error with phase: :planning",
+       Error.execution_error("Planning failed", phase: :planning), :planning_error},
+      {"routing error", Error.routing_error("Route not found", target: :agent), :routing_error},
+      {"timeout error", Error.timeout_error("Timed out", timeout: 5000), :timeout},
+      {"internal error", Error.internal_error("Internal"), :internal}
+    ]
+
+    for {desc, error, expected_type} <- @to_map_cases do
+      @desc desc
+      @error error
+      @expected_type expected_type
+
+      test "converts #{@desc} to map with type #{@expected_type}" do
+        result = Error.to_map(@error)
+        assert result.type == @expected_type
+      end
+    end
+
+    test "converts validation error to map with message and stacktrace" do
       error = Error.validation_error("Invalid", field: :email)
       result = Error.to_map(error)
 
@@ -202,68 +231,12 @@ defmodule JidoTest.ErrorTest do
       assert is_list(result.stacktrace)
     end
 
-    test "converts validation error with kind: :action to :invalid_action" do
-      error = Error.validation_error("Bad action", action: SomeAction)
-      result = Error.to_map(error)
-
-      assert result.type == :invalid_action
-    end
-
-    test "converts validation error with kind: :sensor to :invalid_sensor" do
-      error = Error.validation_error("Bad sensor", sensor: SomeSensor)
-      result = Error.to_map(error)
-
-      assert result.type == :invalid_sensor
-    end
-
-    test "converts validation error with kind: :config to :config_error" do
-      error = Error.validation_error("Bad config", kind: :config)
-      result = Error.to_map(error)
-
-      assert result.type == :config_error
-    end
-
-    test "converts execution error to map" do
-      error = Error.execution_error("Failed")
-      result = Error.to_map(error)
-
-      assert result.type == :execution_error
-    end
-
-    test "converts execution error with phase: :planning to :planning_error" do
-      error = Error.execution_error("Planning failed", phase: :planning)
-      result = Error.to_map(error)
-
-      assert result.type == :planning_error
-    end
-
-    test "converts routing error to map" do
-      error = Error.routing_error("Route not found", target: :agent)
-      result = Error.to_map(error)
-
-      assert result.type == :routing_error
-    end
-
-    test "converts timeout error to map" do
-      error = Error.timeout_error("Timed out", timeout: 5000)
-      result = Error.to_map(error)
-
-      assert result.type == :timeout
-    end
-
     test "converts compensation error to map" do
       original = Error.execution_error("Original")
       error = Error.compensation_error("Compensated", original_error: original, compensated: true)
       result = Error.to_map(error)
 
       assert result.type == :compensation_error
-    end
-
-    test "converts internal error to map" do
-      error = Error.internal_error("Internal")
-      result = Error.to_map(error)
-
-      assert result.type == :internal
     end
 
     test "handles unknown struct" do

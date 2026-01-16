@@ -189,6 +189,60 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
 
       assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
     end
+
+    test "handles spawn returning {:ok, pid, info} tuple", %{
+      input_signal: input_signal,
+      agent: agent,
+      jido: jido
+    } do
+      test_pid = self()
+
+      spawn_fun = fn child_spec ->
+        send(test_pid, {:spawn_called, child_spec})
+        {:ok, spawn(fn -> :ok end), %{extra: :info}}
+      end
+
+      {:ok, opts} =
+        Options.new(%{
+          agent: agent,
+          id: "test-agent-spawn-info",
+          spawn_fun: spawn_fun,
+          jido: jido
+        })
+
+      {:ok, state} = State.from_options(opts, agent.__struct__, agent)
+
+      child_spec = {Task, fn -> :ok end}
+      directive = %Directive.Spawn{child_spec: child_spec, tag: :worker}
+
+      assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
+      assert_receive {:spawn_called, ^child_spec}
+    end
+
+    test "handles spawn returning :ignored", %{
+      input_signal: input_signal,
+      agent: agent,
+      jido: jido
+    } do
+      spawn_fun = fn _child_spec ->
+        :ignored
+      end
+
+      {:ok, opts} =
+        Options.new(%{
+          agent: agent,
+          id: "test-agent-spawn-ignored",
+          spawn_fun: spawn_fun,
+          jido: jido
+        })
+
+      {:ok, state} = State.from_options(opts, agent.__struct__, agent)
+
+      child_spec = {Task, fn -> :ok end}
+      directive = %Directive.Spawn{child_spec: child_spec, tag: :worker}
+
+      assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
+    end
   end
 
   describe "Schedule directive" do
@@ -223,6 +277,110 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
 
       assert {:stop, {:shutdown, :user_requested}, ^state} =
                DirectiveExec.exec(directive, input_signal, state)
+    end
+  end
+
+  describe "SpawnAgent directive" do
+    test "spawns child agent with module", %{state: state, input_signal: input_signal} do
+      directive = %Directive.SpawnAgent{
+        agent: TestAgent,
+        tag: :child_worker,
+        opts: %{},
+        meta: %{role: :worker}
+      }
+
+      assert {:ok, new_state} = DirectiveExec.exec(directive, input_signal, state)
+      assert Map.has_key?(new_state.children, :child_worker)
+      child_info = new_state.children[:child_worker]
+      assert child_info.module == TestAgent
+      assert child_info.tag == :child_worker
+      assert child_info.meta == %{role: :worker}
+      assert is_pid(child_info.pid)
+
+      GenServer.stop(child_info.pid)
+    end
+
+    test "spawns child agent with struct agent (resolve_agent_module for struct)", %{
+      state: state,
+      input_signal: input_signal
+    } do
+      agent_struct = TestAgent.new()
+
+      directive = %Directive.SpawnAgent{
+        agent: agent_struct,
+        tag: :struct_child,
+        opts: %{},
+        meta: %{}
+      }
+
+      assert {:ok, new_state} = DirectiveExec.exec(directive, input_signal, state)
+      assert Map.has_key?(new_state.children, :struct_child)
+      child_info = new_state.children[:struct_child]
+      # resolve_agent_module extracts __struct__ from the agent struct
+      assert child_info.module == agent_struct.__struct__
+      assert is_pid(child_info.pid)
+
+      # Stop the child - catch potential exit as process may be in init
+      catch_exit do
+        GenServer.stop(child_info.pid, :normal, 100)
+      end
+    end
+
+    test "handles spawn failure gracefully", %{state: state, input_signal: input_signal} do
+      directive = %Directive.SpawnAgent{
+        agent: NonExistentAgentModule,
+        tag: :failing_child,
+        opts: %{},
+        meta: %{}
+      }
+
+      assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
+      refute Map.has_key?(state.children, :failing_child)
+    end
+
+    test "resolve_agent_module handles non-module non-struct agent (unknown type)", %{
+      state: state,
+      input_signal: input_signal
+    } do
+      # Pass a string as agent to hit the fallback resolve_agent_module/1 clause
+      directive = %Directive.SpawnAgent{
+        agent: "not_a_module_or_struct",
+        tag: :unknown_agent,
+        opts: %{},
+        meta: %{}
+      }
+
+      # This will fail to spawn but should handle gracefully
+      assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
+    end
+  end
+
+  describe "StopChild directive" do
+    test "stops existing child", %{state: state, input_signal: input_signal} do
+      spawn_directive = %Directive.SpawnAgent{
+        agent: TestAgent,
+        tag: :child_to_stop,
+        opts: %{},
+        meta: %{}
+      }
+
+      {:ok, state_with_child} = DirectiveExec.exec(spawn_directive, input_signal, state)
+      assert Map.has_key?(state_with_child.children, :child_to_stop)
+      child_pid = state_with_child.children[:child_to_stop].pid
+
+      stop_directive = %Directive.StopChild{tag: :child_to_stop, reason: :normal}
+
+      assert {:ok, ^state_with_child} =
+               DirectiveExec.exec(stop_directive, input_signal, state_with_child)
+
+      Process.sleep(50)
+      refute Process.alive?(child_pid)
+    end
+
+    test "returns ok when child tag not found", %{state: state, input_signal: input_signal} do
+      directive = %Directive.StopChild{tag: :nonexistent_child, reason: :normal}
+
+      assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
     end
   end
 

@@ -1,21 +1,14 @@
 defmodule JidoTest.AgentPoolTest do
   use ExUnit.Case, async: true
 
+  import JidoTest.Eventually
+
   @moduletag :capture_log
 
   alias Jido.AgentPool
   alias Jido.AgentServer
   alias Jido.Signal
-
-  defmodule IncrementAction do
-    @moduledoc false
-    use Jido.Action, name: "increment", schema: []
-
-    def run(_params, context) do
-      count = Map.get(context.state, :counter, 0)
-      {:ok, %{counter: count + 1}}
-    end
-  end
+  alias JidoTest.Fixtures
 
   defmodule GetCountAction do
     @moduledoc false
@@ -37,7 +30,7 @@ defmodule JidoTest.AgentPoolTest do
 
     def signal_routes do
       [
-        {"increment", IncrementAction},
+        {"increment", Fixtures.IncrementAction},
         {"get_count", GetCountAction}
       ]
     end
@@ -196,11 +189,12 @@ defmodule JidoTest.AgentPoolTest do
       signal = Signal.new!("increment", %{}, source: "/test")
       assert :ok = AgentPool.cast(jido_name, :test_pool, signal)
 
-      Process.sleep(50)
-
       get_signal = Signal.new!("get_count", %{}, source: "/test")
-      {:ok, agent} = AgentPool.call(jido_name, :test_pool, get_signal)
-      assert agent.state.counter >= 1
+
+      eventually(fn ->
+        {:ok, agent} = AgentPool.call(jido_name, :test_pool, get_signal)
+        agent.state.counter >= 1
+      end)
 
       Supervisor.stop(jido_pid)
     end

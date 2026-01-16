@@ -131,10 +131,7 @@ defmodule JidoTest.AgentServer.StrategyInitTest do
     test "directives from init/2 are processed", %{jido: jido} do
       {:ok, pid} = AgentServer.start_link(agent: DirectiveAgent, jido: jido)
 
-      Process.sleep(20)
-
-      {:ok, state} = AgentServer.state(pid)
-      assert state.agent.state.__strategy__.initialized == true
+      eventually_state(pid, fn state -> state.agent.state.__strategy__.initialized == true end)
 
       GenServer.stop(pid)
     end

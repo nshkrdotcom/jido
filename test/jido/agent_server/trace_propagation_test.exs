@@ -5,16 +5,7 @@ defmodule JidoTest.AgentServer.TracePropagationTest do
   alias Jido.Agent.Directive
   alias Jido.Signal
   alias Jido.Tracing.Trace
-
-  defmodule IncrementAction do
-    @moduledoc false
-    use Jido.Action, name: "increment", schema: []
-
-    def run(_params, context) do
-      count = Map.get(context.state, :counter, 0)
-      {:ok, %{counter: count + 1}}
-    end
-  end
+  alias JidoTest.Fixtures
 
   defmodule EmitAction do
     @moduledoc false
@@ -37,7 +28,7 @@ defmodule JidoTest.AgentServer.TracePropagationTest do
 
     def signal_routes do
       [
-        {"increment", IncrementAction},
+        {"increment", Fixtures.IncrementAction},
         {"emit", EmitAction}
       ]
     end

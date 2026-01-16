@@ -1,0 +1,86 @@
+if Code.ensure_loaded?(Igniter) do
+  defmodule Mix.Tasks.Jido.Install do
+    @shortdoc "Installs Jido in your project"
+
+    @moduledoc """
+    Installs and configures Jido in your project.
+
+        $ mix jido.install
+
+    This task will:
+
+    1. Add Jido configuration to `config/config.exs`
+    2. Optionally add `Jido.Bus.InMemory` to your application's supervision tree
+    3. Optionally generate an example agent
+
+    ## Options
+
+    - `--no-supervisor` - Skip adding Jido bus to the supervision tree
+    - `--example` - Generate an example agent module
+
+    ## Examples
+
+        $ mix jido.install
+        $ mix jido.install --example
+        $ mix jido.install --no-supervisor
+    """
+
+    use Igniter.Mix.Task
+
+    @impl Igniter.Mix.Task
+    def info(_argv, _composing_task) do
+      %Igniter.Mix.Task.Info{
+        group: :jido,
+        adds_deps: [],
+        installs: [],
+        schema: [
+          no_supervisor: :boolean,
+          example: :boolean
+        ],
+        defaults: [
+          no_supervisor: false,
+          example: false
+        ],
+        example: "mix jido.install"
+      }
+    end
+
+    @impl Igniter.Mix.Task
+    def igniter(igniter) do
+      options = igniter.args.options
+      app_name = Igniter.Project.Application.app_name(igniter)
+
+      igniter =
+        igniter
+        |> Igniter.Project.Config.configure_new(
+          "config.exs",
+          :jido,
+          [:default_bus],
+          :jido_bus
+        )
+
+      igniter =
+        if options[:no_supervisor] do
+          igniter
+        else
+          Igniter.Project.Application.add_new_child(
+            igniter,
+            {Jido.Bus.InMemory, name: :jido_bus},
+            after: [Ecto.Repo, Phoenix.PubSub]
+          )
+        end
+
+      igniter =
+        if options[:example] do
+          example_module =
+            Module.concat([Macro.camelize(to_string(app_name)), "Agents", "Example"])
+
+          Igniter.compose_task(igniter, "jido.gen.agent", [inspect(example_module)])
+        else
+          igniter
+        end
+
+      igniter
+    end
+  end
+end

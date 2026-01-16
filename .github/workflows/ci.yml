@@ -21,4 +21,4 @@ jobs:
     with:
       otp_versions: '["27", "28"]'
       elixir_versions: '["1.18", "1.19"]'
-      test_command: mix test
+      test_command: mix deps.compile req_llm --force && mix test

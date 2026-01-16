@@ -940,9 +940,10 @@ defmodule JidoTest.AgentServerTest do
       cron_pid = Map.get(state.cron_jobs, job_id)
       assert Process.alive?(cron_pid)
 
+      cron_ref = Process.monitor(cron_pid)
       GenServer.stop(pid)
-      Process.sleep(50)
 
+      assert_receive {:DOWN, ^cron_ref, :process, ^cron_pid, _reason}, 1000
       refute Process.alive?(cron_pid)
     end
 

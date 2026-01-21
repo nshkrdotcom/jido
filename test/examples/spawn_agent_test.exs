@@ -25,10 +25,10 @@ defmodule JidoExampleTest.SpawnAgentTest do
   @moduletag :example
   @moduletag timeout: 20_000
 
-  alias Jido.Signal
   alias Jido.Agent.Directive
   alias Jido.AgentServer
   alias Jido.AgentServer.ParentRef
+  alias Jido.Signal
 
   # ===========================================================================
   # ACTIONS: Parent actions for spawning and managing children
@@ -241,7 +241,7 @@ defmodule JidoExampleTest.SpawnAgentTest do
       child_info = await_child(parent_pid, :notified_worker)
 
       eventually_state(parent_pid, fn state ->
-        length(state.agent.state.child_started_events) > 0
+        state.agent.state.child_started_events != []
       end)
 
       {:ok, state} = AgentServer.state(parent_pid)
@@ -321,7 +321,7 @@ defmodule JidoExampleTest.SpawnAgentTest do
       assert child_agent.state.last_task == "process data"
 
       eventually_state(parent_pid, fn state ->
-        length(state.agent.state.worker_results) > 0
+        state.agent.state.worker_results != []
       end)
 
       {:ok, parent_state} = AgentServer.state(parent_pid)

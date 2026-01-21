@@ -65,14 +65,16 @@ defmodule JidoTest.Eventually do
   """
   def eventually_state(pid, fun, opts \\ []) do
     eventually(
-      fn ->
-        case Jido.AgentServer.state(pid) do
-          {:ok, state} -> if fun.(state), do: state, else: false
-          _ -> false
-        end
-      end,
+      fn -> check_state(pid, fun) end,
       opts
     )
+  end
+
+  defp check_state(pid, fun) do
+    case Jido.AgentServer.state(pid) do
+      {:ok, state} -> if fun.(state), do: state, else: false
+      _ -> false
+    end
   end
 
   @doc """

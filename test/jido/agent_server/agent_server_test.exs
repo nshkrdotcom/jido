@@ -3,9 +3,9 @@ defmodule JidoTest.AgentServerTest do
 
   @moduletag :capture_log
 
+  alias Jido.Agent.Directive
   alias Jido.AgentServer
   alias Jido.AgentServer.State
-  alias Jido.Agent.Directive
   alias Jido.Signal
   alias JidoTest.TestActions
 

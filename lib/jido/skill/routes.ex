@@ -203,23 +203,31 @@ defmodule Jido.Skill.Routes do
       winner = Enum.max_by(replace_routes, fn {_, _, priority, _} -> priority end)
       {:ok, winner}
     else
-      sorted = Enum.sort_by(routes, fn {_, _, priority, _} -> priority end, :desc)
-      [highest | rest] = sorted
-
-      {_, _, highest_priority, _} = highest
-      same_priority = Enum.filter(rest, fn {_, _, p, _} -> p == highest_priority end)
-
-      if same_priority == [] do
-        {:ok, highest}
-      else
-        targets =
-          [highest | same_priority]
-          |> Enum.map(fn {_, target, _, _} -> inspect(target) end)
-          |> Enum.join(", ")
-
-        {:error,
-         "Route conflict: '#{path}' defined multiple times with same priority #{highest_priority} (targets: #{targets})"}
-      end
+      resolve_by_priority(path, routes)
     end
+  end
+
+  defp resolve_by_priority(path, routes) do
+    sorted = Enum.sort_by(routes, fn {_, _, priority, _} -> priority end, :desc)
+    [highest | rest] = sorted
+
+    {_, _, highest_priority, _} = highest
+    same_priority = Enum.filter(rest, fn {_, _, p, _} -> p == highest_priority end)
+
+    if same_priority == [] do
+      {:ok, highest}
+    else
+      build_conflict_error(path, highest, same_priority, highest_priority)
+    end
+  end
+
+  defp build_conflict_error(path, highest, same_priority, priority) do
+    targets =
+      Enum.map_join([highest | same_priority], ", ", fn {_, target, _, _} ->
+        inspect(target)
+      end)
+
+    {:error,
+     "Route conflict: '#{path}' defined multiple times with same priority #{priority} (targets: #{targets})"}
   end
 end

@@ -1,6 +1,8 @@
 defmodule Jido do
   use Supervisor
 
+  alias Jido.Agent.WorkerPool
+
   @moduledoc """
   自動 (Jido) - A foundational framework for building autonomous, distributed agent systems in Elixir.
 
@@ -201,7 +203,7 @@ defmodule Jido do
     ]
 
     pool_children =
-      Jido.Agent.WorkerPool.build_pool_child_specs(name, Keyword.get(opts, :agent_pools, []))
+      WorkerPool.build_pool_child_specs(name, Keyword.get(opts, :agent_pools, []))
 
     Supervisor.init(base_children ++ pool_children, strategy: :one_for_one)
   end

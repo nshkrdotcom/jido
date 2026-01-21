@@ -19,6 +19,9 @@ if Code.ensure_loaded?(Igniter) do
 
     use Igniter.Mix.Task
 
+    alias Igniter.Project.Module, as: IgniterModule
+    alias Jido.Igniter.Helpers
+
     @impl Igniter.Mix.Task
     def info(_argv, _composing_task) do
       %Igniter.Mix.Task.Info{
@@ -40,12 +43,12 @@ if Code.ensure_loaded?(Igniter) do
       positional = igniter.args.positional
 
       module_name = positional[:module]
-      module = Igniter.Project.Module.parse(module_name)
-      name = Jido.Igniter.Helpers.module_to_name(module_name)
+      module = IgniterModule.parse(module_name)
+      name = Helpers.module_to_name(module_name)
 
       skills =
         options[:skills]
-        |> Jido.Igniter.Helpers.parse_list()
+        |> Helpers.parse_list()
         |> Enum.map(&String.to_atom/1)
 
       skills_opt =
@@ -66,7 +69,7 @@ if Code.ensure_loaded?(Igniter) do
       """
 
       test_module_name = "JidoTest.#{module_name |> String.replace(~r/^.*?\./, "")}"
-      test_module = Igniter.Project.Module.parse(test_module_name)
+      test_module = IgniterModule.parse(test_module_name)
 
       agent_alias = module |> Module.split() |> List.last()
 
@@ -91,8 +94,8 @@ if Code.ensure_loaded?(Igniter) do
       """
 
       igniter
-      |> Igniter.Project.Module.create_module(module, contents)
-      |> Igniter.Project.Module.create_module(test_module, test_contents, location: :test)
+      |> IgniterModule.create_module(module, contents)
+      |> IgniterModule.create_module(test_module, test_contents, location: :test)
     end
   end
 end

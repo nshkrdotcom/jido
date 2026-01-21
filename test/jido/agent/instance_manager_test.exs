@@ -7,6 +7,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
   @moduletag :integration
 
   alias Jido.Agent.InstanceManager
+  alias Jido.Agent.Store.ETS
   alias Jido.AgentServer
 
   # Use module attribute for manager naming to avoid atom leaks
@@ -344,7 +345,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
       # Verify state was persisted to ETS
       store_key = {TestAgent, "stop-persist-key"}
 
-      case Jido.Agent.Store.ETS.get(store_key, table: table) do
+      case ETS.get(store_key, table: table) do
         {:ok, persisted} ->
           # Persisted data should contain the counter
           assert persisted.state.counter == 42

@@ -13,6 +13,7 @@ defmodule Jido.AgentServer.ErrorPolicy do
 
   alias Jido.Agent.Directive.Error, as: ErrorDirective
   alias Jido.AgentServer.State
+  alias Jido.Signal.Dispatch, as: SignalDispatch
 
   @type result :: {:ok, State.t()} | {:stop, term(), State.t()}
 
@@ -61,12 +62,12 @@ defmodule Jido.AgentServer.ErrorPolicy do
   defp emit_error_signal(error, context, state, dispatch_cfg) do
     signal = build_error_signal(error, context, state)
 
-    if Code.ensure_loaded?(Jido.Signal.Dispatch) do
+    if Code.ensure_loaded?(SignalDispatch) do
       task_supervisor =
         if state.jido, do: Jido.task_supervisor_name(state.jido), else: Jido.TaskSupervisor
 
       Task.Supervisor.start_child(task_supervisor, fn ->
-        Jido.Signal.Dispatch.dispatch(signal, dispatch_cfg)
+        SignalDispatch.dispatch(signal, dispatch_cfg)
       end)
     else
       Logger.warning("Jido.Signal.Dispatch not available, skipping error signal emit")

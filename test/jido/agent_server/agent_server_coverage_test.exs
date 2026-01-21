@@ -18,6 +18,7 @@ defmodule JidoTest.AgentServerCoverageTest do
 
   alias Jido.AgentServer
   alias Jido.Signal
+  alias JidoTest.TestAgents.Counter
 
   # Simple test agent with defaults
   defmodule SimpleTestAgent do
@@ -201,7 +202,7 @@ defmodule JidoTest.AgentServerCoverageTest do
     test "via tuple that exists works", %{jido: jido} do
       {:ok, _pid} =
         AgentServer.start_link(
-          agent: JidoTest.TestAgents.Counter,
+          agent: Counter,
           id: "via-test-exists",
           jido: jido
         )
@@ -269,20 +270,20 @@ defmodule JidoTest.AgentServerCoverageTest do
 
   describe "pre-built struct with agent_module option" do
     test "uses explicit agent_module for cmd routing", %{jido: jido} do
-      agent = JidoTest.TestAgents.Counter.new(id: "prebuilt-struct-test")
+      agent = Counter.new(id: "prebuilt-struct-test")
       agent = %{agent | state: Map.put(agent.state, :counter, 50)}
 
       {:ok, pid} =
         AgentServer.start_link(
           agent: agent,
-          agent_module: JidoTest.TestAgents.Counter,
+          agent_module: Counter,
           jido: jido
         )
 
       {:ok, state} = AgentServer.state(pid)
       assert state.id == "prebuilt-struct-test"
       assert state.agent.state.counter == 50
-      assert state.agent_module == JidoTest.TestAgents.Counter
+      assert state.agent_module == Counter
 
       signal = Signal.new!("increment", %{}, source: "/test")
       {:ok, updated_agent} = AgentServer.call(pid, signal)
@@ -400,7 +401,7 @@ defmodule JidoTest.AgentServerCoverageTest do
     test "alive? returns true for existing via tuple", %{jido: jido} do
       {:ok, _pid} =
         AgentServer.start_link(
-          agent: JidoTest.TestAgents.Counter,
+          agent: Counter,
           id: "alive-via-test",
           jido: jido
         )

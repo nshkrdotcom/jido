@@ -129,12 +129,14 @@ defmodule Jido.Agent do
   Server/OTP integration is handled separately by `Jido.AgentServer`.
   """
 
+  alias Jido.Action.Schema
   alias Jido.Agent
   alias Jido.Agent.Directive
   alias Jido.Agent.State, as: StateHelper
-  alias Jido.Action.Schema
   alias Jido.Error
   alias Jido.Instruction
+  alias Jido.Skill.Instance, as: SkillInstance
+  alias Jido.Skill.Requirements, as: SkillRequirements
 
   require OK
 
@@ -293,147 +295,28 @@ defmodule Jido.Agent do
 
   @optional_callbacks [on_before_cmd: 2, on_after_cmd: 3, signal_routes: 0]
 
-  defmacro __using__(opts) do
+  # Helper functions that generate quoted code for the __using__ macro.
+  # This approach reduces the size of the main quote block to avoid
+  # "long quote blocks" and "nested too deep" Credo warnings.
+
+  @doc false
+  def __quoted_module_setup__ do
     quote location: :keep do
       @behaviour Jido.Agent
 
       alias Jido.Agent
+      alias Jido.Agent.State, as: AgentState
+      alias Jido.Agent.Strategy, as: AgentStrategy
       alias Jido.Instruction
+      alias Jido.Skill.Requirements, as: SkillRequirements
 
       require OK
+    end
+  end
 
-      # Validate config at compile time
-      @validated_opts (case Zoi.parse(Agent.config_schema(), Map.new(unquote(opts))) do
-                         {:ok, validated} ->
-                           validated
-
-                         {:error, errors} ->
-                           message =
-                             "Invalid Agent configuration for #{inspect(__MODULE__)}: #{inspect(errors)}"
-
-                           raise CompileError,
-                             description: message,
-                             file: __ENV__.file,
-                             line: __ENV__.line
-                       end)
-
-      # Normalize skills to Instance structs
-      @skill_instances Enum.map(@validated_opts[:skills] || [], fn skill_decl ->
-                         # Extract module for validation first
-                         mod =
-                           case skill_decl do
-                             m when is_atom(m) -> m
-                             {m, _} -> m
-                           end
-
-                         case Code.ensure_compiled(mod) do
-                           {:module, _} ->
-                             unless function_exported?(mod, :skill_spec, 1) do
-                               raise CompileError,
-                                 description:
-                                   "#{inspect(mod)} does not implement Jido.Skill (missing skill_spec/1)",
-                                 file: __ENV__.file,
-                                 line: __ENV__.line
-                             end
-
-                           {:error, reason} ->
-                             raise CompileError,
-                               description:
-                                 "Skill #{inspect(mod)} could not be compiled: #{inspect(reason)}",
-                               file: __ENV__.file,
-                               line: __ENV__.line
-                         end
-
-                         Jido.Skill.Instance.new(skill_decl)
-                       end)
-
-      # Build skill specs from instances (for backward compatibility)
-      @skill_specs Enum.map(@skill_instances, fn instance ->
-                     instance.module.skill_spec(instance.config)
-                     |> Map.put(:state_key, instance.state_key)
-                   end)
-
-      # Validate unique state_keys (now derived from instances)
-      @skill_state_keys Enum.map(@skill_instances, & &1.state_key)
-      @duplicate_keys @skill_state_keys -- Enum.uniq(@skill_state_keys)
-      if @duplicate_keys != [] do
-        raise CompileError,
-          description: "Duplicate skill state_keys: #{inspect(@duplicate_keys)}",
-          file: __ENV__.file,
-          line: __ENV__.line
-      end
-
-      # Validate no collision with base schema keys
-      @base_schema_keys Jido.Agent.Schema.known_keys(@validated_opts[:schema])
-      @colliding_keys Enum.filter(@skill_state_keys, &(&1 in @base_schema_keys))
-      if @colliding_keys != [] do
-        raise CompileError,
-          description: "Skill state_keys collide with agent schema: #{inspect(@colliding_keys)}",
-          file: __ENV__.file,
-          line: __ENV__.line
-      end
-
-      # Merge schemas: base schema + nested skill schemas
-      @merged_schema Jido.Agent.Schema.merge_with_skills(
-                       @validated_opts[:schema],
-                       @skill_specs
-                     )
-
-      # Aggregate actions from skills
-      @skill_actions @skill_specs |> Enum.flat_map(& &1.actions) |> Enum.uniq()
-
-      # Expand routes from all skill instances
-      @expanded_skill_routes Enum.flat_map(@skill_instances, &Jido.Skill.Routes.expand_routes/1)
-
-      # Expand schedules from all skill instances
-      @expanded_skill_schedules Enum.flat_map(
-                                  @skill_instances,
-                                  &Jido.Skill.Schedules.expand_schedules/1
-                                )
-
-      # Generate routes for schedule signal types (low priority)
-      @schedule_routes Enum.flat_map(@skill_instances, &Jido.Skill.Schedules.schedule_routes/1)
-
-      # Combine routes and schedule routes for conflict detection
-      @all_skill_routes @expanded_skill_routes ++ @schedule_routes
-
-      @skill_routes_result Jido.Skill.Routes.detect_conflicts(@all_skill_routes)
-      case @skill_routes_result do
-        {:error, conflicts} ->
-          conflict_list = Enum.join(conflicts, "\n  - ")
-
-          raise CompileError,
-            description: "Route conflicts detected:\n  - #{conflict_list}",
-            file: __ENV__.file,
-            line: __ENV__.line
-
-        {:ok, _routes} ->
-          :ok
-      end
-
-      @validated_skill_routes elem(@skill_routes_result, 1)
-
-      # Validate skill requirements at compile time
-      @skill_config_map Enum.reduce(@skill_instances, %{}, fn instance, acc ->
-                          Map.put(acc, instance.state_key, instance.config)
-                        end)
-      @requirements_result Jido.Skill.Requirements.validate_all_requirements(
-                             @skill_instances,
-                             @skill_config_map
-                           )
-      case @requirements_result do
-        {:error, missing_by_skill} ->
-          error_msg = Jido.Skill.Requirements.format_error(missing_by_skill)
-
-          raise CompileError,
-            description: error_msg,
-            file: __ENV__.file,
-            line: __ENV__.line
-
-        {:ok, :valid} ->
-          :ok
-      end
-
+  @doc false
+  def __quoted_basic_accessors__ do
+    quote location: :keep do
       @doc "Returns the agent's name."
       @spec name() :: String.t()
       def name, do: @validated_opts.name
@@ -457,7 +340,22 @@ defmodule Jido.Agent do
       @doc "Returns the merged schema (base + skill schemas)."
       @spec schema() :: Zoi.schema() | keyword()
       def schema, do: @merged_schema
+    end
+  end
 
+  @doc false
+  def __quoted_skill_accessors__ do
+    basic_skill_accessors = __quoted_basic_skill_accessors__()
+    computed_skill_accessors = __quoted_computed_skill_accessors__()
+
+    quote location: :keep do
+      unquote(basic_skill_accessors)
+      unquote(computed_skill_accessors)
+    end
+  end
+
+  defp __quoted_basic_skill_accessors__ do
+    quote location: :keep do
       @doc """
       Returns the list of skill modules attached to this agent (deduplicated).
 
@@ -487,7 +385,11 @@ defmodule Jido.Agent do
       @doc "Returns the list of actions from all attached skills."
       @spec actions() :: [module()]
       def actions, do: @skill_actions
+    end
+  end
 
+  defp __quoted_computed_skill_accessors__ do
+    quote location: :keep do
       @doc """
       Returns the union of all capabilities from all mounted skill instances.
 
@@ -529,7 +431,26 @@ defmodule Jido.Agent do
       @doc "Returns the expanded skill schedules."
       @spec skill_schedules() :: [Jido.Skill.Schedules.schedule_spec()]
       def skill_schedules, do: @expanded_skill_schedules
+    end
+  end
 
+  @doc false
+  def __quoted_skill_config_accessors__ do
+    skill_config_public = __quoted_skill_config_public__()
+    skill_config_helpers = __quoted_skill_config_helpers__()
+    skill_state_public = __quoted_skill_state_public__()
+    skill_state_helpers = __quoted_skill_state_helpers__()
+
+    quote location: :keep do
+      unquote(skill_config_public)
+      unquote(skill_config_helpers)
+      unquote(skill_state_public)
+      unquote(skill_state_helpers)
+    end
+  end
+
+  defp __quoted_skill_config_public__ do
+    quote location: :keep do
       @doc """
       Returns the configuration for a specific skill.
 
@@ -537,16 +458,7 @@ defmodule Jido.Agent do
       """
       @spec skill_config(module() | {module(), atom()}) :: map() | nil
       def skill_config(skill_mod) when is_atom(skill_mod) do
-        case Enum.find(@skill_instances, &(&1.module == skill_mod and is_nil(&1.as))) do
-          nil ->
-            case Enum.find(@skill_instances, &(&1.module == skill_mod)) do
-              nil -> nil
-              instance -> instance.config
-            end
-
-          instance ->
-            instance.config
-        end
+        __find_skill_config_by_module__(skill_mod)
       end
 
       def skill_config({skill_mod, as_alias}) when is_atom(skill_mod) and is_atom(as_alias) do
@@ -555,7 +467,29 @@ defmodule Jido.Agent do
           instance -> instance.config
         end
       end
+    end
+  end
 
+  defp __quoted_skill_config_helpers__ do
+    quote location: :keep do
+      defp __find_skill_config_by_module__(skill_mod) do
+        case Enum.find(@skill_instances, &(&1.module == skill_mod and is_nil(&1.as))) do
+          nil -> __find_skill_config_fallback__(skill_mod)
+          instance -> instance.config
+        end
+      end
+
+      defp __find_skill_config_fallback__(skill_mod) do
+        case Enum.find(@skill_instances, &(&1.module == skill_mod)) do
+          nil -> nil
+          instance -> instance.config
+        end
+      end
+    end
+  end
+
+  defp __quoted_skill_state_public__ do
+    quote location: :keep do
       @doc """
       Returns the state slice for a specific skill.
 
@@ -563,16 +497,7 @@ defmodule Jido.Agent do
       """
       @spec skill_state(Agent.t(), module() | {module(), atom()}) :: map() | nil
       def skill_state(agent, skill_mod) when is_atom(skill_mod) do
-        case Enum.find(@skill_instances, &(&1.module == skill_mod and is_nil(&1.as))) do
-          nil ->
-            case Enum.find(@skill_instances, &(&1.module == skill_mod)) do
-              nil -> nil
-              instance -> Map.get(agent.state, instance.state_key)
-            end
-
-          instance ->
-            Map.get(agent.state, instance.state_key)
-        end
+        __find_skill_state_by_module__(agent, skill_mod)
       end
 
       def skill_state(agent, {skill_mod, as_alias})
@@ -582,7 +507,30 @@ defmodule Jido.Agent do
           instance -> Map.get(agent.state, instance.state_key)
         end
       end
+    end
+  end
 
+  defp __quoted_skill_state_helpers__ do
+    quote location: :keep do
+      defp __find_skill_state_by_module__(agent, skill_mod) do
+        case Enum.find(@skill_instances, &(&1.module == skill_mod and is_nil(&1.as))) do
+          nil -> __find_skill_state_fallback__(agent, skill_mod)
+          instance -> Map.get(agent.state, instance.state_key)
+        end
+      end
+
+      defp __find_skill_state_fallback__(agent, skill_mod) do
+        case Enum.find(@skill_instances, &(&1.module == skill_mod)) do
+          nil -> nil
+          instance -> Map.get(agent.state, instance.state_key)
+        end
+      end
+    end
+  end
+
+  @doc false
+  def __quoted_strategy_accessors__ do
+    quote location: :keep do
       @doc "Returns the execution strategy module for this agent."
       @spec strategy() :: module()
       def strategy do
@@ -600,7 +548,22 @@ defmodule Jido.Agent do
           _ -> []
         end
       end
+    end
+  end
 
+  @doc false
+  def __quoted_new_function__ do
+    new_fn = __quoted_new_fn_definition__()
+    mount_skills_fn = __quoted_mount_skills_definition__()
+
+    quote location: :keep do
+      unquote(new_fn)
+      unquote(mount_skills_fn)
+    end
+  end
+
+  defp __quoted_new_fn_definition__ do
+    quote location: :keep do
       @doc """
       Creates a new agent with optional initial state.
 
@@ -618,22 +581,7 @@ defmodule Jido.Agent do
       def new(opts \\ []) do
         opts = if is_list(opts), do: Map.new(opts), else: opts
 
-        # Build initial state from base schema defaults
-        base_defaults = Jido.Agent.State.defaults_from_schema(@validated_opts[:schema])
-
-        # Build skill defaults nested under their state_keys
-        skill_defaults =
-          @skill_specs
-          |> Enum.map(fn spec ->
-            skill_state_defaults = Jido.Agent.Schema.defaults_from_zoi_schema(spec.schema)
-            {spec.state_key, skill_state_defaults}
-          end)
-          |> Map.new()
-
-        # Merge: base defaults + skill defaults + provided state
-        schema_defaults = Map.merge(base_defaults, skill_defaults)
-        initial_state = Map.merge(schema_defaults, opts[:state] || %{})
-
+        initial_state = __build_initial_state__(opts)
         id = opts[:id] || Jido.Util.generate_id()
 
         agent = %Agent{
@@ -648,28 +596,7 @@ defmodule Jido.Agent do
         }
 
         # Run skill mount hooks (pure initialization)
-        agent =
-          Enum.reduce(@skill_specs, agent, fn spec, agent_acc ->
-            mod = spec.module
-            config = spec.config || %{}
-
-            case mod.mount(agent_acc, config) do
-              {:ok, skill_state} when is_map(skill_state) ->
-                current_skill_state = Map.get(agent_acc.state, spec.state_key, %{})
-                merged_skill_state = Map.merge(current_skill_state, skill_state)
-                new_state = Map.put(agent_acc.state, spec.state_key, merged_skill_state)
-                %{agent_acc | state: new_state}
-
-              {:ok, nil} ->
-                agent_acc
-
-              {:error, reason} ->
-                raise Jido.Error.internal_error(
-                        "Skill mount failed for #{inspect(mod)}",
-                        %{skill: mod, reason: reason}
-                      )
-            end
-          end)
+        agent = __mount_skills__(agent)
 
         # Run strategy initialization (directives are dropped here;
         # AgentServer handles init directives separately)
@@ -678,6 +605,61 @@ defmodule Jido.Agent do
         initialized_agent
       end
 
+      defp __build_initial_state__(opts) do
+        # Build initial state from base schema defaults
+        base_defaults = AgentState.defaults_from_schema(@validated_opts[:schema])
+
+        # Build skill defaults nested under their state_keys
+        skill_defaults =
+          @skill_specs
+          |> Enum.map(fn spec ->
+            skill_state_defaults = Jido.Agent.Schema.defaults_from_zoi_schema(spec.schema)
+            {spec.state_key, skill_state_defaults}
+          end)
+          |> Map.new()
+
+        # Merge: base defaults + skill defaults + provided state
+        schema_defaults = Map.merge(base_defaults, skill_defaults)
+        Map.merge(schema_defaults, opts[:state] || %{})
+      end
+    end
+  end
+
+  defp __quoted_mount_skills_definition__ do
+    quote location: :keep do
+      defp __mount_skills__(agent) do
+        Enum.reduce(@skill_specs, agent, fn spec, agent_acc ->
+          __mount_single_skill__(agent_acc, spec)
+        end)
+      end
+
+      defp __mount_single_skill__(agent_acc, spec) do
+        mod = spec.module
+        config = spec.config || %{}
+
+        case mod.mount(agent_acc, config) do
+          {:ok, skill_state} when is_map(skill_state) ->
+            current_skill_state = Map.get(agent_acc.state, spec.state_key, %{})
+            merged_skill_state = Map.merge(current_skill_state, skill_state)
+            new_state = Map.put(agent_acc.state, spec.state_key, merged_skill_state)
+            %{agent_acc | state: new_state}
+
+          {:ok, nil} ->
+            agent_acc
+
+          {:error, reason} ->
+            raise Jido.Error.internal_error(
+                    "Skill mount failed for #{inspect(mod)}",
+                    %{skill: mod, reason: reason}
+                  )
+        end
+      end
+    end
+  end
+
+  @doc false
+  def __quoted_cmd_function__ do
+    quote location: :keep do
       @doc """
       Execute actions against the agent. Pure: `(agent, action) -> {agent, directives}`
 
@@ -708,18 +690,23 @@ defmodule Jido.Agent do
 
             normalized_instructions =
               Enum.map(instructions, fn instr ->
-                Jido.Agent.Strategy.normalize_instruction(strat, instr, ctx)
+                AgentStrategy.normalize_instruction(strat, instr, ctx)
               end)
 
             {agent, directives} = strat.cmd(agent, normalized_instructions, ctx)
-            do_after_cmd(agent, action, directives)
+            __do_after_cmd__(agent, action, directives)
 
           {:error, reason} ->
             error = Jido.Error.validation_error("Invalid action", %{reason: reason})
-            {agent, [%Directive.Error{error: error, context: :normalize}]}
+            {agent, [%Jido.Agent.Directive.Error{error: error, context: :normalize}]}
         end
       end
+    end
+  end
 
+  @doc false
+  def __quoted_utility_functions__ do
+    quote location: :keep do
       @doc """
       Returns a stable, public view of the strategy's execution state.
 
@@ -748,7 +735,7 @@ defmodule Jido.Agent do
       """
       @spec set(Agent.t(), map() | keyword()) :: Agent.agent_result()
       def set(%Agent{} = agent, attrs) do
-        new_state = Jido.Agent.State.merge(agent.state, Map.new(attrs))
+        new_state = AgentState.merge(agent.state, Map.new(attrs))
         OK.success(%{agent | state: new_state})
       end
 
@@ -765,7 +752,7 @@ defmodule Jido.Agent do
       """
       @spec validate(Agent.t(), keyword()) :: Agent.agent_result()
       def validate(%Agent{} = agent, opts \\ []) do
-        case Jido.Agent.State.validate(agent.state, agent.schema, opts) do
+        case AgentState.validate(agent.state, agent.schema, opts) do
           {:ok, validated_state} ->
             OK.success(%{agent | state: validated_state})
 
@@ -774,7 +761,12 @@ defmodule Jido.Agent do
             |> OK.failure()
         end
       end
+    end
+  end
 
+  @doc false
+  def __quoted_callbacks__ do
+    quote location: :keep do
       # Default callback implementations
 
       @spec on_before_cmd(Agent.t(), Agent.action()) :: {:ok, Agent.t(), Agent.action()}
@@ -810,11 +802,181 @@ defmodule Jido.Agent do
                      skill_schedules: 0
 
       # Private helper for after hook dispatch
-      defp do_after_cmd(agent, msg, directives) do
+      defp __do_after_cmd__(agent, msg, directives) do
         {:ok, agent, directives} = on_after_cmd(agent, msg, directives)
         {agent, directives}
       end
     end
+  end
+
+  defmacro __using__(opts) do
+    # Get the quoted blocks from helper functions
+    module_setup = Agent.__quoted_module_setup__()
+    basic_accessors = Agent.__quoted_basic_accessors__()
+    skill_accessors = Agent.__quoted_skill_accessors__()
+    skill_config_accessors = Agent.__quoted_skill_config_accessors__()
+    strategy_accessors = Agent.__quoted_strategy_accessors__()
+    new_function = Agent.__quoted_new_function__()
+    cmd_function = Agent.__quoted_cmd_function__()
+    utility_functions = Agent.__quoted_utility_functions__()
+    callbacks = Agent.__quoted_callbacks__()
+
+    # Build compile-time validation and module attributes as a separate smaller block
+    compile_time_setup =
+      quote location: :keep do
+        # Validate config at compile time
+        @validated_opts (case Zoi.parse(Agent.config_schema(), Map.new(unquote(opts))) do
+                           {:ok, validated} ->
+                             validated
+
+                           {:error, errors} ->
+                             message =
+                               "Invalid Agent configuration for #{inspect(__MODULE__)}: #{inspect(errors)}"
+
+                             raise CompileError,
+                               description: message,
+                               file: __ENV__.file,
+                               line: __ENV__.line
+                         end)
+
+        # Normalize skills to Instance structs
+        @skill_instances Jido.Agent.__normalize_skill_instances__(@validated_opts[:skills] || [])
+
+        # Build skill specs from instances (for backward compatibility)
+        @skill_specs Enum.map(@skill_instances, fn instance ->
+                       instance.module.skill_spec(instance.config)
+                       |> Map.put(:state_key, instance.state_key)
+                     end)
+
+        # Validate unique state_keys (now derived from instances)
+        @skill_state_keys Enum.map(@skill_instances, & &1.state_key)
+        @duplicate_keys @skill_state_keys -- Enum.uniq(@skill_state_keys)
+        if @duplicate_keys != [] do
+          raise CompileError,
+            description: "Duplicate skill state_keys: #{inspect(@duplicate_keys)}",
+            file: __ENV__.file,
+            line: __ENV__.line
+        end
+
+        # Validate no collision with base schema keys
+        @base_schema_keys Jido.Agent.Schema.known_keys(@validated_opts[:schema])
+        @colliding_keys Enum.filter(@skill_state_keys, &(&1 in @base_schema_keys))
+        if @colliding_keys != [] do
+          raise CompileError,
+            description:
+              "Skill state_keys collide with agent schema: #{inspect(@colliding_keys)}",
+            file: __ENV__.file,
+            line: __ENV__.line
+        end
+
+        # Merge schemas: base schema + nested skill schemas
+        @merged_schema Jido.Agent.Schema.merge_with_skills(
+                         @validated_opts[:schema],
+                         @skill_specs
+                       )
+
+        # Aggregate actions from skills
+        @skill_actions @skill_specs |> Enum.flat_map(& &1.actions) |> Enum.uniq()
+
+        # Expand routes from all skill instances
+        @expanded_skill_routes Enum.flat_map(@skill_instances, &Jido.Skill.Routes.expand_routes/1)
+
+        # Expand schedules from all skill instances
+        @expanded_skill_schedules Enum.flat_map(
+                                    @skill_instances,
+                                    &Jido.Skill.Schedules.expand_schedules/1
+                                  )
+
+        # Generate routes for schedule signal types (low priority)
+        @schedule_routes Enum.flat_map(@skill_instances, &Jido.Skill.Schedules.schedule_routes/1)
+
+        # Combine routes and schedule routes for conflict detection
+        @all_skill_routes @expanded_skill_routes ++ @schedule_routes
+
+        @skill_routes_result Jido.Skill.Routes.detect_conflicts(@all_skill_routes)
+        case @skill_routes_result do
+          {:error, conflicts} ->
+            conflict_list = Enum.join(conflicts, "\n  - ")
+
+            raise CompileError,
+              description: "Route conflicts detected:\n  - #{conflict_list}",
+              file: __ENV__.file,
+              line: __ENV__.line
+
+          {:ok, _routes} ->
+            :ok
+        end
+
+        @validated_skill_routes elem(@skill_routes_result, 1)
+
+        # Validate skill requirements at compile time
+        @skill_config_map Enum.reduce(@skill_instances, %{}, fn instance, acc ->
+                            Map.put(acc, instance.state_key, instance.config)
+                          end)
+        @requirements_result Jido.Skill.Requirements.validate_all_requirements(
+                               @skill_instances,
+                               @skill_config_map
+                             )
+        case @requirements_result do
+          {:error, missing_by_skill} ->
+            error_msg = SkillRequirements.format_error(missing_by_skill)
+
+            raise CompileError,
+              description: error_msg,
+              file: __ENV__.file,
+              line: __ENV__.line
+
+          {:ok, :valid} ->
+            :ok
+        end
+      end
+
+    # Combine all blocks using unquote
+    quote location: :keep do
+      unquote(module_setup)
+      unquote(compile_time_setup)
+      unquote(basic_accessors)
+      unquote(skill_accessors)
+      unquote(skill_config_accessors)
+      unquote(strategy_accessors)
+      unquote(new_function)
+      unquote(cmd_function)
+      unquote(utility_functions)
+      unquote(callbacks)
+    end
+  end
+
+  @doc false
+  def __normalize_skill_instances__(skills) do
+    Enum.map(skills, &__validate_and_create_skill_instance__/1)
+  end
+
+  defp __validate_and_create_skill_instance__(skill_decl) do
+    mod = __extract_skill_module__(skill_decl)
+    __validate_skill_module__(mod)
+    SkillInstance.new(skill_decl)
+  end
+
+  defp __extract_skill_module__(m) when is_atom(m), do: m
+  defp __extract_skill_module__({m, _}), do: m
+
+  defp __validate_skill_module__(mod) do
+    case Code.ensure_compiled(mod) do
+      {:module, _} -> __validate_skill_behaviour__(mod)
+      {:error, reason} -> __raise_skill_compile_error__(mod, reason)
+    end
+  end
+
+  defp __validate_skill_behaviour__(mod) do
+    unless function_exported?(mod, :skill_spec, 1) do
+      raise CompileError,
+        description: "#{inspect(mod)} does not implement Jido.Skill (missing skill_spec/1)"
+    end
+  end
+
+  defp __raise_skill_compile_error__(mod, reason) do
+    raise CompileError,
+      description: "Skill #{inspect(mod)} could not be compiled: #{inspect(reason)}"
   end
 
   # Base module functions (for direct use without `use`)

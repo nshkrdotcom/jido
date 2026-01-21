@@ -1,5 +1,7 @@
 # Strategies
 
+**After:** You can choose Direct vs FSM and understand what strategies control.
+
 Strategies control **how agents execute actions** in `cmd/2`. They enable different execution patterns without changing agent logic.
 
 ## What Strategies Control
@@ -97,6 +99,22 @@ end
 
 This enables strategies to intercept signals and route them to internal handlers.
 
+## When to Use FSM vs Direct
+
+| Use Case | Strategy | Why |
+|----------|----------|-----|
+| Simple request/response | Direct | No state machine overhead |
+| Multi-step workflows | FSM | Explicit transitions prevent invalid states |
+| Stateless actions | Direct | No state to track between calls |
+| User-driven flows (wizards, onboarding) | FSM | Natural fit for step-by-step progression |
+| Background jobs | Direct | Execute and complete in one pass |
+| Long-running processes with pauses | FSM | Can persist state and resume |
+| Agents with mode switching | FSM | States represent distinct operational modes |
+
+**Rule of thumb:** If you need to ask "what step are we on?" or "can we do X right now?", use FSM. If every action is independent, use Direct.
+
 ---
 
 See `Jido.Agent.Strategy` moduledoc for full API details.
+
+For FSM-specific patterns and examples, see the [FSM Strategy Guide](fsm-strategy.livemd).

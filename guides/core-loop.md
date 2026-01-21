@@ -1,4 +1,6 @@
-# Core Concepts
+# Core Loop
+
+**After:** You can explain Jido in one sentence: "Signal → Action → cmd/2 → {agent, directives} → runtime executes directives."
 
 This guide explains the mental model behind Jido — an Elm/Redux-inspired agent framework for Elixir.
 
@@ -89,7 +91,7 @@ This enables:
 | Term | Definition |
 |------|------------|
 | **Agent** | Immutable struct with state and schema. Defines `cmd/2` for pure transformations. |
-| **Action** | Pure function that transforms agent state. Defined in [jido_action](https://hexdocs.pm/jido_action). |
+| **Action** | Function that transforms agent state (may perform side effects). Defined in [jido_action](https://hexdocs.pm/jido_action). |
 | **Directive** | Effect description for runtime execution (Emit, Spawn, Schedule, etc.). Never modifies state. |
 | **Skill** | Composable capability module bundling actions, state, and routing rules. |
 | **Strategy** | Execution pattern (Direct, FSM, custom) that controls how actions are processed. |

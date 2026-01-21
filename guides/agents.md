@@ -1,5 +1,7 @@
 # Agents
 
+**After:** You can define agents with schemas, hooks, and the `cmd/2` contract.
+
 Agents are immutable data structures that hold state and respond to actions. The core operation is `cmd/2`, which processes actions and returns an updated agent plus directives for external effects.
 
 ## Defining an Agent
@@ -155,7 +157,8 @@ agent = MyAgent.new(state: %{counter: 10})
 
 ## Further Reading
 
+- [Actions](actions.md) — Defining actions that transform agent state
+- [State Operations](state-ops.md) — Internal state transitions during `cmd/2`
+- [Directives](directives.md) — External effects emitted by agents
+- [Strategies](strategies.md) — Execution strategies for `cmd/2`
 - `Jido.Agent` — Full module documentation
-- `Jido.Agent.Directive` — Available directives
-- `Jido.Agent.Strategy` — Execution strategies
-- `Jido.Action` — Defining actions for agents

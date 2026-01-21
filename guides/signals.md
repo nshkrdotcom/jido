@@ -255,7 +255,7 @@ agent.state.counter
 
 ## Related
 
-- [Core Concepts](core-concepts.md) — Agent fundamentals
+- [Core Loop](core-loop.md) — Agent fundamentals
 - [Directives](directives.md) — The Emit directive and others
 - [Strategies](strategies.md) — Strategy signal routing
 - [Skills](skills.md) — Skill signal patterns

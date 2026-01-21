@@ -1,5 +1,7 @@
 # Directives
 
+**After:** You can emit directives from actions to perform effects without polluting pure logic.
+
 Directives are **pure descriptions of external effects**. Agents emit them from `cmd/2` callbacks; the runtime (`AgentServer`) executes them.
 
 **Key principle**: Directives never modify agent state — state changes happen in the returned agent struct.
@@ -13,7 +15,7 @@ Jido separates two distinct concerns:
 | **Directives** | `Jido.Agent.Directive` | External effects (emit signals, spawn processes) | Runtime (AgentServer) |
 | **State Operations** | `Jido.Agent.StateOp` | Internal state transitions (set, replace, delete) | Strategy layer |
 
-State operations are applied during `cmd/2` and never leave the strategy layer. Directives are passed through to the runtime for execution.
+State operations are applied during `cmd/2` and never leave the strategy layer. Directives are passed through to the runtime for execution. See the [State Operations guide](state-ops.md) for details on `SetState`, `SetPath`, and other state ops.
 
 ```elixir
 def cmd({:notify_user, message}, agent, _context) do
@@ -96,6 +98,40 @@ end
 
 The runtime dispatches on struct type — no core changes needed. Implement a custom `AgentServer` or middleware to handle your directive types.
 
+## Complete Example: Action → Directive Flow
+
+Here's a full example showing an action that processes an order and emits a signal:
+
+```elixir
+defmodule ProcessOrderAction do
+  use Jido.Action,
+    name: "process_order",
+    schema: [order_id: [type: :string, required: true]]
+
+  alias Jido.Agent.{Directive, StateOp}
+
+  def run(%{order_id: order_id}, context) do
+    signal = Jido.Signal.new!(
+      "order.processed",
+      %{order_id: order_id, processed_at: DateTime.utc_now()},
+      source: "/orders"
+    )
+
+    {:ok, %{order_id: order_id}, [
+      StateOp.set_state(%{last_order: order_id}),  # Applied by strategy
+      Directive.emit(signal)                        # Passed to runtime
+    ]}
+  end
+end
+```
+
+When the agent runs this action via `cmd/2`:
+1. The strategy applies `StateOp.set_state` — agent state is updated
+2. The `Emit` directive passes through to the runtime
+3. `AgentServer` dispatches the signal via configured adapters
+
 ---
 
 See `Jido.Agent.Directive` moduledoc for the complete API reference.
+
+**Related guides:** [State Operations](state-ops.md)

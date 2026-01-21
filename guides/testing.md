@@ -1,5 +1,7 @@
 # Testing
 
+**After:** You can test pure logic and integration without flakes.
+
 Testing Jido agents involves two approaches: pure agent testing (no runtime) and integration testing with AgentServer. This guide covers both patterns along with test isolation, async coordination, and mocking strategies.
 
 ## JidoTest.Case for Isolation

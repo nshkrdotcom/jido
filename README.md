@@ -36,14 +36,14 @@ State changes are pure data transformations; side effects are described as direc
 
 Jido is the core package of the Jido ecosystem. The ecosystem is built around the core Jido Agent behavior and offer several opt-in packages to extend the core behavior.
 
-| Package | Description |
-|---------|-------------|
-| [req_llm](https://github.com/agentjido/req_llm) | HTTP client for LLM APIs |
-| [jido_action](https://github.com/agentjido/jido_action) | Composable, validated actions with AI tool integration |
+| Package                                                 | Description                                                                                   |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [req_llm](https://github.com/agentjido/req_llm)         | HTTP client for LLM APIs                                                                      |
+| [jido_action](https://github.com/agentjido/jido_action) | Composable, validated actions with AI tool integration                                        |
 | [jido_signal](https://github.com/agentjido/jido_signal) | CloudEvents-based message envelope and supporting utilities for routing and pub/sub messaging |
-| [jido](https://github.com/agentjido/jido) | Core agent framework with state management, directives, and runtime |
-| [jido_ai](https://github.com/agentjido/jido_ai) | AI/LLM integration for agents |
-| [jido_coder](https://github.com/agentjido/jido_coder) | AI coding agent with file operations, git integration, and test execution |
+| [jido](https://github.com/agentjido/jido)               | Core agent framework with state management, directives, and runtime                           |
+| [jido_ai](https://github.com/agentjido/jido_ai)         | AI/LLM integration for agents                                                                 |
+| [jido_coder](https://github.com/agentjido/jido_coder)   | AI coding agent with file operations, git integration, and test execution                     |
 
 For demos and examples of what you can build with the Jido Ecosystem, see [https://agentjido.xyz](https://agentjido.xyz).
 
@@ -51,13 +51,13 @@ For demos and examples of what you can build with the Jido Ecosystem, see [https
 
 OTP primitives are excellent. You can build agent systems with raw GenServer. But when building *multiple cooperating agents*, you'll reinvent:
 
-| Raw OTP | Jido Formalizes |
-|---------|-----------------|
-| Ad-hoc message shapes per GenServer | Signals as standard envelope |
-| Business logic mixed in callbacks | Actions as reusable command pattern |
-| Implicit effects scattered in code | Directives as typed effect descriptions |
-| Custom child tracking per server | Built-in parent/child hierarchy |
-| Process exit = completion | State-based completion semantics |
+| Raw OTP                             | Jido Formalizes                         |
+| ----------------------------------- | --------------------------------------- |
+| Ad-hoc message shapes per GenServer | Signals as standard envelope            |
+| Business logic mixed in callbacks   | Actions as reusable command pattern     |
+| Implicit effects scattered in code  | Directives as typed effect descriptions |
+| Custom child tracking per server    | Built-in parent/child hierarchy         |
+| Process exit = completion           | State-based completion semantics        |
 
 Jido isn't "better GenServer" - it's a formalized agent pattern built *on* GenServer.
 
@@ -95,6 +95,27 @@ Jido isn't "better GenServer" - it's a formalized agent pattern built *on* GenSe
 - Extensible strategy protocol for custom execution patterns
 
 ## Installation
+
+### Using Igniter (Recommended)
+
+The fastest way to get started is with [Igniter](https://hex.pm/packages/igniter):
+
+```bash
+mix igniter.install jido
+```
+
+This automatically:
+- Adds Jido to your dependencies
+- Creates configuration in `config/config.exs`
+- Adds `Jido.Bus.InMemory` to your supervision tree
+
+Generate an example agent to get started:
+
+```bash
+mix igniter.install jido --example
+```
+
+### Manual Installation
 
 Add `jido` to your list of dependencies in `mix.exs`:
 
@@ -211,41 +232,41 @@ Key invariants:
 
 ### Actions vs Directives vs State Operations
 
-| Actions | Directives | State Operations |
-|---------|------------|------------------|
-| Describe state transformations | Describe external effects | Describe internal state changes |
-| Executed by `cmd/2`, update `agent.state` | Bare structs emitted by agents | Applied by strategy layer |
-| Never perform side effects | Runtime (AgentServer) interprets them | Never leave the strategy |
+| Actions                                    | Directives                            | State Operations                |
+| ------------------------------------------ | ------------------------------------- | ------------------------------- |
+| Transform state, may perform side effects  | Describe external effects             | Describe internal state changes |
+| Executed by `cmd/2`, update `agent.state`  | Bare structs emitted by agents        | Applied by strategy layer       |
+| Can call APIs, read files, query databases | Runtime (AgentServer) interprets them | Never leave the strategy        |
 
 ### State Operations (`Jido.Agent.StateOp`)
 
 State operations are internal state transitions handled by the strategy layer during `cmd/2`. Unlike directives, they never reach the runtime.
 
-| StateOp | Purpose |
-|---------|---------|
-| `SetState` | Deep merge attributes into state |
-| `ReplaceState` | Replace state wholesale |
-| `DeleteKeys` | Remove top-level keys |
-| `SetPath` | Set value at nested path |
-| `DeletePath` | Delete value at nested path |
+| StateOp        | Purpose                          |
+| -------------- | -------------------------------- |
+| `SetState`     | Deep merge attributes into state |
+| `ReplaceState` | Replace state wholesale          |
+| `DeleteKeys`   | Remove top-level keys            |
+| `SetPath`      | Set value at nested path         |
+| `DeletePath`   | Delete value at nested path      |
 
 ### Directive Types
 
-| Directive | Purpose |
-|-----------|---------|
-| `Emit` | Dispatch a signal via configured adapters |
-| `Error` | Signal an error from cmd/2 |
-| `Spawn` | Spawn a generic BEAM child process |
+| Directive    | Purpose                                          |
+| ------------ | ------------------------------------------------ |
+| `Emit`       | Dispatch a signal via configured adapters        |
+| `Error`      | Signal an error from cmd/2                       |
+| `Spawn`      | Spawn a generic BEAM child process               |
 | `SpawnAgent` | Spawn a child Jido agent with hierarchy tracking |
-| `StopChild` | Gracefully stop a tracked child agent |
-| `Schedule` | Schedule a delayed message |
-| `Stop` | Stop the agent process |
+| `StopChild`  | Gracefully stop a tracked child agent            |
+| `Schedule`   | Schedule a delayed message                       |
+| `Stop`       | Stop the agent process                           |
 
 ## Documentation
 
 **Start here:**
 - [Quick Start](guides/getting-started.livemd) - Build your first agent in 5 minutes
-- [Core Concepts](guides/core-concepts.md) - Understand the mental model
+- [Core Loop](guides/core-loop.md) - Understand the mental model
 
 **Guides:**
 - [Building Agents](guides/agents.md) - Agent definitions and state management

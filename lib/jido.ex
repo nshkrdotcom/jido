@@ -30,7 +30,7 @@ defmodule Jido do
       {agent, directives} = MyAgent.cmd(agent, MyAction)
 
   - **Agents** — Immutable structs updated via commands
-  - **Actions** — Pure functions that transform agent state
+  - **Actions** — Functions that transform agent state (may perform side effects)
   - **Directives** — Descriptions of external effects (signals, processes, etc.)
 
   ## For Tests

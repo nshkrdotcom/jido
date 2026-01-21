@@ -1,5 +1,7 @@
 # Configuration & Deployment
 
+**After:** You can configure Jido for different environments.
+
 This guide covers Jido configuration options and production deployment patterns.
 
 ## Basic Setup

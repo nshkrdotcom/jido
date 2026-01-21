@@ -1,5 +1,7 @@
 # Runtime
 
+**After:** You can run agents in a supervision tree and manage parent/child hierarchies.
+
 Agents run inside an `AgentServer` GenServer process. This guide covers starting agents, sending signals, and managing parent-child hierarchies.
 
 > For complete API details, see `Jido.AgentServer` and `Jido.Await` moduledocs.
@@ -126,3 +128,5 @@ Jido.alive?(pid)                    # Check if agent is running
 {:ok, children} = Jido.get_children(parent)  # List child agents
 Jido.cancel(pid)                    # Cancel a running agent
 ```
+
+For detailed await patterns, fan-out coordination, and testing without `Process.sleep`, see the [Await & Coordination](await.md) guide.

@@ -199,7 +199,9 @@ defmodule JidoExampleTest.HierarchicalAgentsTest do
 
     def run(params, context) do
       pending = Map.get(context.state, :pending_tasks, %{})
-      job_info = Map.get(pending, params.job_id, %{results: [], completed_tasks: 0, total_tasks: 0})
+
+      job_info =
+        Map.get(pending, params.job_id, %{results: [], completed_tasks: 0, total_tasks: 0})
 
       task_result = %{
         task_id: params.task_id,
@@ -231,9 +233,12 @@ defmodule JidoExampleTest.HierarchicalAgentsTest do
         emit_directive = Directive.emit_to_parent(agent_like, job_result_signal)
 
         completed = Map.get(context.state, :completed_jobs, [])
-        set_pending_op = StateOp.set_path([:pending_tasks], Map.delete(updated_pending, params.job_id))
 
-        {:ok, %{completed_jobs: [params.job_id | completed]}, [set_pending_op | List.wrap(emit_directive)]}
+        set_pending_op =
+          StateOp.set_path([:pending_tasks], Map.delete(updated_pending, params.job_id))
+
+        {:ok, %{completed_jobs: [params.job_id | completed]},
+         [set_pending_op | List.wrap(emit_directive)]}
       else
         {:ok, %{pending_tasks: updated_pending}}
       end

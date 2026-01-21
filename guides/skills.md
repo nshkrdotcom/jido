@@ -1,5 +1,9 @@
 # Skills
 
+**After:** You can compose multiple skills with isolated state and understand lifecycle hooks.
+
+> 🎓 **New to skills?** Start with [Your First Skill](your-first-skill.md) for a hands-on tutorial before diving into this comprehensive reference.
+
 Skills are composable capability modules that extend an agent's functionality. They encapsulate actions, state, configuration, and signal routing into reusable units.
 
 ## When to Use Skills

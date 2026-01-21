@@ -4,7 +4,7 @@
 
 ## Core Components
 
-### Actions - Pure Functions
+### Actions - State Transformers
 ```elixir
 defmodule MyAction do
   use Jido.Action,
@@ -52,7 +52,7 @@ end
 - **Always return tagged tuples**: `{:ok, result}` or `{:error, reason}`
 - **Use schemas for validation** in all components
 - **Pattern match with function heads** instead of conditionals
-- **Actions are pure functions**, Agents manage state
+- **Actions transform state** (may perform side effects), Agents manage state
 - **Plan before execution**: `Agent.plan(agent, actions) |> Agent.run()`
 
 ## Common Operations

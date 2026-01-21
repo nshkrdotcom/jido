@@ -1,6 +1,8 @@
 defmodule JidoTest.Agent.InstanceManagerTest do
   use ExUnit.Case, async: false
 
+  import JidoTest.Eventually
+
   # Tests with timing-based assertions (idle timeout behavior)
   @moduletag :integration
 
@@ -302,10 +304,20 @@ defmodule JidoTest.Agent.InstanceManagerTest do
       refute Process.alive?(pid1)
 
       # Get should thaw the agent with persisted state (new process)
-      {:ok, pid2} = InstanceManager.get(manager, "hibernate-key")
+      # Use eventually to handle race where agent may hibernate before attach
+      {:ok, pid2} =
+        eventually(
+          fn ->
+            {:ok, pid} = InstanceManager.get(manager, "hibernate-key")
 
-      # Attach to prevent immediate idle timeout
-      :ok = AgentServer.attach(pid2)
+            case AgentServer.attach(pid) do
+              :ok -> {:ok, pid}
+              _ -> false
+            end
+          end,
+          timeout: 2000
+        )
+
       assert Process.alive?(pid2)
 
       {:ok, state2} = AgentServer.state(pid2)

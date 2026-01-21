@@ -71,23 +71,45 @@ defmodule Jido.MixProject do
       groups_for_extras: [
         "Start Here": [
           "guides/getting-started.livemd",
-          "guides/core-concepts.md"
+          "guides/core-loop.md",
+          "guides/your-first-skill.md",
+          "guides/your-first-sensor.md",
+          "guides/observability-intro.md"
         ],
         Fundamentals: [
           "guides/agents.md",
+          "guides/actions.md",
           "guides/signals.md",
           "guides/directives.md",
+          "guides/state-ops.md",
           "guides/skills.md",
           "guides/strategies.md",
           "guides/runtime.md"
         ],
-        Advanced: [
-          "guides/fsm-strategy.livemd",
-          "guides/errors.md",
-          "guides/configuration.md"
+        Coordination: [
+          "guides/await.md",
+          "guides/orchestration.md"
         ],
         Operations: [
-          "guides/testing.md"
+          "guides/observability.md",
+          "guides/testing.md",
+          "guides/configuration.md",
+          "guides/persistence.md",
+          "guides/worker-pools.md",
+          "guides/scheduling.md"
+        ],
+        Extending: [
+          "guides/sensors.md",
+          "guides/discovery.md",
+          "guides/custom-strategies.md"
+        ],
+        Integrations: [
+          "guides/phoenix-integration.md",
+          "guides/ash-integration.md"
+        ],
+        Advanced: [
+          "guides/fsm-strategy.livemd",
+          "guides/errors.md"
         ],
         Migration: [
           "guides/migration.md"
@@ -103,23 +125,45 @@ defmodule Jido.MixProject do
 
         # Start Here
         {"guides/getting-started.livemd", title: "Quick Start"},
-        {"guides/core-concepts.md", title: "Core Concepts"},
+        {"guides/core-loop.md", title: "Core Loop"},
+        {"guides/your-first-skill.md", title: "Your First Skill"},
+        {"guides/your-first-sensor.md", title: "Your First Sensor"},
+        {"guides/observability-intro.md", title: "Seeing What Happened"},
 
         # Fundamentals
         {"guides/agents.md", title: "Agents"},
+        {"guides/actions.md", title: "Actions"},
         {"guides/signals.md", title: "Signals & Routing"},
         {"guides/directives.md", title: "Directives"},
+        {"guides/state-ops.md", title: "State Operations"},
         {"guides/skills.md", title: "Skills"},
         {"guides/strategies.md", title: "Strategies"},
         {"guides/runtime.md", title: "Runtime"},
 
+        # Coordination
+        {"guides/await.md", title: "Await & Coordination"},
+        {"guides/orchestration.md", title: "Multi-Agent Orchestration"},
+
+        # Operations
+        {"guides/observability.md", title: "Observability"},
+        {"guides/testing.md", title: "Testing"},
+        {"guides/configuration.md", title: "Configuration"},
+        {"guides/persistence.md", title: "Persistence"},
+        {"guides/worker-pools.md", title: "Worker Pools"},
+        {"guides/scheduling.md", title: "Scheduling"},
+
+        # Extending
+        {"guides/sensors.md", title: "Sensors"},
+        {"guides/discovery.md", title: "Discovery"},
+        {"guides/custom-strategies.md", title: "Custom Strategies"},
+
+        # Integrations
+        {"guides/phoenix-integration.md", title: "Phoenix Integration"},
+        {"guides/ash-integration.md", title: "Ash Integration"},
+
         # Advanced
         {"guides/fsm-strategy.livemd", title: "FSM Strategy Deep Dive"},
         {"guides/errors.md", title: "Error Handling"},
-        {"guides/configuration.md", title: "Configuration"},
-
-        # Operations
-        {"guides/testing.md", title: "Testing"},
 
         # Migration
         {"guides/migration.md", title: "Migrating from 1.x"},

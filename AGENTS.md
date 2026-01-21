@@ -61,9 +61,9 @@ Single source of truth for fields, types, enforced keys, and validation.
 
 | **Actions** | **Directives** | **State Operations** |
 |-------------|----------------|----------------------|
-| Describe *state transformations* | Describe *external effects* | Describe *internal state changes* |
+| Transform state, may perform side effects | Describe *external effects* | Describe *internal state changes* |
 | Executed by `cmd/2`, update `agent.state` | Bare structs emitted by agents | Applied by strategy layer |
-| Never perform side effects | Runtime (AgentServer) interprets them | Never leave the strategy |
+| Can call APIs, read files, query databases | Runtime (AgentServer) interprets them | Never leave the strategy |
 
 ### State Operations (`Jido.Agent.StateOp`)
 

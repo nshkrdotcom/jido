@@ -262,8 +262,8 @@ defmodule Jido.MixProject do
   defp deps do
     [
       # Jido Ecosystem
-      {:jido_action, "~> 1.0"},
-      {:jido_signal, "~> 1.2"},
+      {:jido_action, "~> 2.0.0-rc"},
+      {:jido_signal, "~> 2.0.0-rc"},
 
       # Jido Deps
       {:deep_merge, "~> 1.0"},

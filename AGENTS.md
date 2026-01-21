@@ -119,6 +119,36 @@ alias Jido.Agent.{Directive, StateOp}
 2. `mix quality` — format, credo, dialyzer must pass
 3. End-to-end examples in `/examples`
 
+## Git Commit Guidelines
+
+Use **Conventional Commits** format for all commit messages:
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Types:**
+- `feat` - New feature
+- `fix` - Bug fix
+- `docs` - Documentation only
+- `style` - Formatting, no code change
+- `refactor` - Code change that neither fixes a bug nor adds a feature
+- `test` - Adding or updating tests
+- `chore` - Maintenance tasks, dependency updates
+
+**Examples:**
+```
+feat(agent): add new directive for child process management
+fix(server): handle timeout edge case in signal dispatch
+docs: update architecture overview
+test(skill): add skill integration tests
+chore(deps): bump jido_action to 2.0.0-rc.0
+```
+
 ---
 
 > **Note**: `Jido.AI.*` modules and `req_llm` are incubating. They will be extracted to a separate package before 1.0 release. Treat as experimental.

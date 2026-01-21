@@ -76,6 +76,7 @@ defmodule Jido.Agent.Strategy do
   `:__strategy__`. Use `Jido.Agent.Strategy.State` helpers to manage it.
   """
 
+  alias Jido.Action.Tool, as: ActionTool
   alias Jido.Agent
   alias Jido.Agent.Strategy.State, as: StratState
 
@@ -354,7 +355,7 @@ defmodule Jido.Agent.Strategy do
         end
 
       is_list(schema) ->
-        Jido.Action.Tool.convert_params_using_schema(params, schema)
+        ActionTool.convert_params_using_schema(params, schema)
 
       true ->
         atomized
@@ -377,11 +378,9 @@ defmodule Jido.Agent.Strategy do
   defp atomize_string_keys(other), do: other
 
   defp safe_to_atom(str) when is_binary(str) do
-    try do
-      String.to_existing_atom(str)
-    rescue
-      ArgumentError -> String.to_atom(str)
-    end
+    String.to_existing_atom(str)
+  rescue
+    ArgumentError -> String.to_atom(str)
   end
 
   defmacro __using__(_opts) do
@@ -401,7 +400,7 @@ defmodule Jido.Agent.Strategy do
       @impl true
       @spec snapshot(Jido.Agent.t(), Jido.Agent.Strategy.context()) ::
               Jido.Agent.Strategy.Snapshot.t()
-      def snapshot(agent, _ctx), do: Jido.Agent.Strategy.default_snapshot(agent)
+      def snapshot(agent, _ctx), do: unquote(__MODULE__).default_snapshot(agent)
 
       defoverridable init: 2, tick: 2, snapshot: 2
     end

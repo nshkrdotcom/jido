@@ -2,6 +2,7 @@ defmodule JidoTest.ErrorCoverageTest do
   use JidoTest.Case, async: true
 
   alias Jido.Error
+  alias Jido.Error.Internal.UnknownError
 
   describe "error constructors with map options" do
     test "validation_error accepts map opts" do
@@ -253,7 +254,7 @@ defmodule JidoTest.ErrorCoverageTest do
     end
 
     test "UnknownError returns :internal" do
-      error = Error.Internal.UnknownError.exception(message: "Unknown")
+      error = UnknownError.exception(message: "Unknown")
       result = Error.to_map(error)
       assert result.type == :internal
     end

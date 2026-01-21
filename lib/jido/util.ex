@@ -18,6 +18,8 @@ defmodule Jido.Util do
   but they can also be useful for developers building applications with Jido.
   """
 
+  alias Jido.Signal.ID, as: SignalID
+
   require OK
   require Logger
 
@@ -27,7 +29,7 @@ defmodule Jido.Util do
   Generates a unique ID.
   """
   @spec generate_id() :: String.t()
-  def generate_id, do: Jido.Signal.ID.generate!()
+  def generate_id, do: SignalID.generate!()
 
   @doc """
   Converts a string to a binary.

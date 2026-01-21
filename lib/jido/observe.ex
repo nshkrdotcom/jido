@@ -78,7 +78,9 @@ defmodule Jido.Observe do
 
   require Logger
 
+  alias Jido.Observe.Log
   alias Jido.Observe.SpanCtx
+  alias Jido.Tracing.Context, as: TracingContext
 
   @type event_prefix :: [atom()]
   @type metadata :: map()
@@ -287,7 +289,7 @@ defmodule Jido.Observe do
   """
   @spec log(Logger.level(), Logger.message(), keyword()) :: :ok
   def log(level, message, metadata \\ []) do
-    Jido.Observe.Log.log(level, message, metadata)
+    Log.log(level, message, metadata)
   end
 
   @doc """
@@ -409,8 +411,8 @@ defmodule Jido.Observe do
   end
 
   defp correlation_metadata do
-    if Code.ensure_loaded?(Jido.Tracing.Context) do
-      Jido.Tracing.Context.to_telemetry_metadata()
+    if Code.ensure_loaded?(TracingContext) do
+      TracingContext.to_telemetry_metadata()
     else
       %{}
     end

@@ -316,7 +316,10 @@ defmodule Jido.Skill do
     subscriptions: 2
   ]
 
-  defmacro __using__(opts) do
+  # Helper functions that return quoted expressions to reduce the size of __using__/1
+
+  @doc false
+  defp generate_behaviour_and_validation(opts) do
     quote location: :keep do
       @behaviour Jido.Skill
 
@@ -339,27 +342,49 @@ defmodule Jido.Skill do
                        end)
 
       # Validate actions exist at compile time
-      @validated_opts.actions
-      |> Enum.each(fn action_module ->
-        case Code.ensure_compiled(action_module) do
-          {:module, _} ->
-            unless function_exported?(action_module, :__action_metadata__, 0) do
-              raise CompileError,
-                description:
-                  "Action #{inspect(action_module)} does not implement Jido.Action behavior",
-                file: __ENV__.file,
-                line: __ENV__.line
-            end
+      Skill.__validate_actions__(@validated_opts.actions, __ENV__)
+    end
+  end
 
-          {:error, reason} ->
-            raise CompileError,
-              description:
-                "Action #{inspect(action_module)} could not be compiled: #{inspect(reason)}",
-              file: __ENV__.file,
-              line: __ENV__.line
-        end
-      end)
+  @doc false
+  def __validate_actions__(actions, env) do
+    Enum.each(actions, &validate_single_action(&1, env))
+  end
 
+  defp validate_single_action(action_module, env) do
+    case Code.ensure_compiled(action_module) do
+      {:module, _} ->
+        validate_action_behaviour(action_module, env)
+
+      {:error, reason} ->
+        raise CompileError,
+          description:
+            "Action #{inspect(action_module)} could not be compiled: #{inspect(reason)}",
+          file: env.file,
+          line: env.line
+    end
+  end
+
+  defp validate_action_behaviour(action_module, env) do
+    unless function_exported?(action_module, :__action_metadata__, 0) do
+      raise CompileError,
+        description: "Action #{inspect(action_module)} does not implement Jido.Action behavior",
+        file: env.file,
+        line: env.line
+    end
+  end
+
+  @doc false
+  defp generate_accessor_functions do
+    [
+      generate_core_accessors(),
+      generate_optional_accessors(),
+      generate_list_accessors()
+    ]
+  end
+
+  defp generate_core_accessors do
+    quote location: :keep do
       @doc "Returns the skill's name."
       @spec name() :: String.t()
       def name, do: @validated_opts.name
@@ -371,7 +396,11 @@ defmodule Jido.Skill do
       @doc "Returns the list of action modules provided by this skill."
       @spec actions() :: [module()]
       def actions, do: @validated_opts.actions
+    end
+  end
 
+  defp generate_optional_accessors do
+    quote location: :keep do
       @doc "Returns the skill's description."
       @spec description() :: String.t() | nil
       def description, do: @validated_opts[:description]
@@ -395,7 +424,18 @@ defmodule Jido.Skill do
       @doc "Returns the Zoi schema for per-agent configuration."
       @spec config_schema() :: Zoi.schema() | nil
       def config_schema, do: @validated_opts[:config_schema]
+    end
+  end
 
+  defp generate_list_accessors do
+    [
+      generate_pattern_accessors(),
+      generate_requirement_accessors()
+    ]
+  end
+
+  defp generate_pattern_accessors do
+    quote location: :keep do
       @doc "Returns the signal patterns this skill handles."
       @spec signal_patterns() :: [String.t()]
       def signal_patterns, do: @validated_opts[:signal_patterns] || []
@@ -407,7 +447,11 @@ defmodule Jido.Skill do
       @doc "Returns the capabilities provided by this skill."
       @spec capabilities() :: [atom()]
       def capabilities, do: @validated_opts[:capabilities] || []
+    end
+  end
 
+  defp generate_requirement_accessors do
+    quote location: :keep do
       @doc "Returns the requirements for this skill."
       @spec requires() :: [tuple()]
       def requires, do: @validated_opts[:requires] || []
@@ -419,14 +463,19 @@ defmodule Jido.Skill do
       @doc "Returns the schedules for this skill."
       @spec schedules() :: [tuple()]
       def schedules, do: @validated_opts[:schedules] || []
+    end
+  end
 
+  @doc false
+  defp generate_spec_and_manifest_functions do
+    quote location: :keep do
       @doc """
       Returns the skill specification with optional per-agent configuration.
 
       ## Examples
 
-          spec = #{inspect(__MODULE__)}.skill_spec(%{})
-          spec = #{inspect(__MODULE__)}.skill_spec(%{custom_option: true})
+          spec = MyModule.skill_spec(%{})
+          spec = MyModule.skill_spec(%{custom_option: true})
       """
       @spec skill_spec(map()) :: Spec.t()
       @impl Jido.Skill
@@ -491,9 +540,12 @@ defmodule Jido.Skill do
           tags: tags()
         }
       end
+    end
+  end
 
-      # Default implementations for optional callbacks
-
+  @doc false
+  defp generate_default_callbacks do
+    quote location: :keep do
       @doc false
       @spec mount(term(), map()) :: {:ok, map() | nil} | {:error, term()}
       @impl Jido.Skill
@@ -524,7 +576,12 @@ defmodule Jido.Skill do
       @spec subscriptions(map(), map()) :: [{module(), keyword() | map()}]
       @impl Jido.Skill
       def subscriptions(_config, _context), do: []
+    end
+  end
 
+  @doc false
+  defp generate_defoverridable do
+    quote location: :keep do
       defoverridable mount: 2,
                      router: 1,
                      handle_signal: 2,
@@ -547,5 +604,21 @@ defmodule Jido.Skill do
                      routes: 0,
                      schedules: 0
     end
+  end
+
+  defmacro __using__(opts) do
+    behaviour_and_validation = generate_behaviour_and_validation(opts)
+    accessor_functions = generate_accessor_functions()
+    spec_and_manifest = generate_spec_and_manifest_functions()
+    default_callbacks = generate_default_callbacks()
+    defoverridable_block = generate_defoverridable()
+
+    [
+      behaviour_and_validation,
+      accessor_functions,
+      spec_and_manifest,
+      default_callbacks,
+      defoverridable_block
+    ]
   end
 end

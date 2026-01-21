@@ -1,8 +1,8 @@
 defmodule JidoTest.Tracing.TraceTest do
   use ExUnit.Case, async: true
 
-  alias Jido.Tracing.Trace
   alias Jido.Signal
+  alias Jido.Tracing.Trace
 
   describe "new_root/0" do
     test "creates trace with fresh trace_id and span_id" do

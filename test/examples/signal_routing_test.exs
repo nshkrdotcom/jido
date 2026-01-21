@@ -15,8 +15,8 @@ defmodule JidoExampleTest.SignalRoutingTest do
   @moduletag :example
   @moduletag timeout: 15_000
 
-  alias Jido.Signal
   alias Jido.AgentServer
+  alias Jido.Signal
 
   # ===========================================================================
   # ACTIONS: Handle different signal types

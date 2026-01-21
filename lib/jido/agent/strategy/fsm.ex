@@ -155,15 +155,7 @@ defmodule Jido.Agent.Strategy.FSM do
       {:ok, machine} ->
         {agent, machine, directives} = process_instructions(agent, machine, instructions)
 
-        machine =
-          if auto_transition do
-            case Machine.transition(machine, initial_state) do
-              {:ok, m} -> m
-              {:error, _} -> machine
-            end
-          else
-            machine
-          end
+        machine = maybe_auto_transition(machine, auto_transition, initial_state)
 
         agent = StratState.put(agent, %{state | machine: machine})
         {agent, directives}
@@ -182,6 +174,15 @@ defmodule Jido.Agent.Strategy.FSM do
 
       {new_agent, new_machine, acc_directives ++ new_directives}
     end)
+  end
+
+  defp maybe_auto_transition(machine, false, _initial_state), do: machine
+
+  defp maybe_auto_transition(machine, true, initial_state) do
+    case Machine.transition(machine, initial_state) do
+      {:ok, m} -> m
+      {:error, _} -> machine
+    end
   end
 
   defp run_instruction(agent, machine, %Instruction{} = instruction) do

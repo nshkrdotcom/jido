@@ -15,9 +15,9 @@ defmodule JidoExampleTest.ScheduleDirectiveTest do
   @moduletag :example
   @moduletag timeout: 20_000
 
-  alias Jido.Signal
   alias Jido.Agent.Directive
   alias Jido.AgentServer
+  alias Jido.Signal
 
   # ===========================================================================
   # ACTIONS: Schedule-based patterns

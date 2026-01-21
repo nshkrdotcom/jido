@@ -149,7 +149,7 @@ defmodule JidoTest.DiscoveryTest do
     test "returns action for valid slug" do
       actions = Discovery.list_actions(limit: 1)
 
-      if length(actions) > 0 do
+      if actions != [] do
         [action | _] = actions
         found = Discovery.get_action_by_slug(action.slug)
         assert found != nil
@@ -172,7 +172,7 @@ defmodule JidoTest.DiscoveryTest do
     test "returns agent for valid slug" do
       agents = Discovery.list_agents(limit: 1)
 
-      if length(agents) > 0 do
+      if agents != [] do
         [agent | _] = agents
         found = Discovery.get_agent_by_slug(agent.slug)
         assert found != nil

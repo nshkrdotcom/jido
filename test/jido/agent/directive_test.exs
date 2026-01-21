@@ -2,6 +2,7 @@ defmodule JidoTest.Agent.DirectiveTest do
   use ExUnit.Case, async: true
 
   alias Jido.Agent.Directive
+  alias Jido.AgentServer.ParentRef
 
   describe "emit/2" do
     test "creates Emit directive without dispatch" do
@@ -157,7 +158,7 @@ defmodule JidoTest.Agent.DirectiveTest do
       parent_pid = self()
 
       parent_ref =
-        Jido.AgentServer.ParentRef.new!(%{pid: parent_pid, id: "parent-123", tag: :child})
+        ParentRef.new!(%{pid: parent_pid, id: "parent-123", tag: :child})
 
       agent = %{state: %{__parent__: parent_ref}}
       signal = %{type: "child.result"}
@@ -172,7 +173,7 @@ defmodule JidoTest.Agent.DirectiveTest do
       parent_pid = self()
 
       parent_ref =
-        Jido.AgentServer.ParentRef.new!(%{pid: parent_pid, id: "parent-123", tag: :child})
+        ParentRef.new!(%{pid: parent_pid, id: "parent-123", tag: :child})
 
       agent = %{state: %{__parent__: parent_ref}}
 

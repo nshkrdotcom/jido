@@ -2,9 +2,9 @@ defmodule JidoTest.Agent.StateOpsTest do
   use ExUnit.Case, async: true
 
   alias Jido.Agent
-  alias Jido.Agent.StateOps
-  alias Jido.Agent.StateOp
   alias Jido.Agent.Directive
+  alias Jido.Agent.StateOp
+  alias Jido.Agent.StateOps
 
   describe "apply_result/2" do
     test "merges result into agent state" do

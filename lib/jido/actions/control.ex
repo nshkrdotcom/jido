@@ -109,14 +109,29 @@ defmodule Jido.Actions.Control do
     def run(%{target_pid: pid, signal_type: type, payload: payload, source: source}, context) do
       original = context[:signal]
 
-      final_type = type || (original && original.type) || "forwarded"
-      final_payload = payload || (original && original.data) || %{}
-      final_source = source || ((original && original.source) || "") <> "/forwarded"
+      final_type = resolve_type(type, original)
+      final_payload = resolve_payload(payload, original)
+      final_source = resolve_source(source, original)
 
       signal = Signal.new!(final_type, final_payload, source: final_source)
       directive = Directive.emit_to_pid(signal, pid)
       {:ok, %{forwarded_to: pid}, [directive]}
     end
+
+    defp resolve_type(type, _original) when is_binary(type), do: type
+    defp resolve_type(nil, %{type: type}) when is_binary(type), do: type
+    defp resolve_type(nil, _original), do: "forwarded"
+
+    defp resolve_payload(payload, _original) when is_map(payload), do: payload
+    defp resolve_payload(nil, %{data: data}) when is_map(data), do: data
+    defp resolve_payload(nil, _original), do: %{}
+
+    defp resolve_source(source, _original) when is_binary(source), do: source
+
+    defp resolve_source(nil, %{source: original_source}) when is_binary(original_source),
+      do: original_source <> "/forwarded"
+
+    defp resolve_source(nil, _original), do: "/forwarded"
   end
 
   defmodule Broadcast do

@@ -42,10 +42,10 @@ defmodule JidoExampleTest.ParentChildTest do
   @moduletag :example
   @moduletag timeout: 25_000
 
-  alias Jido.Signal
   alias Jido.Agent.Directive
   alias Jido.Agent.StateOp
   alias Jido.AgentServer
+  alias Jido.Signal
 
   # ===========================================================================
   # ACTIONS: Worker operations
@@ -264,7 +264,7 @@ defmodule JidoExampleTest.ParentChildTest do
         fn ->
           case AgentServer.state(coordinator_pid) do
             {:ok, %{agent: %{state: %{completed_responses: responses}}}} ->
-              length(responses) >= 1
+              responses != []
 
             _ ->
               false
@@ -299,7 +299,7 @@ defmodule JidoExampleTest.ParentChildTest do
         fn ->
           case AgentServer.state(coordinator_pid) do
             {:ok, %{agent: %{state: %{completed_responses: responses}}}} ->
-              length(responses) >= 1
+              responses != []
 
             _ ->
               false
@@ -345,7 +345,7 @@ defmodule JidoExampleTest.ParentChildTest do
         fn ->
           case AgentServer.state(coordinator_pid) do
             {:ok, %{agent: %{state: %{completed_responses: responses}}}} ->
-              length(responses) >= 3
+              match?([_, _, _ | _], responses)
 
             _ ->
               false
@@ -392,7 +392,7 @@ defmodule JidoExampleTest.ParentChildTest do
         fn ->
           case AgentServer.state(coordinator_pid) do
             {:ok, %{agent: %{state: %{completed_responses: responses}}}} ->
-              length(responses) >= 3
+              match?([_, _, _ | _], responses)
 
             _ ->
               false

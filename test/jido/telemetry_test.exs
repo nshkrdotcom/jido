@@ -1,8 +1,8 @@
 defmodule JidoTest.TelemetryTest do
   use ExUnit.Case, async: false
 
-  alias Jido.Telemetry
   alias Jido.Agent
+  alias Jido.Telemetry
 
   defmodule TestAgent do
     @moduledoc false

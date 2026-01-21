@@ -3,9 +3,10 @@ defmodule JidoTest.AgentServer.HierarchyTest do
 
   @moduletag capture_log: true
 
-  alias Jido.AgentServer
-  alias Jido.AgentServer.{ParentRef, State}
   alias Jido.Agent.Directive
+  alias Jido.AgentServer
+  alias Jido.AgentServer.ChildInfo
+  alias Jido.AgentServer.{ParentRef, State}
   alias Jido.Signal
 
   # Actions for ParentAgent
@@ -278,7 +279,7 @@ defmodule JidoTest.AgentServer.HierarchyTest do
       ref = Process.monitor(child_pid)
 
       child_info =
-        Jido.AgentServer.ChildInfo.new!(%{
+        ChildInfo.new!(%{
           pid: child_pid,
           ref: ref,
           module: ChildAgent,
@@ -320,7 +321,7 @@ defmodule JidoTest.AgentServer.HierarchyTest do
       ref = Process.monitor(child_pid)
 
       child_info =
-        Jido.AgentServer.ChildInfo.new!(%{
+        ChildInfo.new!(%{
           pid: child_pid,
           ref: ref,
           module: ChildAgent,

@@ -81,6 +81,8 @@ defmodule JidoTest.TestAgents do
     @moduledoc false
     @behaviour Jido.Agent.Strategy
 
+    alias Jido.Agent.Strategy.Direct
+
     @impl true
     def init(agent, _ctx), do: {agent, []}
 
@@ -91,7 +93,7 @@ defmodule JidoTest.TestAgents do
     def cmd(agent, action, ctx) do
       count = Map.get(agent.state, :strategy_count, 0)
       agent = %{agent | state: Map.put(agent.state, :strategy_count, count + 1)}
-      Jido.Agent.Strategy.Direct.cmd(agent, action, ctx)
+      Direct.cmd(agent, action, ctx)
     end
   end
 

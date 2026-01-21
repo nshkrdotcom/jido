@@ -1,8 +1,8 @@
 defmodule JidoTest.AgentServer.StrategyInitTest do
   use JidoTest.Case, async: true
 
-  alias Jido.AgentServer
   alias Jido.Agent.Directive
+  alias Jido.AgentServer
   alias Jido.Signal
 
   defmodule TrackingStrategy do

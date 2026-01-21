@@ -4,7 +4,7 @@ defmodule JidoTest.AgentServer.ErrorPolicyTest do
   @moduletag :capture_log
 
   alias Jido.Agent.Directive
-  alias Jido.AgentServer.{ErrorPolicy, State, Options}
+  alias Jido.AgentServer.{ErrorPolicy, Options, State}
 
   defmodule TestAgent do
     @moduledoc false

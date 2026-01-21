@@ -1,8 +1,8 @@
 defmodule JidoTest.AgentServer.TelemetryTest do
   use JidoTest.Case, async: false
 
-  alias Jido.AgentServer
   alias Jido.Agent.Directive
+  alias Jido.AgentServer
   alias Jido.Signal
   alias JidoTest.TestActions
 

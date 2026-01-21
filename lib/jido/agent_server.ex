@@ -122,12 +122,13 @@ defmodule Jido.AgentServer do
     Status
   }
 
-  alias Jido.AgentServer.Signal.{ChildExit, ChildStarted, Orphaned}
   alias Jido.Agent.Directive
+  alias Jido.AgentServer.Signal.{ChildExit, ChildStarted, Orphaned}
+  alias Jido.Sensor.Runtime, as: SensorRuntime
   alias Jido.Signal
-  alias Jido.Tracing.Trace
-  alias Jido.Tracing.Context, as: TraceContext
   alias Jido.Signal.Router, as: JidoRouter
+  alias Jido.Tracing.Context, as: TraceContext
+  alias Jido.Tracing.Trace
 
   @type server :: pid() | atom() | {:via, module(), term()} | String.t()
 
@@ -753,21 +754,25 @@ defmodule Jido.AgentServer do
 
         state = %{state | completion_waiters: new_waiters}
 
-        cond do
-          match?(%{parent: %ParentRef{pid: ^pid}}, state) ->
-            handle_parent_down(state, pid, reason)
-
-          true ->
-            handle_child_down(state, pid, reason)
+        if match?(%{parent: %ParentRef{pid: ^pid}}, state) do
+          handle_parent_down(state, pid, reason)
+        else
+          handle_child_down(state, pid, reason)
         end
     end
   end
 
-  def handle_info(:lifecycle_idle_timeout, state) do
-    # Delegate to lifecycle module
-    case state.lifecycle.mod.handle_event(:idle_timeout, state) do
-      {:cont, state} -> {:noreply, state}
-      {:stop, reason, state} -> {:stop, reason, state}
+  def handle_info({:timeout, ref, :lifecycle_idle_timeout}, state) do
+    if state.lifecycle.idle_timer == ref do
+      # Clear the timer so stale messages don't trigger after cancel/reset.
+      state = %{state | lifecycle: %{state.lifecycle | idle_timer: nil}}
+
+      case state.lifecycle.mod.handle_event(:idle_timeout, state) do
+        {:cont, state} -> {:noreply, state}
+        {:stop, reason, state} -> {:stop, reason, state}
+      end
+    else
+      {:noreply, state}
     end
   end
 
@@ -804,17 +809,7 @@ defmodule Jido.AgentServer do
 
   defp process_signal(%Signal{} = signal, %State{signal_router: router} = state) do
     start_time = System.monotonic_time()
-    agent_module = state.agent_module
-
-    trace_metadata = TraceContext.to_telemetry_metadata()
-
-    metadata =
-      %{
-        agent_id: state.id,
-        agent_module: agent_module,
-        signal_type: signal.type
-      }
-      |> Map.merge(trace_metadata)
+    metadata = build_signal_metadata(state, signal)
 
     emit_telemetry(
       [:jido, :agent_server, :signal, :start],
@@ -823,47 +818,7 @@ defmodule Jido.AgentServer do
     )
 
     try do
-      case run_skill_signal_hooks(signal, state) do
-        {:error, error} ->
-          error_directive = %Directive.Error{error: error, context: :skill_handle_signal}
-
-          case State.enqueue_all(state, signal, [error_directive]) do
-            {:ok, enq_state} -> {:error, error, start_drain_if_idle(enq_state)}
-            {:error, :queue_overflow} -> {:error, error, state}
-          end
-
-        {:override, action_spec} ->
-          dispatch_action(signal, action_spec, state, start_time, metadata)
-
-        :continue ->
-          case route_to_actions(router, signal) do
-            {:ok, actions} ->
-              dispatch_action(signal, actions, state, start_time, metadata)
-
-            {:error, reason} ->
-              emit_telemetry(
-                [:jido, :agent_server, :signal, :stop],
-                %{duration: System.monotonic_time() - start_time},
-                Map.merge(metadata, %{error: reason})
-              )
-
-              error =
-                Jido.Error.routing_error("No route for signal", %{
-                  signal_type: signal.type,
-                  reason: reason
-                })
-
-              error_directive = %Directive.Error{error: error, context: :routing}
-
-              case State.enqueue_all(state, signal, [error_directive]) do
-                {:ok, enq_state} ->
-                  {:error, reason, start_drain_if_idle(enq_state)}
-
-                {:error, :queue_overflow} ->
-                  {:error, reason, state}
-              end
-          end
-      end
+      do_process_signal(signal, router, state, start_time, metadata)
     catch
       kind, reason ->
         emit_telemetry(
@@ -873,6 +828,69 @@ defmodule Jido.AgentServer do
         )
 
         :erlang.raise(kind, reason, __STACKTRACE__)
+    end
+  end
+
+  defp build_signal_metadata(state, signal) do
+    trace_metadata = TraceContext.to_telemetry_metadata()
+
+    %{
+      agent_id: state.id,
+      agent_module: state.agent_module,
+      signal_type: signal.type
+    }
+    |> Map.merge(trace_metadata)
+  end
+
+  defp do_process_signal(signal, router, state, start_time, metadata) do
+    case run_skill_signal_hooks(signal, state) do
+      {:error, error} ->
+        handle_skill_hook_error(error, signal, state)
+
+      {:override, action_spec} ->
+        dispatch_action(signal, action_spec, state, start_time, metadata)
+
+      :continue ->
+        handle_signal_routing(signal, router, state, start_time, metadata)
+    end
+  end
+
+  defp handle_skill_hook_error(error, signal, state) do
+    error_directive = %Directive.Error{error: error, context: :skill_handle_signal}
+    enqueue_error_directive(error, signal, [error_directive], state)
+  end
+
+  defp handle_signal_routing(signal, router, state, start_time, metadata) do
+    case route_to_actions(router, signal) do
+      {:ok, actions} ->
+        dispatch_action(signal, actions, state, start_time, metadata)
+
+      {:error, reason} ->
+        handle_routing_error(reason, signal, state, start_time, metadata)
+    end
+  end
+
+  defp handle_routing_error(reason, signal, state, start_time, metadata) do
+    emit_telemetry(
+      [:jido, :agent_server, :signal, :stop],
+      %{duration: System.monotonic_time() - start_time},
+      Map.merge(metadata, %{error: reason})
+    )
+
+    error =
+      Jido.Error.routing_error("No route for signal", %{
+        signal_type: signal.type,
+        reason: reason
+      })
+
+    error_directive = %Directive.Error{error: error, context: :routing}
+    enqueue_error_directive(reason, signal, [error_directive], state)
+  end
+
+  defp enqueue_error_directive(error, signal, directives, state) do
+    case State.enqueue_all(state, signal, directives) do
+      {:ok, enq_state} -> {:error, error, start_drain_if_idle(enq_state)}
+      {:error, :queue_overflow} -> {:error, error, state}
     end
   end
 
@@ -970,32 +988,36 @@ defmodule Jido.AgentServer do
           {:halt, acc}
 
         :continue ->
-          context = %{
-            agent: state.agent,
-            agent_module: agent_module,
-            skill: spec.module,
-            skill_spec: spec,
-            config: spec.config || %{}
-          }
-
-          case spec.module.handle_signal(signal, context) do
-            {:ok, {:override, action_spec}} ->
-              {:halt, {:override, action_spec}}
-
-            {:ok, _} ->
-              {:cont, :continue}
-
-            {:error, reason} ->
-              error =
-                Jido.Error.execution_error(
-                  "Skill handle_signal failed",
-                  %{skill: spec.module, reason: reason}
-                )
-
-              {:halt, {:error, error}}
-          end
+          invoke_skill_handle_signal(spec, signal, state, agent_module)
       end
     end)
+  end
+
+  defp invoke_skill_handle_signal(spec, signal, state, agent_module) do
+    context = %{
+      agent: state.agent,
+      agent_module: agent_module,
+      skill: spec.module,
+      skill_spec: spec,
+      config: spec.config || %{}
+    }
+
+    case spec.module.handle_signal(signal, context) do
+      {:ok, {:override, action_spec}} ->
+        {:halt, {:override, action_spec}}
+
+      {:ok, _} ->
+        {:cont, :continue}
+
+      {:error, reason} ->
+        error =
+          Jido.Error.execution_error(
+            "Skill handle_signal failed",
+            %{skill: spec.module, reason: reason}
+          )
+
+        {:halt, {:error, error}}
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -1038,27 +1060,30 @@ defmodule Jido.AgentServer do
 
     Enum.reduce(skill_specs, state, fn spec, acc_state ->
       config = spec.config || %{}
-
-      case spec.module.child_spec(config) do
-        nil ->
-          acc_state
-
-        %{} = child_spec ->
-          start_skill_child(acc_state, spec.module, child_spec)
-
-        list when is_list(list) ->
-          Enum.reduce(list, acc_state, fn cs, s ->
-            start_skill_child(s, spec.module, cs)
-          end)
-
-        other ->
-          Logger.warning(
-            "Invalid child_spec from skill #{inspect(spec.module)}: #{inspect(other)}"
-          )
-
-          acc_state
-      end
+      start_skill_spec_children(acc_state, spec.module, config)
     end)
+  end
+
+  defp start_skill_spec_children(state, skill_module, config) do
+    case skill_module.child_spec(config) do
+      nil ->
+        state
+
+      %{} = child_spec ->
+        start_skill_child(state, skill_module, child_spec)
+
+      list when is_list(list) ->
+        Enum.reduce(list, state, fn cs, s ->
+          start_skill_child(s, skill_module, cs)
+        end)
+
+      other ->
+        Logger.warning(
+          "Invalid child_spec from skill #{inspect(skill_module)}: #{inspect(other)}"
+        )
+
+        state
+    end
   end
 
   defp start_skill_child(%State{} = state, skill_module, %{start: {m, f, a}} = spec) do
@@ -1143,7 +1168,7 @@ defmodule Jido.AgentServer do
       context: context
     ]
 
-    case Jido.Sensor.Runtime.start_link(opts) do
+    case SensorRuntime.start_link(opts) do
       {:ok, pid} ->
         ref = Process.monitor(pid)
         tag = {:sensor, skill_module, sensor_module}

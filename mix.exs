@@ -19,7 +19,8 @@ defmodule Jido.MixProject do
 
       # Docs
       name: "Jido",
-      description: "A toolkit for building autonomous, distributed agent systems in Elixir",
+      description:
+        "Pure functional agents and OTP runtime for building autonomous multi-agent workflows in Elixir.",
       source_url: "https://github.com/agentjido/jido",
       homepage_url: "https://github.com/agentjido/jido",
       package: package(),
@@ -261,8 +262,8 @@ defmodule Jido.MixProject do
   defp deps do
     [
       # Jido Ecosystem
-      {:jido_action, github: "agentjido/jido_action", branch: "main"},
-      {:jido_signal, github: "agentjido/jido_signal", branch: "main"},
+      {:jido_action, "~> 1.0"},
+      {:jido_signal, "~> 1.2"},
 
       # Jido Deps
       {:deep_merge, "~> 1.0"},
@@ -270,7 +271,7 @@ defmodule Jido.MixProject do
       {:nimble_options, "~> 1.1"},
       {:ok, "~> 2.3"},
       {:phoenix_pubsub, "~> 2.1"},
-      {:splode, "~> 0.2.5"},
+      {:splode, "~> 0.2.4", override: true},
       {:telemetry, "~> 1.3"},
       {:poolboy, "~> 1.5"},
       {:telemetry_metrics, "~> 1.1"},
@@ -278,11 +279,11 @@ defmodule Jido.MixProject do
       {:uniq, "~> 0.6.1"},
 
       # Skill & Action Dependencies for examples
-      {:req, "~> 0.5.16"},
+      # {:req, "~> 0.5.16"},
 
       # ReAct example dependency (optional - requires API key)
       # Using GitHub main for upcoming tool call extraction improvements
-      {:req_llm, github: "agentjido/req_llm", branch: "main"},
+      # {:req_llm, github: "agentjido/req_llm", branch: "main"},
 
       # Development & Test Dependencies
       {:git_ops, "~> 2.9", only: :dev, runtime: false},

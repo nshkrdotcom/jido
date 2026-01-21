@@ -186,7 +186,7 @@ defmodule JidoTest.AwaitCoverageTest do
 
       result = Await.any([pid1, pid2], 50)
 
-      assert match?({:error, :timeout}, result) or match?({:error, {_, :timeout}}, result)
+      assert {:error, :timeout} = result
 
       GenServer.stop(pid1)
       GenServer.stop(pid2)

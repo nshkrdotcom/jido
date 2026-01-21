@@ -373,8 +373,7 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
       assert {:ok, ^state_with_child} =
                DirectiveExec.exec(stop_directive, input_signal, state_with_child)
 
-      Process.sleep(50)
-      refute Process.alive?(child_pid)
+      refute_eventually(Process.alive?(child_pid))
     end
 
     test "returns ok when child tag not found", %{state: state, input_signal: input_signal} do

@@ -10,6 +10,17 @@ defmodule JidoTest.ObserveTest do
   alias Jido.Observe.Log
   alias Jido.Observe.NoopTracer
 
+  setup do
+    previous_level = Logger.level()
+    Logger.configure(level: :debug)
+
+    on_exit(fn ->
+      Logger.configure(level: previous_level)
+    end)
+
+    :ok
+  end
+
   describe "with_span/3" do
     setup do
       test_pid = self()

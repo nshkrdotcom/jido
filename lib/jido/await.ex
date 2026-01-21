@@ -205,6 +205,10 @@ defmodule Jido.Await do
       {:await_result, ref, server, {:ok, result}} ->
         collect_all(Map.delete(waiters, ref), Map.put(acc, server, result), deadline)
 
+      {:await_result, ref, _server, {:error, :timeout}} ->
+        kill_waiters(Map.delete(waiters, ref))
+        {:error, :timeout}
+
       {:await_result, ref, server, {:error, reason}} ->
         kill_waiters(Map.delete(waiters, ref))
         {:error, {server, reason}}
@@ -267,6 +271,10 @@ defmodule Jido.Await do
       {:await_result, ref, server, {:ok, result}} ->
         kill_waiters(Map.delete(waiters, ref))
         {:ok, {server, result}}
+
+      {:await_result, ref, _server, {:error, :timeout}} ->
+        kill_waiters(Map.delete(waiters, ref))
+        {:error, :timeout}
 
       {:await_result, ref, server, {:error, reason}} ->
         kill_waiters(Map.delete(waiters, ref))

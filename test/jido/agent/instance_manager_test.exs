@@ -132,7 +132,6 @@ defmodule JidoTest.Agent.InstanceManagerTest do
       {:ok, manager: manager_name}
     end
 
-    @tag :flaky
     test "stop/2 terminates agent", %{manager: manager} do
       {:ok, pid} = InstanceManager.get(manager, "stop-key")
       assert Process.alive?(pid)

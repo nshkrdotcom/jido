@@ -190,8 +190,15 @@ defmodule Jido.Agent.InstanceManager do
   @spec lookup(manager_name(), key()) :: {:ok, pid()} | :error
   def lookup(manager, key) do
     case Registry.lookup(registry_name(manager), key) do
-      [{pid, _}] -> {:ok, pid}
-      [] -> :error
+      [{pid, _}] ->
+        if Process.alive?(pid) do
+          {:ok, pid}
+        else
+          :error
+        end
+
+      [] ->
+        :error
     end
   end
 

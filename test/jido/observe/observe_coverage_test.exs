@@ -15,9 +15,14 @@ defmodule JidoTest.ObserveCoverageTest do
   alias Jido.Observe
 
   setup do
+    previous_level = Logger.level()
+    Logger.configure(level: :debug)
+
     original_config = Application.get_env(:jido, :observability)
 
     on_exit(fn ->
+      Logger.configure(level: previous_level)
+
       if original_config do
         Application.put_env(:jido, :observability, original_config)
       else

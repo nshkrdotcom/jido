@@ -271,7 +271,7 @@ defmodule Jido.MixProject do
       {:nimble_options, "~> 1.1"},
       {:ok, "~> 2.3"},
       {:phoenix_pubsub, "~> 2.1"},
-      {:splode, "~> 0.2.4", override: true},
+      {:splode, "~> 0.2.10"},
       {:telemetry, "~> 1.3"},
       {:poolboy, "~> 1.5"},
       {:telemetry_metrics, "~> 1.1"},

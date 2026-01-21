@@ -216,9 +216,7 @@ defmodule JidoTest.AwaitTest do
         AgentServer.start_link(agent: AwaitAgent, id: "await-any-timeout-2", jido: jido)
 
       result = Await.any([pid1, pid2], 50)
-      # When an individual server times out, we get {:error, {server, :timeout}}
-      # When no messages arrive at all, we get {:error, :timeout}
-      assert match?({:error, :timeout}, result) or match?({:error, {_, :timeout}}, result)
+      assert {:error, :timeout} = result
 
       GenServer.stop(pid1)
       GenServer.stop(pid2)

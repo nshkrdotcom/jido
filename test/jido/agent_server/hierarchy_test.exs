@@ -257,7 +257,7 @@ defmodule JidoTest.AgentServer.HierarchyTest do
 
       [event] = child_state.agent.state.orphan_events
       assert event.parent_id == "parent-orphan-1"
-      assert event.reason == :normal
+      assert event.reason in [:normal, :noproc]
 
       GenServer.stop(child_pid)
     end

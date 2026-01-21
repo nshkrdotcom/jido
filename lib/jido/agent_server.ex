@@ -466,7 +466,13 @@ defmodule Jido.AgentServer do
   @spec attach(server(), pid()) :: :ok | {:error, term()}
   def attach(server, owner_pid \\ self()) do
     with {:ok, pid} <- resolve_server(server) do
-      GenServer.call(pid, {:attach, owner_pid})
+      try do
+        GenServer.call(pid, {:attach, owner_pid})
+      catch
+        :exit, {:noproc, _} -> {:error, :not_found}
+        :exit, {:timeout, _} -> {:error, :timeout}
+        :exit, reason -> {:error, reason}
+      end
     end
   end
 
@@ -486,7 +492,13 @@ defmodule Jido.AgentServer do
   @spec detach(server(), pid()) :: :ok | {:error, term()}
   def detach(server, owner_pid \\ self()) do
     with {:ok, pid} <- resolve_server(server) do
-      GenServer.call(pid, {:detach, owner_pid})
+      try do
+        GenServer.call(pid, {:detach, owner_pid})
+      catch
+        :exit, {:noproc, _} -> {:error, :not_found}
+        :exit, {:timeout, _} -> {:error, :timeout}
+        :exit, reason -> {:error, reason}
+      end
     end
   end
 

@@ -13,6 +13,7 @@ defmodule JidoTest.ObserveCoverageTest do
   import ExUnit.CaptureLog
 
   alias Jido.Observe
+  alias JidoTest.Support.TestTracer
 
   setup do
     previous_level = Logger.level()
@@ -238,7 +239,7 @@ defmodule JidoTest.ObserveCoverageTest do
     test "redacts various data types" do
       Application.put_env(:jido, :observability, redact_sensitive: true)
 
-      assert Observe.redact(12345) == "[REDACTED]"
+      assert Observe.redact(12_345) == "[REDACTED]"
       assert Observe.redact(%{key: "value"}) == "[REDACTED]"
       assert Observe.redact([:a, :b, :c]) == "[REDACTED]"
       assert Observe.redact(nil) == "[REDACTED]"
@@ -247,9 +248,9 @@ defmodule JidoTest.ObserveCoverageTest do
 
   describe "custom tracer with TestTracer" do
     setup do
-      {:ok, _pid} = JidoTest.Support.TestTracer.start_link()
-      JidoTest.Support.TestTracer.clear()
-      Application.put_env(:jido, :observability, tracer: JidoTest.Support.TestTracer)
+      {:ok, _pid} = TestTracer.start_link()
+      TestTracer.clear()
+      Application.put_env(:jido, :observability, tracer: TestTracer)
       :ok
     end
 
@@ -257,7 +258,7 @@ defmodule JidoTest.ObserveCoverageTest do
       span_ctx = Observe.start_span([:jido, :tracer, :test], %{key: "val"})
       Observe.finish_span(span_ctx, %{extra: 123})
 
-      spans = JidoTest.Support.TestTracer.get_spans()
+      spans = TestTracer.get_spans()
 
       assert Enum.any?(spans, fn
                {:start, _ref, [:jido, :tracer, :test], %{key: "val"}} -> true
@@ -274,7 +275,7 @@ defmodule JidoTest.ObserveCoverageTest do
       span_ctx = Observe.start_span([:jido, :tracer, :exception], %{})
       Observe.finish_span_error(span_ctx, :error, :test_error, [])
 
-      spans = JidoTest.Support.TestTracer.get_spans()
+      spans = TestTracer.get_spans()
 
       assert Enum.any?(spans, fn
                {:exception, _ref, :error, :test_error, []} -> true

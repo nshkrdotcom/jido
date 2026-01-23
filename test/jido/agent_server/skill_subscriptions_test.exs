@@ -1,6 +1,8 @@
 defmodule JidoTest.AgentServer.SkillSubscriptionsTest do
   use JidoTest.Case, async: false
 
+  alias Jido.Sensor.Runtime
+
   @moduletag :capture_log
 
   # ---------------------------------------------------------------------------
@@ -297,7 +299,7 @@ defmodule JidoTest.AgentServer.SkillSubscriptionsTest do
 
       [{_tag, child_info}] = sensor_children
 
-      Jido.Sensor.Runtime.event(child_info.pid, {:trigger, :test_value})
+      Runtime.event(child_info.pid, {:trigger, :test_value})
 
       Process.sleep(50)
 

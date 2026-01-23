@@ -14,8 +14,8 @@ defmodule JidoExampleTest.SensorDemoTest do
   @moduletag :example
   @moduletag timeout: 30_000
 
-  alias Jido.Signal
   alias Jido.AgentServer
+  alias Jido.Signal
 
   # ===========================================================================
   # ACTIONS: Handle sensor and webhook signals
@@ -139,8 +139,8 @@ defmodule JidoExampleTest.SensorDemoTest do
     @moduledoc false
     use GenServer
 
-    alias Jido.Signal
     alias Jido.AgentServer
+    alias Jido.Signal
 
     @quotes [
       "The best way to predict the future is to create it.",
@@ -199,8 +199,8 @@ defmodule JidoExampleTest.SensorDemoTest do
 
   defmodule WebhookHelper do
     @moduledoc false
-    alias Jido.Signal
     alias Jido.AgentServer
+    alias Jido.Signal
 
     def emit_github_event(agent_target, event_type, payload) do
       signal =
@@ -257,7 +257,7 @@ defmodule JidoExampleTest.SensorDemoTest do
           agent_pid,
           fn state ->
             quotes = state.agent.state.quotes
-            length(quotes) >= 2
+            match?([_, _ | _], quotes)
           end,
           timeout: 5_000,
           interval: 50
@@ -298,7 +298,7 @@ defmodule JidoExampleTest.SensorDemoTest do
           agent_pid,
           fn state ->
             events = state.agent.state.events
-            length(events) >= 2
+            match?([_, _ | _], events)
           end,
           timeout: 5_000,
           interval: 50
@@ -338,7 +338,7 @@ defmodule JidoExampleTest.SensorDemoTest do
       # Wait for some quotes, then inject webhooks
       eventually_state(
         agent_pid,
-        fn state -> length(state.agent.state.quotes) >= 1 end,
+        fn state -> state.agent.state.quotes != [] end,
         timeout: 3_000,
         interval: 50
       )

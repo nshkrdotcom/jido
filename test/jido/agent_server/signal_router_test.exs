@@ -3,6 +3,7 @@ defmodule JidoTest.AgentServer.SignalRouterTest do
 
   alias Jido.AgentServer.SignalRouter
   alias Jido.AgentServer.State
+  alias Jido.AgentServer.State.Lifecycle
   alias Jido.Signal.Router, as: JidoRouter
 
   # =============================================================================
@@ -226,7 +227,7 @@ defmodule JidoTest.AgentServer.SignalRouterTest do
   defp build_test_state(agent_module) do
     agent = agent_module.new(%{id: "test-#{System.unique_integer([:positive])}"})
 
-    {:ok, lifecycle} = Jido.AgentServer.State.Lifecycle.new([])
+    {:ok, lifecycle} = Lifecycle.new([])
 
     attrs = %{
       id: agent.id,

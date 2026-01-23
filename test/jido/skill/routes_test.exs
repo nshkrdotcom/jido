@@ -1,8 +1,8 @@
 defmodule JidoTest.Skill.RoutesTest do
   use ExUnit.Case, async: true
 
-  alias Jido.Skill.Routes
   alias Jido.Skill.Instance
+  alias Jido.Skill.Routes
 
   defmodule TestAction1 do
     @moduledoc false

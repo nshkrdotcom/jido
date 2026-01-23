@@ -5,8 +5,8 @@ defmodule JidoTest.AwaitCoverageTest do
   """
   use JidoTest.Case, async: false
 
-  alias Jido.Await
   alias Jido.AgentServer
+  alias Jido.Await
   alias Jido.Signal
 
   defmodule NeverCompletesAction do

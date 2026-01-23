@@ -17,6 +17,7 @@ defmodule Jido.Agent.StateOps do
   """
 
   alias Jido.Agent
+  alias Jido.Agent.State
   alias Jido.Agent.StateOp
 
   @doc """
@@ -26,7 +27,7 @@ defmodule Jido.Agent.StateOps do
   """
   @spec apply_result(Agent.t(), map()) :: Agent.t()
   def apply_result(%Agent{} = agent, result) when is_map(result) do
-    new_state = Jido.Agent.State.merge(agent.state, result)
+    new_state = State.merge(agent.state, result)
     %{agent | state: new_state}
   end
 
@@ -42,7 +43,7 @@ defmodule Jido.Agent.StateOps do
   def apply_state_ops(%Agent{} = agent, effects) do
     Enum.reduce(effects, {agent, []}, fn
       %StateOp.SetState{attrs: attrs}, {a, directives} ->
-        new_state = Jido.Agent.State.merge(a.state, attrs)
+        new_state = State.merge(a.state, attrs)
         {%{a | state: new_state}, directives}
 
       %StateOp.ReplaceState{state: new_state}, {a, directives} ->

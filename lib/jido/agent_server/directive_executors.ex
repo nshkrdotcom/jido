@@ -14,24 +14,26 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Emit do
         {:error, _} -> signal
       end
 
-    case cfg do
-      nil ->
-        Logger.debug("Emit directive with no dispatch config, signal: #{traced_signal.type}")
-
-      cfg ->
-        if Code.ensure_loaded?(Jido.Signal.Dispatch) do
-          task_sup =
-            if state.jido, do: Jido.task_supervisor_name(state.jido), else: Jido.TaskSupervisor
-
-          Task.Supervisor.start_child(task_sup, fn ->
-            Jido.Signal.Dispatch.dispatch(traced_signal, cfg)
-          end)
-        else
-          Logger.warning("Jido.Signal.Dispatch not available, skipping emit")
-        end
-    end
+    dispatch_signal(traced_signal, cfg, state)
 
     {:async, nil, state}
+  end
+
+  defp dispatch_signal(traced_signal, nil, _state) do
+    Logger.debug("Emit directive with no dispatch config, signal: #{traced_signal.type}")
+  end
+
+  defp dispatch_signal(traced_signal, cfg, state) do
+    if Code.ensure_loaded?(Jido.Signal.Dispatch) do
+      task_sup =
+        if state.jido, do: Jido.task_supervisor_name(state.jido), else: Jido.TaskSupervisor
+
+      Task.Supervisor.start_child(task_sup, fn ->
+        Jido.Signal.Dispatch.dispatch(traced_signal, cfg)
+      end)
+    else
+      Logger.warning("Jido.Signal.Dispatch not available, skipping emit")
+    end
   end
 end
 
@@ -52,15 +54,13 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Spawn do
 
   def exec(%{child_spec: child_spec, tag: tag}, _input_signal, state) do
     result =
-      cond do
-        is_function(state.spawn_fun, 1) ->
-          state.spawn_fun.(child_spec)
+      if is_function(state.spawn_fun, 1) do
+        state.spawn_fun.(child_spec)
+      else
+        agent_sup =
+          if state.jido, do: Jido.agent_supervisor_name(state.jido), else: Jido.AgentSupervisor
 
-        true ->
-          agent_sup =
-            if state.jido, do: Jido.agent_supervisor_name(state.jido), else: Jido.AgentSupervisor
-
-          DynamicSupervisor.start_child(agent_sup, child_spec)
+        DynamicSupervisor.start_child(agent_sup, child_spec)
       end
 
     case result do

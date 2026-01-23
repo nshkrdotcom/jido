@@ -2,8 +2,8 @@ defmodule JidoTest.AgentTest do
   use ExUnit.Case, async: true
 
   alias Jido.Agent
-  alias JidoTest.TestAgents
   alias JidoTest.TestActions
+  alias JidoTest.TestAgents
 
   describe "module definition" do
     test "defines metadata accessors" do
@@ -253,7 +253,7 @@ defmodule JidoTest.AgentTest do
     end
 
     test "Agent.new/1 returns error for invalid id type" do
-      {:error, error} = Agent.new(%{id: 12345})
+      {:error, error} = Agent.new(%{id: 12_345})
       assert error.message == "Agent validation failed"
     end
 

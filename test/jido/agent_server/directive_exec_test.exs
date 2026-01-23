@@ -2,7 +2,7 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
   use JidoTest.Case, async: true
 
   alias Jido.Agent.Directive
-  alias Jido.AgentServer.{DirectiveExec, State, Options}
+  alias Jido.AgentServer.{DirectiveExec, Options, State}
   alias Jido.Signal
 
   defmodule TestAgent do

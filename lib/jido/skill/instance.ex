@@ -26,6 +26,8 @@ defmodule Jido.Skill.Instance do
       Instance.new({MySkill, as: :sales, token: "sales-token"})
   """
 
+  alias Jido.Skill.Config
+
   @schema Zoi.struct(
             __MODULE__,
             %{
@@ -83,7 +85,7 @@ defmodule Jido.Skill.Instance do
     base_state_key = manifest.state_key
     base_name = manifest.name
 
-    resolved_config = Jido.Skill.Config.resolve_config!(module, overrides)
+    resolved_config = Config.resolve_config!(module, overrides)
 
     state_key = derive_state_key(base_state_key, as_opt)
     route_prefix = derive_route_prefix(base_name, as_opt)

@@ -136,12 +136,10 @@ defmodule Jido.Skill.Requirements do
   @spec format_error(%{String.t() => [requirement()]}) :: String.t()
   def format_error(missing_by_skill) do
     parts =
-      missing_by_skill
-      |> Enum.map(fn {skill_name, requirements} ->
-        reqs_str = requirements |> Enum.map(&inspect/1) |> Enum.join(", ")
+      Enum.map_join(missing_by_skill, "; ", fn {skill_name, requirements} ->
+        reqs_str = Enum.map_join(requirements, ", ", &inspect/1)
         "#{skill_name} requires #{reqs_str}"
       end)
-      |> Enum.join("; ")
 
     "Missing requirements for skills: #{parts}"
   end

@@ -53,10 +53,7 @@ defmodule Jido.Igniter.Templates do
           signal_patterns :: [String.t()]
         ) :: String.t()
   def skill_template(module, name, state_key, signal_patterns) do
-    patterns_str =
-      signal_patterns
-      |> Enum.map(&~s("#{&1}"))
-      |> Enum.join(", ")
+    patterns_str = Enum.map_join(signal_patterns, ", ", &~s("#{&1}"))
 
     """
     defmodule #{module} do

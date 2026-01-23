@@ -4,8 +4,8 @@ defmodule JidoTest.AgentServer.CronIntegrationTest do
   @moduletag :integration
   @moduletag capture_log: true
 
-  alias Jido.AgentServer
   alias Jido.Agent.Directive
+  alias Jido.AgentServer
   alias Jido.Signal
 
   defmodule CronCountAction do

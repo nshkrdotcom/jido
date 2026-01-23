@@ -2,6 +2,25 @@ import Config
 
 config :jido, default: Jido.DefaultInstance
 
+# Logger configuration for Jido telemetry metadata
+# These metadata keys are used by Jido.Telemetry for structured logging
+config :logger, :default_formatter,
+  format: "[$level] $message $metadata\n",
+  metadata: [
+    :agent_id,
+    :agent_module,
+    :action,
+    :directive_count,
+    :directive_type,
+    :duration_μs,
+    :error,
+    :instruction_count,
+    :queue_size,
+    :result,
+    :signal_type,
+    :strategy
+  ]
+
 # Git hooks and git_ops configuration for conventional commits
 # Only enabled in dev environment (git_ops is a dev-only dependency)
 if config_env() == :dev do

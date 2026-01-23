@@ -16,9 +16,9 @@ defmodule JidoExampleTest.ObservabilityTest do
   @moduletag :example
   @moduletag timeout: 15_000
 
+  alias Jido.AgentServer
   alias Jido.Observe
   alias Jido.Signal
-  alias Jido.AgentServer
   alias Jido.Tracing.Context, as: TraceContext
 
   # ===========================================================================
@@ -317,7 +317,7 @@ defmodule JidoExampleTest.ObservabilityTest do
 
       eventually(fn ->
         events = TelemetryCollector.get_events(collector)
-        length(events) >= 1
+        events != []
       end)
 
       [{event, measurements, metadata}] = TelemetryCollector.get_events(collector)

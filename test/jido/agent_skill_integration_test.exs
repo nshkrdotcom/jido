@@ -1,6 +1,7 @@
 defmodule JidoTest.AgentSkillIntegrationTest do
   use ExUnit.Case, async: true
 
+  alias Jido.Agent.Schema
   alias Jido.Skill.Spec
 
   # =============================================================================
@@ -224,7 +225,7 @@ defmodule JidoTest.AgentSkillIntegrationTest do
       schema = SingleSkillAgent.schema()
 
       assert is_struct(schema)
-      keys = Jido.Agent.Schema.known_keys(schema)
+      keys = Schema.known_keys(schema)
       assert :counter_skill in keys
     end
 
@@ -608,7 +609,7 @@ defmodule JidoTest.AgentSkillIntegrationTest do
   describe "schema merging" do
     test "merged schema contains skill state_keys" do
       schema = MixedSchemaAgent.schema()
-      keys = Jido.Agent.Schema.known_keys(schema)
+      keys = Schema.known_keys(schema)
 
       assert :counter_skill in keys
     end

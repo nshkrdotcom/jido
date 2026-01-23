@@ -15,9 +15,9 @@ defmodule JidoExampleTest.EmitDirectiveTest do
   @moduletag :example
   @moduletag timeout: 15_000
 
-  alias Jido.Signal
   alias Jido.Agent.Directive
   alias Jido.AgentServer
+  alias Jido.Signal
 
   # ===========================================================================
   # ACTIONS: Emit domain events
@@ -196,7 +196,7 @@ defmodule JidoExampleTest.EmitDirectiveTest do
       eventually(
         fn ->
           signals = SignalCollector.get_signals(collector)
-          length(signals) >= 1
+          signals != []
         end,
         timeout: 2_000
       )

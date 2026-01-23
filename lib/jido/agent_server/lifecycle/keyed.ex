@@ -31,6 +31,8 @@ defmodule Jido.AgentServer.Lifecycle.Keyed do
 
   require Logger
 
+  alias Jido.Agent.Persistence
+
   @impl true
   def init(_opts, state) do
     # The lifecycle struct is already populated by State.from_options
@@ -164,7 +166,7 @@ defmodule Jido.AgentServer.Lifecycle.Keyed do
     agent = state.agent
     agent_module = state.agent_module
 
-    case Jido.Agent.Persistence.hibernate(persistence, agent_module, pool_key, agent) do
+    case Persistence.hibernate(persistence, agent_module, pool_key, agent) do
       :ok ->
         Logger.debug("Lifecycle hibernated agent for #{lifecycle.pool}/#{inspect(pool_key)}")
 
@@ -184,7 +186,8 @@ defmodule Jido.AgentServer.Lifecycle.Keyed do
         state
 
       MapSet.size(lifecycle.attachments) == 0 and is_integer(timeout) and timeout > 0 ->
-        timer_ref = Process.send_after(self(), :lifecycle_idle_timeout, timeout)
+        # Use a timer ref so stale timeout messages can be ignored safely.
+        timer_ref = :erlang.start_timer(timeout, self(), :lifecycle_idle_timeout)
         %{state | lifecycle: %{lifecycle | idle_timer: timer_ref}}
 
       true ->
@@ -196,7 +199,7 @@ defmodule Jido.AgentServer.Lifecycle.Keyed do
     lifecycle = state.lifecycle
 
     if lifecycle.idle_timer do
-      Process.cancel_timer(lifecycle.idle_timer)
+      :erlang.cancel_timer(lifecycle.idle_timer)
       %{state | lifecycle: %{lifecycle | idle_timer: nil}}
     else
       state

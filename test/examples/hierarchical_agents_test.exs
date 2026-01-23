@@ -54,10 +54,10 @@ defmodule JidoExampleTest.HierarchicalAgentsTest do
   @moduletag :example
   @moduletag timeout: 30_000
 
-  alias Jido.Signal
   alias Jido.Agent.Directive
   alias Jido.Agent.StateOp
   alias Jido.AgentServer
+  alias Jido.Signal
   alias Jido.Tracing.Trace
 
   # ===========================================================================
@@ -510,7 +510,7 @@ defmodule JidoExampleTest.HierarchicalAgentsTest do
         fn ->
           case AgentServer.state(orchestrator_pid) do
             {:ok, %{agent: %{state: %{completed_jobs: jobs}}}} ->
-              length(jobs) >= 1
+              jobs != []
 
             _ ->
               false
@@ -560,8 +560,8 @@ defmodule JidoExampleTest.HierarchicalAgentsTest do
       eventually(
         fn ->
           case AgentServer.state(orchestrator_pid) do
-            {:ok, %{agent: %{state: %{completed_jobs: jobs}}}} ->
-              length(jobs) >= 2
+            {:ok, %{agent: %{state: %{completed_jobs: [_, _ | _]}}}} ->
+              true
 
             _ ->
               false
@@ -609,7 +609,7 @@ defmodule JidoExampleTest.HierarchicalAgentsTest do
         fn ->
           case AgentServer.state(orchestrator_pid) do
             {:ok, %{agent: %{state: %{completed_jobs: jobs}}}} ->
-              length(jobs) >= 1
+              jobs != []
 
             _ ->
               false
@@ -619,7 +619,7 @@ defmodule JidoExampleTest.HierarchicalAgentsTest do
       )
 
       {:ok, final_state} = AgentServer.state(orchestrator_pid)
-      assert length(final_state.agent.state.completed_jobs) >= 1
+      assert final_state.agent.state.completed_jobs != []
     end
   end
 
@@ -648,7 +648,7 @@ defmodule JidoExampleTest.HierarchicalAgentsTest do
         fn ->
           case AgentServer.state(orchestrator_pid) do
             {:ok, %{agent: %{state: %{completed_jobs: jobs}}}} ->
-              length(jobs) >= 1
+              jobs != []
 
             _ ->
               false
@@ -695,7 +695,7 @@ defmodule JidoExampleTest.HierarchicalAgentsTest do
         fn ->
           case AgentServer.state(orchestrator_pid) do
             {:ok, %{agent: %{state: %{completed_jobs: jobs}}}} ->
-              length(jobs) >= 1
+              jobs != []
 
             _ ->
               false

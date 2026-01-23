@@ -22,9 +22,9 @@ defmodule JidoExampleTest.TracingTest do
   @moduletag :example
   @moduletag timeout: 15_000
 
-  alias Jido.Signal
   alias Jido.Agent.Directive
   alias Jido.AgentServer
+  alias Jido.Signal
   alias Jido.Tracing.Trace
 
   # ===========================================================================
@@ -180,7 +180,7 @@ defmodule JidoExampleTest.TracingTest do
 
       eventually(fn ->
         signals = TracedSignalCollector.get_signals(collector)
-        length(signals) >= 1
+        signals != []
       end)
 
       [emitted] = TracedSignalCollector.get_signals(collector)
@@ -214,7 +214,7 @@ defmodule JidoExampleTest.TracingTest do
 
       eventually(fn ->
         signals = TracedSignalCollector.get_signals(collector)
-        length(signals) >= 3
+        match?([_, _, _ | _], signals)
       end)
 
       signals = TracedSignalCollector.get_signals(collector)
@@ -251,7 +251,7 @@ defmodule JidoExampleTest.TracingTest do
 
       eventually(fn ->
         signals = TracedSignalCollector.get_signals(collector)
-        length(signals) >= 1
+        signals != []
       end)
 
       [emitted] = TracedSignalCollector.get_signals(collector)
@@ -281,7 +281,7 @@ defmodule JidoExampleTest.TracingTest do
 
       eventually(fn ->
         signals = TracedSignalCollector.get_signals(collector)
-        length(signals) >= 1
+        signals != []
       end)
 
       [emitted] = TracedSignalCollector.get_signals(collector)

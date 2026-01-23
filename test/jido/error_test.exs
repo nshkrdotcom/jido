@@ -264,7 +264,7 @@ defmodule JidoTest.ErrorTest do
       stacktrace = Error.capture_stacktrace()
 
       assert is_list(stacktrace)
-      assert length(stacktrace) > 0
+      assert stacktrace != []
     end
   end
 end

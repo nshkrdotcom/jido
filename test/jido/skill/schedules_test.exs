@@ -1,8 +1,9 @@
 defmodule JidoTest.Skill.SchedulesTest do
   use ExUnit.Case, async: true
 
-  alias Jido.Skill.Schedules
   alias Jido.Skill.Instance
+  alias Jido.Skill.Routes
+  alias Jido.Skill.Schedules
 
   defmodule RefreshTokenAction do
     @moduledoc false
@@ -168,7 +169,7 @@ defmodule JidoTest.Skill.SchedulesTest do
   describe "schedule_route_priority/0" do
     test "returns a negative priority lower than default skill routes" do
       priority = Schedules.schedule_route_priority()
-      default_priority = Jido.Skill.Routes.default_priority()
+      default_priority = Routes.default_priority()
 
       assert priority < default_priority
       assert priority == -20

@@ -27,6 +27,9 @@ if Code.ensure_loaded?(Igniter) do
 
     use Igniter.Mix.Task
 
+    alias Igniter.Project.Application
+    alias Igniter.Project.Config
+
     @impl Igniter.Mix.Task
     def info(_argv, _composing_task) do
       %Igniter.Mix.Task.Info{
@@ -48,11 +51,11 @@ if Code.ensure_loaded?(Igniter) do
     @impl Igniter.Mix.Task
     def igniter(igniter) do
       options = igniter.args.options
-      app_name = Igniter.Project.Application.app_name(igniter)
+      app_name = Application.app_name(igniter)
 
       igniter =
         igniter
-        |> Igniter.Project.Config.configure_new(
+        |> Config.configure_new(
           "config.exs",
           :jido,
           [:default_bus],
@@ -63,7 +66,7 @@ if Code.ensure_loaded?(Igniter) do
         if options[:no_supervisor] do
           igniter
         else
-          Igniter.Project.Application.add_new_child(
+          Application.add_new_child(
             igniter,
             {Jido.Bus.InMemory, name: :jido_bus},
             after: [Ecto.Repo, Phoenix.PubSub]

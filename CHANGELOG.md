@@ -2,6 +2,22 @@
 
 <!-- %% CHANGELOG_ENTRIES %% -->
 
+## 2.0.0-rc.2 - 2025-01-30
+
+### Changed
+- **Zoi Schema Migration**: Convert remaining structs to use Zoi schemas for consistent validation (#106)
+- **Macro Decomposition**: Decompose large macros and improve code organization (#101)
+- **Sensor Simplification**: Simplify `handle_event/2` to directive-only format (#108)
+
+### Fixed
+- Address code quality issues from codebase review (#107)
+- Improve process lifecycle handling and test reliability (#100)
+
+### Dependencies
+- Bump `jido_action` and `jido_signal` to 2.0.0-rc.2
+
+---
+
 ## 2.0.0 - 2025-12-31
 
 ### Added

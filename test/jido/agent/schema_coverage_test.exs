@@ -25,25 +25,15 @@ defmodule JidoTest.Agent.SchemaCoverageTest do
     end
 
     test "returns keys from directly constructed Map type with map fields" do
-      map_schema = %Zoi.Types.Map{
-        fields: %{direct_key: Zoi.string(), another_key: Zoi.integer()},
-        strict: false,
-        coerce: false,
-        meta: %Zoi.Types.Meta{}
-      }
+      map_schema = Zoi.map(%{direct_key: Zoi.string(), another_key: Zoi.integer()})
 
       keys = Schema.known_keys(map_schema)
       assert :direct_key in keys
       assert :another_key in keys
     end
 
-    test "returns keys from directly constructed Map type with list fields" do
-      map_schema = %Zoi.Types.Map{
-        fields: [list_key: Zoi.string(), other_key: Zoi.integer()],
-        strict: false,
-        coerce: false,
-        meta: %Zoi.Types.Meta{}
-      }
+    test "returns keys from Map type with additional fields" do
+      map_schema = Zoi.map(%{list_key: Zoi.string(), other_key: Zoi.integer()})
 
       keys = Schema.known_keys(map_schema)
       assert :list_key in keys
@@ -72,27 +62,15 @@ defmodule JidoTest.Agent.SchemaCoverageTest do
     end
 
     test "returns keys from directly constructed Struct type with map fields" do
-      struct_schema = %Zoi.Types.Struct{
-        module: TestStruct,
-        fields: %{field_a: Zoi.string(), field_b: Zoi.integer()},
-        strict: false,
-        coerce: false,
-        meta: %Zoi.Types.Meta{}
-      }
+      struct_schema = Zoi.struct(TestStruct, %{field_a: Zoi.string(), field_b: Zoi.integer()})
 
       keys = Schema.known_keys(struct_schema)
       assert :field_a in keys
       assert :field_b in keys
     end
 
-    test "returns keys from directly constructed Struct type with list fields" do
-      struct_schema = %Zoi.Types.Struct{
-        module: TestStruct,
-        fields: [field_a: Zoi.string(), field_b: Zoi.integer()],
-        strict: false,
-        coerce: false,
-        meta: %Zoi.Types.Meta{}
-      }
+    test "returns keys from Struct type with additional fields" do
+      struct_schema = Zoi.struct(TestStruct, %{field_a: Zoi.string(), field_b: Zoi.integer()})
 
       keys = Schema.known_keys(struct_schema)
       assert :field_a in keys
@@ -113,39 +91,23 @@ defmodule JidoTest.Agent.SchemaCoverageTest do
       assert defaults == %{name: "default_name", enabled: true}
     end
 
-    test "extracts defaults from directly constructed Map type with map fields" do
-      map_schema = %Zoi.Types.Map{
-        fields: %{
-          key_with_default: %Zoi.Types.Default{
-            inner: Zoi.string(),
-            value: "default_value",
-            meta: %Zoi.Types.Meta{}
-          },
+    test "extracts defaults from Map type with map fields" do
+      map_schema =
+        Zoi.map(%{
+          key_with_default: Zoi.string() |> Zoi.default("default_value"),
           key_without_default: Zoi.integer()
-        },
-        strict: false,
-        coerce: false,
-        meta: %Zoi.Types.Meta{}
-      }
+        })
 
       defaults = Schema.defaults_from_zoi_schema(map_schema)
       assert defaults == %{key_with_default: "default_value"}
     end
 
-    test "extracts defaults from directly constructed Map type with list fields" do
-      map_schema = %Zoi.Types.Map{
-        fields: [
-          key_with_default: %Zoi.Types.Default{
-            inner: Zoi.integer(),
-            value: 42,
-            meta: %Zoi.Types.Meta{}
-          },
+    test "extracts defaults from Map type with integer default" do
+      map_schema =
+        Zoi.map(%{
+          key_with_default: Zoi.integer() |> Zoi.default(42),
           key_without_default: Zoi.string()
-        ],
-        strict: false,
-        coerce: false,
-        meta: %Zoi.Types.Meta{}
-      }
+        })
 
       defaults = Schema.defaults_from_zoi_schema(map_schema)
       assert defaults == %{key_with_default: 42}
@@ -186,41 +148,23 @@ defmodule JidoTest.Agent.SchemaCoverageTest do
       assert defaults == %{field_a: "default_a", field_b: 42}
     end
 
-    test "extracts defaults from directly constructed Struct type with map fields" do
-      struct_schema = %Zoi.Types.Struct{
-        module: TestStruct,
-        fields: %{
-          field_a: %Zoi.Types.Default{
-            inner: Zoi.string(),
-            value: "struct_default",
-            meta: %Zoi.Types.Meta{}
-          },
+    test "extracts defaults from Struct type with map fields" do
+      struct_schema =
+        Zoi.struct(TestStruct, %{
+          field_a: Zoi.string() |> Zoi.default("struct_default"),
           field_b: Zoi.integer()
-        },
-        strict: false,
-        coerce: false,
-        meta: %Zoi.Types.Meta{}
-      }
+        })
 
       defaults = Schema.defaults_from_zoi_schema(struct_schema)
       assert defaults == %{field_a: "struct_default"}
     end
 
-    test "extracts defaults from directly constructed Struct type with list fields" do
-      struct_schema = %Zoi.Types.Struct{
-        module: TestStruct,
-        fields: [
-          field_a: %Zoi.Types.Default{
-            inner: Zoi.string(),
-            value: "list_default",
-            meta: %Zoi.Types.Meta{}
-          },
+    test "extracts defaults from Struct type with string default" do
+      struct_schema =
+        Zoi.struct(TestStruct, %{
+          field_a: Zoi.string() |> Zoi.default("list_default"),
           field_b: Zoi.integer()
-        ],
-        strict: false,
-        coerce: false,
-        meta: %Zoi.Types.Meta{}
-      }
+        })
 
       defaults = Schema.defaults_from_zoi_schema(struct_schema)
       assert defaults == %{field_a: "list_default"}
@@ -294,13 +238,8 @@ defmodule JidoTest.Agent.SchemaCoverageTest do
       assert :skill_data in keys
     end
 
-    test "merges directly constructed Map type with map fields" do
-      base = %Zoi.Types.Map{
-        fields: %{base_key: Zoi.atom()},
-        strict: false,
-        coerce: false,
-        meta: %Zoi.Types.Meta{}
-      }
+    test "merges Map type base with skill" do
+      base = Zoi.map(%{base_key: Zoi.atom()})
 
       skill_spec = %Jido.Skill.Spec{
         module: MySkill,
@@ -318,13 +257,8 @@ defmodule JidoTest.Agent.SchemaCoverageTest do
       assert :skill in keys
     end
 
-    test "merges directly constructed Map type with list fields" do
-      base = %Zoi.Types.Map{
-        fields: [base_key: Zoi.atom()],
-        strict: false,
-        coerce: false,
-        meta: %Zoi.Types.Meta{}
-      }
+    test "merges Map type base with another skill" do
+      base = Zoi.map(%{base_key: Zoi.atom()})
 
       skill_spec = %Jido.Skill.Spec{
         module: MySkill,
@@ -342,14 +276,8 @@ defmodule JidoTest.Agent.SchemaCoverageTest do
       assert :skill in keys
     end
 
-    test "merges directly constructed Struct type with map fields" do
-      base = %Zoi.Types.Struct{
-        module: TestStruct,
-        fields: %{field_a: Zoi.string()},
-        strict: false,
-        coerce: false,
-        meta: %Zoi.Types.Meta{}
-      }
+    test "merges Struct type base with skill" do
+      base = Zoi.struct(TestStruct, %{field_a: Zoi.string()})
 
       skill_spec = %Jido.Skill.Spec{
         module: MySkill,
@@ -367,14 +295,8 @@ defmodule JidoTest.Agent.SchemaCoverageTest do
       assert :skill in keys
     end
 
-    test "merges directly constructed Struct type with list fields" do
-      base = %Zoi.Types.Struct{
-        module: TestStruct,
-        fields: [field_a: Zoi.string()],
-        strict: false,
-        coerce: false,
-        meta: %Zoi.Types.Meta{}
-      }
+    test "merges Struct type base with another skill" do
+      base = Zoi.struct(TestStruct, %{field_a: Zoi.string()})
 
       skill_spec = %Jido.Skill.Spec{
         module: MySkill,

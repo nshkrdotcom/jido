@@ -349,8 +349,8 @@ defmodule Jido.MixProject do
   defp deps do
     [
       # Jido Ecosystem
-      {:jido_action, "~> 2.0.0-rc.2"},
-      {:jido_signal, "~> 2.0.0-rc.2"},
+      {:jido_action, "~> 2.0.0-rc.3"},
+      {:jido_signal, "~> 2.0.0-rc.3"},
 
       # Jido Deps
       {:deep_merge, "~> 1.0"},
@@ -364,13 +364,6 @@ defmodule Jido.MixProject do
       {:telemetry_metrics, "~> 1.1"},
       {:sched_ex, "~> 1.1"},
       {:uniq, "~> 0.6.1"},
-
-      # Skill & Action Dependencies for examples
-      # {:req, "~> 0.5.16"},
-
-      # ReAct example dependency (optional - requires API key)
-      # Using GitHub main for upcoming tool call extraction improvements
-      # {:req_llm, github: "agentjido/req_llm", branch: "main"},
 
       # Development & Test Dependencies
       {:git_ops, "~> 2.9", only: :dev, runtime: false},

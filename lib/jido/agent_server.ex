@@ -52,6 +52,7 @@ defmodule Jido.AgentServer do
   - `:parent` - Parent reference for hierarchy
   - `:on_parent_death` - Behavior when parent dies (`:stop`, `:continue`, `:emit_orphan`)
   - `:spawn_fun` - Custom function for spawning children
+  - `:debug` - Enable debug mode with event buffer (default: `false`)
 
   ## Agent Resolution
 
@@ -107,6 +108,48 @@ defmodule Jido.AgentServer do
   **Do NOT** use `{:stop, ...}` from DirectiveExec for normal completion—this
   causes race conditions with async work and skips lifecycle hooks.
   See `Jido.AgentServer.DirectiveExec` for details.
+
+  ## Debugging
+
+  AgentServer can record recent events in an in-memory ring buffer (max 50)
+  to help diagnose what happened inside a running agent.
+
+  Enable at start:
+
+      {:ok, pid} = AgentServer.start_link(agent: MyAgent, debug: true)
+
+  Or toggle at runtime:
+
+      :ok = AgentServer.set_debug(pid, true)
+
+  Retrieve recent events (newest-first):
+
+      {:ok, events} = AgentServer.recent_events(pid, limit: 10)
+
+  Each event has the shape `%{at: monotonic_ms, type: atom(), data: map()}`.
+  Event types include `:signal_received` and `:directive_started`.
+
+  Returns `{:error, :debug_not_enabled}` if debug mode is off.
+
+  > **Note:** This is a development aid, not an audit log. Events are not
+  > persisted and the buffer has fixed capacity.
+
+  ## Timeout Diagnostics
+
+  When `await_completion/2` times out, it returns a diagnostic map:
+
+      {:error, {:timeout, %{
+        hint: "Agent is idle but await_completion is blocking",
+        server_status: :idle,
+        queue_length: 0,
+        iteration: nil,
+        waited_ms: 5000
+      }}}
+
+  Use this to understand why the agent hasn't completed:
+  - `:idle` with empty queue → agent finished but state doesn't match await condition
+  - `:waiting` → strategy is waiting (e.g., for LLM response)
+  - `:running` → still processing directives
   """
 
   use GenServer
@@ -308,7 +351,34 @@ defmodule Jido.AgentServer do
     timeout = Keyword.get(opts, :timeout, 10_000)
 
     with {:ok, pid} <- resolve_server(server) do
-      GenServer.call(pid, {:await_completion, opts}, timeout)
+      try do
+        GenServer.call(pid, {:await_completion, opts}, timeout)
+      catch
+        :exit, {:timeout, _} ->
+          case status(server) do
+            {:ok, s} -> {:error, {:timeout, build_timeout_diagnostic(s, timeout)}}
+            _ -> {:error, :timeout}
+          end
+      end
+    end
+  end
+
+  defp build_timeout_diagnostic(status, timeout_ms) do
+    %{
+      waited_ms: timeout_ms,
+      server_status: status.snapshot.status,
+      queue_length: Status.queue_length(status),
+      iteration: Status.iteration(status),
+      hint: infer_timeout_hint(status)
+    }
+  end
+
+  defp infer_timeout_hint(status) do
+    case status.snapshot.status do
+      :waiting -> "Strategy is waiting (possibly for LLM response)"
+      :running -> "Strategy is running (processing directives)"
+      :idle -> "Agent is idle but await_completion is blocking"
+      _ -> nil
     end
   end
 
@@ -399,6 +469,50 @@ defmodule Jido.AgentServer do
           raise "Failed to get status: #{inspect(reason)}"
       end
     end)
+  end
+
+  @doc """
+  Enables or disables debug mode at runtime.
+
+  When debug mode is enabled, the agent records recent events in a ring buffer
+  for diagnostic purposes.
+
+  ## Examples
+
+      :ok = AgentServer.set_debug(pid, true)
+      # ... run some operations ...
+      {:ok, events} = AgentServer.recent_events(pid)
+  """
+  @spec set_debug(server(), boolean()) :: :ok | {:error, term()}
+  def set_debug(server, enabled) when is_boolean(enabled) do
+    with {:ok, pid} <- resolve_server(server) do
+      GenServer.call(pid, {:set_debug, enabled})
+    end
+  end
+
+  @doc """
+  Retrieves recent debug events from the agent's event buffer.
+
+  Events are returned newest-first. Each event includes:
+  - `:at` - Monotonic timestamp in milliseconds
+  - `:type` - Event type atom (e.g., `:signal_received`, `:directive_started`)
+  - `:data` - Event-specific data map
+
+  Returns `{:error, :debug_not_enabled}` if debug mode is off.
+
+  ## Options
+
+  - `:limit` - Maximum number of events to return (default: all, max 50)
+
+  ## Examples
+
+      {:ok, events} = AgentServer.recent_events(pid, limit: 10)
+  """
+  @spec recent_events(server(), keyword()) :: {:ok, [map()]} | {:error, term()}
+  def recent_events(server, opts \\ []) do
+    with {:ok, pid} <- resolve_server(server) do
+      GenServer.call(pid, {:recent_events, opts})
+    end
   end
 
   @doc """
@@ -636,6 +750,20 @@ defmodule Jido.AgentServer do
     {:reply, {:ok, state}, state}
   end
 
+  def handle_call({:set_debug, enabled}, _from, %State{} = state) do
+    new_state = State.set_debug(state, enabled)
+    {:reply, :ok, new_state}
+  end
+
+  def handle_call({:recent_events, _opts}, _from, %State{debug: false} = state) do
+    {:reply, {:error, :debug_not_enabled}, state}
+  end
+
+  def handle_call({:recent_events, opts}, _from, %State{} = state) do
+    events = State.get_debug_events(state, opts)
+    {:reply, {:ok, events}, state}
+  end
+
   def handle_call({:await_completion, opts}, from, %State{} = state) do
     status_path = Keyword.get(opts, :status_path, [:status])
     result_path = Keyword.get(opts, :result_path, [:last_answer])
@@ -826,6 +954,13 @@ defmodule Jido.AgentServer do
   defp process_signal(%Signal{} = signal, %State{signal_router: router} = state) do
     start_time = System.monotonic_time()
     metadata = build_signal_metadata(state, signal)
+
+    # Record debug event for signal received
+    state =
+      State.record_debug_event(state, :signal_received, %{
+        type: signal.type,
+        id: signal.id
+      })
 
     emit_telemetry(
       [:jido, :agent_server, :signal, :start],
@@ -1527,6 +1662,13 @@ defmodule Jido.AgentServer do
 
     directive_type =
       directive.__struct__ |> Module.split() |> List.last()
+
+    # Record debug event for directive execution
+    state =
+      State.record_debug_event(state, :directive_started, %{
+        type: directive_type,
+        signal_type: signal.type
+      })
 
     trace_metadata = TraceContext.to_telemetry_metadata()
 

@@ -2,6 +2,26 @@
 
 <!-- %% CHANGELOG_ENTRIES %% -->
 
+## 2.0.0-rc.3 - 2026-02-04
+
+### Added
+- `cmd/3` to support per-action timeout opts (#117)
+- Unified persistence layer for agent checkpoints and thread journals (#110)
+- Telemetry infrastructure with span tracking and metrics (#109)
+- Debug helpers and improved timeout errors (#111)
+
+### Changed
+- **BREAKING**: Renamed `Jido.Skill` to `Jido.Plugin` (#115)
+
+### Fixed
+- Dialyzer/Credo: add :mix to PLT, remove unnecessary ignores (#118)
+
+### Dependencies
+- Bump `jido_action` and `jido_signal` to 2.0.0-rc.3
+- Bump `ex_doc` from 0.40.0 to 0.40.1 (#112)
+
+---
+
 ## 2.0.0-rc.2 - 2025-01-30
 
 ### Changed

@@ -229,7 +229,19 @@ defmodule Jido.Agent do
                              Zoi.list(Zoi.any(),
                                description: "Plugin modules or {module, config} tuples"
                              )
-                             |> Zoi.default([])
+                             |> Zoi.default([]),
+                           default_plugins:
+                             Zoi.any(
+                               description:
+                                 "Override default plugins. false to disable all, or map of %{state_key => false | Module | {Module, config}}"
+                             )
+                             |> Zoi.optional(),
+                           jido:
+                             Zoi.atom(
+                               description:
+                                 "Jido instance module for resolving default plugins at compile time"
+                             )
+                             |> Zoi.optional()
                          },
                          coerce: true
                        )
@@ -297,11 +309,9 @@ defmodule Jido.Agent do
   Serializes the agent for persistence.
 
   Called by `Jido.Persist.hibernate/2` before writing to storage.
-  The returned data should NOT include the full Thread - only a pointer.
-
-  If not implemented, a default serialization is used that:
-  - Excludes `:__thread__` from state
-  - Stores thread pointer as `%{id: thread.id, rev: thread.rev}`
+  The default implementation passes the full agent state through.
+  `Jido.Persist` enforces invariants (e.g., stripping `:__thread__`
+  and storing a pointer) after this callback returns.
 
   ## Parameters
 
@@ -666,8 +676,10 @@ defmodule Jido.Agent do
         base_defaults = AgentState.defaults_from_schema(@validated_opts[:schema])
 
         # Build plugin defaults nested under their state_keys
+        # Skip plugins with nil schema (they manage their own state lifecycle)
         plugin_defaults =
           @plugin_specs
+          |> Enum.reject(fn spec -> spec.schema == nil end)
           |> Enum.map(fn spec ->
             plugin_state_defaults = Jido.Agent.Schema.defaults_from_zoi_schema(spec.schema)
             {spec.state_key, plugin_state_defaults}
@@ -884,17 +896,34 @@ defmodule Jido.Agent do
   defp __quoted_callback_checkpoint__ do
     quote location: :keep do
       @impl true
-      def checkpoint(agent, _ctx) do
-        thread = agent.state[:__thread__]
+      def checkpoint(agent, ctx) do
+        {state, externalized} =
+          Enum.reduce(@plugin_instances, {agent.state, %{}}, fn instance, {state_acc, ext_acc} ->
+            plugin_state = Map.get(state_acc, instance.state_key)
+            config = instance.config || %{}
+
+            case instance.module.on_checkpoint(plugin_state, Map.put(ctx, :config, config)) do
+              {:externalize, key, pointer} ->
+                {Map.delete(state_acc, instance.state_key), Map.put(ext_acc, key, pointer)}
+
+              :drop ->
+                {Map.delete(state_acc, instance.state_key), ext_acc}
+
+              :keep ->
+                {state_acc, ext_acc}
+            end
+          end)
 
         {:ok,
-         %{
-           version: 1,
-           agent_module: __MODULE__,
-           id: agent.id,
-           state: Map.delete(agent.state, :__thread__),
-           thread: thread && %{id: thread.id, rev: thread.rev}
-         }}
+         Map.merge(
+           %{
+             version: 1,
+             agent_module: __MODULE__,
+             id: agent.id,
+             state: state
+           },
+           externalized
+         )}
       end
     end
   end
@@ -983,10 +1012,35 @@ defmodule Jido.Agent do
                                line: __ENV__.line
                          end)
 
-        # Normalize plugins to Instance structs
-        @plugin_instances Jido.Agent.__normalize_plugin_instances__(
-                            @validated_opts[:plugins] || []
-                          )
+        @default_plugin_list Jido.Agent.__resolve_default_plugins__(@validated_opts)
+        @all_plugin_decls @default_plugin_list ++ (@validated_opts[:plugins] || [])
+        @plugin_instances Jido.Agent.__normalize_plugin_instances__(@all_plugin_decls)
+
+        @singleton_alias_violations @plugin_instances
+                                    |> Enum.filter(fn inst ->
+                                      inst.module.singleton?() and inst.as != nil
+                                    end)
+        if @singleton_alias_violations != [] do
+          modules =
+            Enum.map(@singleton_alias_violations, & &1.module) |> Enum.map(&inspect/1)
+
+          raise CompileError,
+            description: "Cannot alias singleton plugins: #{Enum.join(modules, ", ")}",
+            file: __ENV__.file,
+            line: __ENV__.line
+        end
+
+        @singleton_modules @plugin_instances
+                           |> Enum.filter(fn inst -> inst.module.singleton?() end)
+                           |> Enum.map(& &1.module)
+        @duplicate_singletons @singleton_modules -- Enum.uniq(@singleton_modules)
+        if @duplicate_singletons != [] do
+          raise CompileError,
+            description:
+              "Duplicate singleton plugins: #{inspect(Enum.uniq(@duplicate_singletons))}",
+            file: __ENV__.file,
+            line: __ENV__.line
+        end
 
         # Build plugin specs from instances (for backward compatibility)
         @plugin_specs Enum.map(@plugin_instances, fn instance ->
@@ -1102,6 +1156,21 @@ defmodule Jido.Agent do
   @spec __normalize_plugin_instances__([module() | {module(), map()}]) :: [PluginInstance.t()]
   def __normalize_plugin_instances__(plugins) do
     Enum.map(plugins, &__validate_and_create_plugin_instance__/1)
+  end
+
+  @doc false
+  @spec __resolve_default_plugins__(map()) :: [module() | {module(), map()}]
+  def __resolve_default_plugins__(agent_opts) do
+    jido_module = agent_opts[:jido]
+
+    base_defaults =
+      if jido_module != nil and function_exported?(jido_module, :__default_plugins__, 0) do
+        jido_module.__default_plugins__()
+      else
+        Jido.Agent.DefaultPlugins.package_defaults()
+      end
+
+    Jido.Agent.DefaultPlugins.apply_agent_overrides(base_defaults, agent_opts[:default_plugins])
   end
 
   defp __validate_and_create_plugin_instance__(plugin_decl) do

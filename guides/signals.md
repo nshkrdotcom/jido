@@ -89,7 +89,7 @@ When a signal arrives at an agent, the `SignalRouter` determines which action to
 
 1. **Strategy routes** (priority 50+) — via `strategy.signal_routes/1`
 2. **Agent routes** (priority 0) — via `agent_module.signal_routes/0`
-3. **Plugin routes** (priority -10) — via plugin `signal_patterns` and `router/1`
+3. **Plugin routes** (priority -10) — via plugin `signal_patterns` and `signal_routes/1`
 
 ### Agent Signal Routes
 
@@ -147,7 +147,7 @@ Pattern matching:
 - `"chat.*"` — matches `chat.message`, `chat.clear`, etc.
 - `"chat.**"` — matches `chat.message`, `chat.room.join`, etc.
 
-Plugins can also implement a `router/1` callback for dynamic routing.
+Plugins can also implement a `signal_routes/1` callback for dynamic routing.
 
 ## Emitting Signals (Directive.Emit)
 

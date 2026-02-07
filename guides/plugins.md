@@ -99,13 +99,13 @@ end
 
 Returns `{:ok, map}` to merge into plugin state, or `{:error, reason}` to abort agent creation.
 
-### router/1
+### signal_routes/1
 
 Defines signal-to-action routing rules.
 
 ```elixir
 @impl Jido.Plugin
-def router(_config) do
+def signal_routes(_config) do
   [
     {"chat.send", MyApp.Actions.SendMessage},
     {"chat.history", MyApp.Actions.ListHistory}

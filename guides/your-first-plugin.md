@@ -19,7 +19,7 @@ defmodule MyApp.CounterPlugin do
     signal_patterns: ["counter.*"]
 
   @impl Jido.Plugin
-  def router(_config) do
+  def signal_routes(_config) do
     [{"counter.increment", MyApp.IncrementAction}]
   end
 end
@@ -92,7 +92,7 @@ defmodule MyApp.CounterPlugin do
     signal_patterns: ["counter.*"]
 
   @impl Jido.Plugin
-  def router(_config) do
+  def signal_routes(_config) do
     [{"counter.increment", MyApp.IncrementAction}]
   end
 end
@@ -163,11 +163,11 @@ Plugins can't accidentally overwrite each other's state.
 
 ## Signal Routing
 
-The `router/1` callback maps signal types to actions:
+The `signal_routes/1` callback maps signal types to actions:
 
 ```elixir
 @impl Jido.Plugin
-def router(_config) do
+def signal_routes(_config) do
   [
     {"counter.increment", MyApp.IncrementAction},
     {"counter.reset", MyApp.ResetAction}

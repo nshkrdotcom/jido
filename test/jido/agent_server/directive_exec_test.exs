@@ -379,6 +379,32 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
       GenServer.stop(child_info.pid)
     end
 
+    test "spawns child agent with temporary restart semantics", %{
+      state: state,
+      input_signal: input_signal
+    } do
+      directive = %Directive.SpawnAgent{
+        agent: TestAgent,
+        tag: :temporary_child,
+        opts: %{},
+        meta: %{}
+      }
+
+      assert {:ok, new_state} = DirectiveExec.exec(directive, input_signal, state)
+
+      child_info = new_state.children[:temporary_child]
+      child_pid = child_info.pid
+      child_id = child_info.id
+      child_ref = Process.monitor(child_pid)
+
+      Process.exit(child_pid, :kill)
+      assert_receive {:DOWN, ^child_ref, :process, ^child_pid, :killed}, 1_000
+
+      eventually(fn ->
+        Jido.AgentServer.whereis(state.registry, child_id) == nil
+      end)
+    end
+
     test "spawns child agent with struct agent (resolve_agent_module for struct)", %{
       state: state,
       input_signal: input_signal

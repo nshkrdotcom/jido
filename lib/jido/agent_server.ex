@@ -192,27 +192,49 @@ defmodule Jido.AgentServer do
   """
   @spec start(keyword() | map()) :: DynamicSupervisor.on_start_child()
   def start(opts) do
-    child_spec = {__MODULE__, opts}
+    {child_spec_overrides, start_opts} = extract_child_spec_overrides(opts)
+    child_spec = build_child_spec(start_opts, child_spec_overrides)
+    supervisor = resolve_supervisor(start_opts)
+    start_under_supervisor(supervisor, child_spec)
+  end
 
+  defp build_child_spec(start_opts, []), do: {__MODULE__, start_opts}
+
+  defp build_child_spec(start_opts, overrides),
+    do: Supervisor.child_spec({__MODULE__, start_opts}, overrides)
+
+  defp resolve_supervisor(start_opts) do
     jido_instance =
-      if is_list(opts), do: Keyword.get(opts, :jido), else: Map.get(opts, :jido)
+      if is_list(start_opts), do: Keyword.get(start_opts, :jido), else: Map.get(start_opts, :jido)
 
-    supervisor =
-      case jido_instance do
-        nil -> Jido.AgentSupervisor
-        instance -> Jido.agent_supervisor_name(instance)
-      end
-
-    case maybe_whereis_supervisor(supervisor) do
-      {:ok, _pid} ->
-        case safe_dynamic_supervisor_start_child(supervisor, child_spec) do
-          {:error, :not_found} -> {:error, {:missing_supervisor, supervisor}}
-          other -> other
-        end
-
-      {:error, :not_found} ->
-        {:error, {:missing_supervisor, supervisor}}
+    case jido_instance do
+      nil -> Jido.AgentSupervisor
+      instance -> Jido.agent_supervisor_name(instance)
     end
+  end
+
+  defp start_under_supervisor(supervisor, child_spec) do
+    with {:ok, _pid} <- maybe_whereis_supervisor(supervisor),
+         result <- safe_dynamic_supervisor_start_child(supervisor, child_spec) do
+      case result do
+        {:error, :not_found} -> {:error, {:missing_supervisor, supervisor}}
+        other -> other
+      end
+    else
+      {:error, :not_found} -> {:error, {:missing_supervisor, supervisor}}
+    end
+  end
+
+  defp extract_child_spec_overrides(opts) when is_list(opts) do
+    {restart, start_opts} = Keyword.pop(opts, :restart)
+    overrides = if is_nil(restart), do: [], else: [restart: restart]
+    {overrides, start_opts}
+  end
+
+  defp extract_child_spec_overrides(opts) when is_map(opts) do
+    {restart, start_opts} = Map.pop(opts, :restart)
+    overrides = if is_nil(restart), do: [], else: [restart: restart]
+    {overrides, start_opts}
   end
 
   @doc """
@@ -366,7 +388,7 @@ defmodule Jido.AgentServer do
 
   - `{:ok, %{status: :completed | :failed, result: any()}}` - Agent reached terminal status
   - `{:error, :not_found}` - Server not found
-  - Exits with `{:timeout, ...}` if GenServer.call times out
+  - `{:error, {:timeout, map()}}` - Completion timeout with diagnostics
 
   ## Examples
 
@@ -374,17 +396,14 @@ defmodule Jido.AgentServer do
   """
   @spec await_completion(server(), keyword()) :: {:ok, map()} | {:error, term()}
   def await_completion(server, opts \\ []) do
-    timeout = Keyword.get(opts, :timeout, RuntimeDefaults.await_timeout())
-
     with {:ok, server_ref} <- resolve_server(server) do
       try do
-        GenServer.call(server_ref, {:await_completion, opts}, timeout)
+        # Timeout semantics are handled by server-side waiter expiry to avoid
+        # GenServer.call timeout reply leaks in caller mailboxes.
+        GenServer.call(server_ref, {:await_completion, opts}, :infinity)
       catch
         :exit, {:timeout, _} ->
-          case status(server) do
-            {:ok, s} -> {:error, {:timeout, build_timeout_diagnostic(s, timeout)}}
-            _ -> {:error, :timeout}
-          end
+          {:error, :timeout}
 
         :exit, {:noproc, _} ->
           {:error, :not_found}
@@ -401,18 +420,8 @@ defmodule Jido.AgentServer do
     end
   end
 
-  defp build_timeout_diagnostic(status, timeout_ms) do
-    %{
-      waited_ms: timeout_ms,
-      server_status: status.snapshot.status,
-      queue_length: Status.queue_length(status),
-      iteration: Status.iteration(status),
-      hint: infer_timeout_hint(status)
-    }
-  end
-
   defp infer_timeout_hint(status) do
-    case status.snapshot.status do
+    case status do
       :waiting -> "Strategy is waiting (possibly for LLM response)"
       :running -> "Strategy is running (processing directives)"
       :idle -> "Agent is idle but await_completion is blocking"
@@ -831,7 +840,8 @@ defmodule Jido.AgentServer do
           expiry_ref: expiry_ref,
           status_path: status_path,
           result_path: result_path,
-          error_path: error_path
+          error_path: error_path,
+          timeout: timeout
         }
 
         new_waiters = Map.put(state.completion_waiters, monitor_ref, waiter)
@@ -961,6 +971,10 @@ defmodule Jido.AgentServer do
 
       {waiter, waiters} ->
         Process.demonitor(waiter.monitor_ref, [:flush])
+
+        diagnostic = build_timeout_diagnostic_from_state(state, waiter.timeout)
+        GenServer.reply(waiter.from, {:error, {:timeout, diagnostic}})
+
         {:noreply, %{state | completion_waiters: waiters}}
     end
   end
@@ -2000,6 +2014,18 @@ defmodule Jido.AgentServer do
 
   defp cancel_waiter_expiry(_), do: :ok
 
+  defp build_timeout_diagnostic_from_state(%State{} = state, timeout_ms) do
+    snapshot = state.agent_module.strategy_snapshot(state.agent)
+
+    %{
+      waited_ms: timeout_ms,
+      server_status: snapshot.status,
+      queue_length: State.queue_length(state),
+      iteration: Map.get(snapshot, :iteration),
+      hint: infer_timeout_hint(snapshot.status)
+    }
+  end
+
   # ---------------------------------------------------------------------------
   # Internal: Agent Resolution
   # ---------------------------------------------------------------------------
@@ -2097,7 +2123,7 @@ defmodule Jido.AgentServer do
   defp runtime_child_supervisor_name(_state), do: Jido.AgentSupervisor
 
   defp supervised_runtime_child_spec(spec) do
-    Supervisor.child_spec(spec, restart: :temporary)
+    Supervisor.child_spec(spec, [])
   end
 
   defp start_runtime_child(%State{} = state, child_spec) do

@@ -218,6 +218,7 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.SpawnAgent do
       ] ++ Map.to_list(Map.delete(opts, :id))
 
     child_opts = if state.jido, do: Keyword.put(child_opts, :jido, state.jido), else: child_opts
+    child_opts = Keyword.put(child_opts, :restart, :temporary)
 
     case AgentServer.start(child_opts) do
       {:ok, pid} ->

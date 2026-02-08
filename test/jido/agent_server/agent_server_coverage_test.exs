@@ -449,6 +449,35 @@ defmodule JidoTest.AgentServerCoverageTest do
       GenServer.stop(pid)
     end
 
+    test "timeout does not leave a late GenServer.call reply in caller mailbox", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: CompletionAgent, jido: jido)
+      parent = self()
+
+      waiter_pid =
+        spawn(fn ->
+          result = AgentServer.await_completion(pid, timeout: 30)
+          send(parent, {:await_result, result})
+
+          receive do
+            :mailbox_snapshot ->
+              send(parent, {:await_mailbox, Process.info(self(), :messages)})
+          end
+        end)
+
+      assert_receive {:await_result, {:error, {:timeout, diagnostic}}}, 1_000
+      assert diagnostic.waited_ms == 30
+
+      signal = Signal.new!("complete", %{}, source: "/test")
+      {:ok, _agent} = AgentServer.call(pid, signal)
+
+      Process.sleep(50)
+      send(waiter_pid, :mailbox_snapshot)
+
+      assert_receive {:await_mailbox, {:messages, []}}, 1_000
+
+      GenServer.stop(pid)
+    end
+
     test "pending waiters receive shutdown error when server stops", %{jido: jido} do
       {:ok, pid} = AgentServer.start(agent: CompletionAgent, jido: jido)
 

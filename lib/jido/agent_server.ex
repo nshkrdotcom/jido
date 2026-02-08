@@ -143,7 +143,7 @@ defmodule Jido.AgentServer do
         server_status: :idle,
         queue_length: 0,
         iteration: nil,
-        waited_ms: 5000
+        waited_ms: timeout_ms
       }}}
 
   Use this to understand why the agent hasn't completed:
@@ -258,7 +258,7 @@ defmodule Jido.AgentServer do
     %{
       id: id,
       start: {__MODULE__, :start_link, [opts]},
-      shutdown: 5_000,
+      shutdown: RuntimeDefaults.agent_server_shutdown_timeout(),
       restart: :permanent,
       type: :worker
     }
@@ -559,7 +559,7 @@ defmodule Jido.AgentServer do
   """
   @spec whereis(module(), String.t()) :: pid() | nil
   def whereis(registry, id) when is_atom(registry) and is_binary(id) do
-    case Registry.lookup(registry, id) do
+    case safe_registry_lookup(registry, id) do
       [{pid, _}] -> pid
       [] -> nil
     end
@@ -1998,17 +1998,19 @@ defmodule Jido.AgentServer do
   # Internal: Server Resolution
   # ---------------------------------------------------------------------------
 
-  defp resolve_server(pid) when is_pid(pid), do: {:ok, pid}
+  defp resolve_server(pid) when is_pid(pid) do
+    if Process.alive?(pid), do: {:ok, pid}, else: {:error, :not_found}
+  end
 
   defp resolve_server({:via, _, _} = via) do
-    case GenServer.whereis(via) do
+    case safe_whereis(via) do
       nil -> {:error, :not_found}
       pid -> {:ok, pid}
     end
   end
 
   defp resolve_server(name) when is_atom(name) do
-    case GenServer.whereis(name) do
+    case safe_whereis(name) do
       nil -> {:error, :not_found}
       pid -> {:ok, pid}
     end
@@ -2022,6 +2024,20 @@ defmodule Jido.AgentServer do
   end
 
   defp resolve_server(_), do: {:error, :invalid_server}
+
+  defp safe_whereis(server_ref) do
+    GenServer.whereis(server_ref)
+  rescue
+    ArgumentError -> nil
+  catch
+    :exit, _ -> nil
+  end
+
+  defp safe_registry_lookup(registry, id) do
+    Registry.lookup(registry, id)
+  rescue
+    ArgumentError -> []
+  end
 
   # ---------------------------------------------------------------------------
   # Internal: Hierarchy

@@ -115,7 +115,12 @@ defmodule Jido.Await do
   """
   @spec child(server(), term(), non_neg_integer(), Keyword.t()) ::
           {:ok, completion()} | {:error, term()}
-  def child(parent_server, child_tag, timeout_ms \\ RuntimeDefaults.await_timeout(), opts \\ []) do
+  def child(
+        parent_server,
+        child_tag,
+        timeout_ms \\ RuntimeDefaults.await_child_timeout(),
+        opts \\ []
+      ) do
     deadline = now_ms() + timeout_ms
 
     with {:ok, child_pid} <- poll_for_child(parent_server, child_tag, deadline, 50) do

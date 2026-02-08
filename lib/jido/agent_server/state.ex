@@ -77,7 +77,7 @@ defmodule Jido.AgentServer.State do
                 Zoi.map(description: "Map of schedule message ref => timer ref")
                 |> Zoi.default(%{}),
 
-              # Lifecycle (InstanceManager integration: attachment tracking, idle timeout, persistence)
+              # Lifecycle (InstanceManager integration: attachment tracking, idle timeout, storage)
               lifecycle: Zoi.any(description: "Lifecycle state (State.Lifecycle.t())"),
 
               # Debug mode
@@ -113,7 +113,7 @@ defmodule Jido.AgentServer.State do
       pool: opts.pool,
       pool_key: opts.pool_key,
       idle_timeout: opts.idle_timeout,
-      persistence: opts.persistence
+      storage: opts.storage
     ]
 
     with {:ok, lifecycle} <- LifecycleState.new(lifecycle_opts) do

@@ -138,7 +138,7 @@ defmodule JidoTest.PersistTest do
       ETS.put_checkpoint({Agent, "nonexistent"}, %{}, table: table)
       ETS.delete_checkpoint({Agent, "nonexistent"}, table: table)
 
-      assert :not_found = Persist.thaw(storage(table), Agent, "nonexistent")
+      assert {:error, :not_found} = Persist.thaw(storage(table), Agent, "nonexistent")
     end
 
     test "thaws agent without thread" do
@@ -351,7 +351,7 @@ defmodule JidoTest.PersistTest do
 
       :ok = Persist.hibernate(storage(table), agent)
 
-      assert :not_found = ETS.load_thread("empty-thread", table: table)
+      assert {:error, :not_found} = ETS.load_thread("empty-thread", table: table)
     end
 
     test "thread with entries but no expected_rev conflict" do

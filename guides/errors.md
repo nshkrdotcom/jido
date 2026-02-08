@@ -166,14 +166,14 @@ The `ErrorPolicy` module determines what happens with errors based on configurat
 
 ## Not Found Convention
 
-Jido uses two explicit `not_found` contracts depending on layer:
+Jido uses a single explicit not-found contract across runtime and storage layers:
 
-- Runtime/process APIs return tagged tuples:
-  - `{:error, :not_found}` (for example `Jido.AgentServer.call/3`, `Jido.Agent.InstanceManager.lookup/2`)
-- Storage adapters use sentinel lookup results:
-  - `:not_found` (for example `Jido.Storage.get_checkpoint/2`, `Jido.Storage.load_thread/2`)
+- `{:error, :not_found}`
 
-This split keeps runtime APIs tuple-oriented while preserving adapter ergonomics for lookup-heavy persistence paths.
+Examples:
+
+- Runtime/process APIs: `Jido.AgentServer.call/3`, `Jido.Agent.InstanceManager.lookup/2`
+- Storage/persistence APIs: `c:Jido.Storage.get_checkpoint/2`, `c:Jido.Storage.load_thread/2`, `Jido.Persist.thaw/3`
 
 ## Raise vs Return Policy
 

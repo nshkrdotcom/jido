@@ -48,6 +48,7 @@ defmodule Jido.Sensor.Runtime do
 
   require Logger
 
+  alias Jido.RuntimeDefaults
   alias Jido.Signal.Dispatch
   @system_task_supervisor Jido.SystemTaskSupervisor
 
@@ -88,7 +89,7 @@ defmodule Jido.Sensor.Runtime do
     %{
       id: id,
       start: {__MODULE__, :start_link, [opts]},
-      shutdown: 5_000,
+      shutdown: RuntimeDefaults.sensor_runtime_shutdown_timeout(),
       restart: :permanent,
       type: :worker
     }

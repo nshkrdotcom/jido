@@ -7,8 +7,8 @@ defmodule JidoTest.Agent.InstanceManagerTest do
   @moduletag :integration
 
   alias Jido.Agent.InstanceManager
-  alias Jido.Agent.Store.ETS
   alias Jido.AgentServer
+  alias Jido.Storage.ETS, as: StorageETS
 
   # Use module attribute for manager naming to avoid atom leaks
   # Each test gets a unique integer suffix but we clean up persistent_term
@@ -258,7 +258,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
     end
   end
 
-  describe "persistence with ETS store" do
+  describe "storage-backed hibernate/thaw" do
     setup do
       manager_name = :"#{@manager_prefix}_persist_#{:erlang.unique_integer([:positive])}"
       table_name = :"#{@manager_prefix}_cache_#{:erlang.unique_integer([:positive])}"
@@ -269,9 +269,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
             name: manager_name,
             agent: TestAgent,
             idle_timeout: 200,
-            persistence: [
-              store: {Jido.Agent.Store.ETS, table: table_name}
-            ],
+            storage: {Jido.Storage.ETS, table: table_name},
             agent_opts: [jido: JidoTest.InstanceManagerTestJido]
           )
         )
@@ -279,11 +277,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
       on_exit(fn ->
         :persistent_term.erase({InstanceManager, manager_name})
 
-        try do
-          :ets.delete(table_name)
-        rescue
-          _ -> :ok
-        end
+        :ok = StorageETS.cleanup(table: table_name)
       end)
 
       {:ok, manager: manager_name, table: table_name}
@@ -342,15 +336,15 @@ defmodule JidoTest.Agent.InstanceManagerTest do
       # Wait for process to terminate
       assert_receive {:DOWN, ^ref, :process, ^pid, _reason}, 1000
 
-      # Verify state was persisted to ETS
-      store_key = {TestAgent, "stop-persist-key"}
+      # Verify state was persisted to storage checkpoint
+      checkpoint_key = {Jido.Agent, "stop-persist-key"}
 
-      case ETS.get(store_key, table: table) do
+      case StorageETS.get_checkpoint(checkpoint_key, table: table) do
         {:ok, persisted} ->
           # Persisted data should contain the counter
           assert persisted.state.counter == 42
 
-        :not_found ->
+        {:error, :not_found} ->
           flunk("Agent state was not persisted on stop")
       end
     end

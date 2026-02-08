@@ -53,13 +53,21 @@ defmodule Jido.Thread.Entry do
     now = System.system_time(:millisecond)
 
     %__MODULE__{
-      id: fetch_attr(attrs, :id, "entry_" <> Jido.Util.generate_id()),
+      id: fetch_attr(attrs, :id, generate_id()),
       seq: fetch_attr(attrs, :seq, 0),
       at: fetch_attr(attrs, :at, now),
       kind: fetch_attr(attrs, :kind, :note),
       payload: fetch_attr(attrs, :payload, %{}),
       refs: fetch_attr(attrs, :refs, %{})
     }
+  end
+
+  @doc """
+  Generates a unique entry identifier.
+  """
+  @spec generate_id() :: String.t()
+  def generate_id do
+    "entry_" <> Jido.Util.generate_id()
   end
 
   defp fetch_attr(attrs, key, default) do

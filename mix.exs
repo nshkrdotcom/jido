@@ -302,11 +302,7 @@ defmodule Jido.MixProject do
           Jido.Storage.ETS,
           Jido.Storage.File,
           Jido.Persist,
-          Jido.Agent.InstanceManager,
-          Jido.Agent.Persistence,
-          Jido.Agent.Store,
-          Jido.Agent.Store.ETS,
-          Jido.Agent.Store.File
+          Jido.Agent.InstanceManager
         ],
         Observability: [
           Jido.Observe,

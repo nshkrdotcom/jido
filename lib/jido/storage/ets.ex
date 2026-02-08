@@ -46,19 +46,19 @@ defmodule Jido.Storage.ETS do
   @doc """
   Retrieve a checkpoint by key.
 
-  Returns `{:ok, data}` if found, `:not_found` otherwise.
+  Returns `{:ok, data}` if found, `{:error, :not_found}` otherwise.
   """
-  @spec get_checkpoint(term(), opts()) :: {:ok, term()} | :not_found | {:error, term()}
+  @spec get_checkpoint(term(), opts()) :: {:ok, term()} | {:error, :not_found | term()}
   def get_checkpoint(key, opts) do
     with {:ok, table} <- checkpoint_table(opts),
          :ok <- ensure_tables(opts) do
       case :ets.lookup(table, key) do
         [{^key, data}] -> {:ok, data}
-        [] -> :not_found
+        [] -> {:error, :not_found}
       end
     end
   rescue
-    ArgumentError -> :not_found
+    ArgumentError -> {:error, :not_found}
   end
 
   @impl true
@@ -95,9 +95,9 @@ defmodule Jido.Storage.ETS do
   @doc """
   Load a thread by ID, reconstructing from stored entries.
 
-  Returns `{:ok, thread}` if entries exist, `:not_found` otherwise.
+  Returns `{:ok, thread}` if entries exist, `{:error, :not_found}` otherwise.
   """
-  @spec load_thread(String.t(), opts()) :: {:ok, Thread.t()} | :not_found | {:error, term()}
+  @spec load_thread(String.t(), opts()) :: {:ok, Thread.t()} | {:error, :not_found | term()}
   def load_thread(thread_id, opts) do
     with {:ok, threads_table} <- threads_table(opts),
          {:ok, meta_table} <- meta_table(opts),
@@ -111,15 +111,15 @@ defmodule Jido.Storage.ETS do
 
       case entries do
         [] ->
-          :not_found
+          {:error, :not_found}
 
         entries ->
           meta = get_thread_meta(meta_table, thread_id)
-          {:ok, reconstruct_thread(thread_id, entries, meta)}
+          {:ok, thread_from_entries(thread_id, entries, meta)}
       end
     end
   rescue
-    ArgumentError -> :not_found
+    ArgumentError -> {:error, :not_found}
   end
 
   @impl true
@@ -158,12 +158,7 @@ defmodule Jido.Storage.ETS do
       is_new = current_rev == 0
 
       prepared_entries =
-        entries
-        |> Enum.with_index()
-        |> Enum.map(fn {entry, idx} ->
-          seq = base_seq + idx
-          prepare_entry(entry, seq, now)
-        end)
+        Thread.prepare_entries(entries, base_seq, now)
 
       ets_entries =
         Enum.map(prepared_entries, fn entry ->
@@ -186,7 +181,7 @@ defmodule Jido.Storage.ETS do
           update_thread_meta(meta_table, thread_id, now)
         end
 
-      {:ok, reconstruct_thread(thread_id, load_all_entries(threads_table, thread_id), meta)}
+      {:ok, thread_from_entries(thread_id, load_all_entries(threads_table, thread_id), meta)}
     end
   end
 
@@ -316,50 +311,11 @@ defmodule Jido.Storage.ETS do
     end
   end
 
-  defp prepare_entry(%Entry{} = entry, seq, now) do
-    %Entry{
-      id: entry.id || generate_entry_id(),
-      seq: seq,
-      at: entry.at || now,
-      kind: entry.kind,
-      payload: entry.payload,
-      refs: entry.refs
-    }
-  end
-
-  defp prepare_entry(attrs, seq, now) when is_map(attrs) do
-    %Entry{
-      id: fetch_entry_attr(attrs, :id, &generate_entry_id/0),
-      seq: seq,
-      at: fetch_entry_attr(attrs, :at, fn -> now end),
-      kind: fetch_entry_attr(attrs, :kind, fn -> :note end),
-      payload: fetch_entry_attr(attrs, :payload, fn -> %{} end),
-      refs: fetch_entry_attr(attrs, :refs, fn -> %{} end)
-    }
-  end
-
-  defp fetch_entry_attr(attrs, key, default_fun) when is_function(default_fun, 0) do
-    case Map.get(attrs, key) || Map.get(attrs, Atom.to_string(key)) do
-      nil -> default_fun.()
-      value -> value
-    end
-  end
-
-  defp reconstruct_thread(thread_id, entries, meta) do
-    entry_count = length(entries)
-
-    %Thread{
-      id: thread_id,
-      rev: entry_count,
-      entries: entries,
-      created_at: meta[:created_at] || (List.first(entries) && List.first(entries).at),
-      updated_at: meta[:updated_at] || (List.last(entries) && List.last(entries).at),
+  defp thread_from_entries(thread_id, entries, meta) do
+    Thread.from_entries(thread_id, entries,
       metadata: meta[:metadata] || %{},
-      stats: %{entry_count: entry_count}
-    }
-  end
-
-  defp generate_entry_id do
-    "entry_" <> Jido.Util.generate_id()
+      created_at: meta[:created_at],
+      updated_at: meta[:updated_at]
+    )
   end
 end

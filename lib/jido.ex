@@ -182,7 +182,7 @@ defmodule Jido do
       end
 
       @doc "Thaw an agent from storage."
-      @spec thaw(module(), term()) :: {:ok, Jido.Agent.t()} | :not_found | {:error, term()}
+      @spec thaw(module(), term()) :: {:ok, Jido.Agent.t()} | {:error, :not_found | term()}
       def thaw(agent_module, key) do
         Jido.Persist.thaw(__jido_storage__(), agent_module, key)
       end
@@ -283,7 +283,7 @@ defmodule Jido do
       start: {__MODULE__, :start_link, [opts]},
       type: :supervisor,
       restart: :permanent,
-      shutdown: 10_000
+      shutdown: RuntimeDefaults.jido_supervisor_shutdown_timeout()
     }
   end
 
@@ -300,8 +300,10 @@ defmodule Jido do
        name: agent_supervisor_name(name),
        strategy: :one_for_one,
        max_children: Keyword.get(opts, :max_agents, RuntimeDefaults.max_agents()),
-       max_restarts: 1000,
-       max_seconds: 5}
+       max_restarts:
+         Keyword.get(opts, :max_restarts, RuntimeDefaults.agent_supervisor_max_restarts()),
+       max_seconds:
+         Keyword.get(opts, :max_seconds, RuntimeDefaults.agent_supervisor_max_seconds())}
     ]
 
     pool_children =
@@ -447,7 +449,7 @@ defmodule Jido do
   end
 
   @doc "Thaw an agent using the given Jido instance."
-  @spec thaw(atom(), module(), term()) :: {:ok, Jido.Agent.t()} | :not_found | {:error, term()}
+  @spec thaw(atom(), module(), term()) :: {:ok, Jido.Agent.t()} | {:error, :not_found | term()}
   def thaw(jido_instance, agent_module, key) when is_atom(jido_instance) do
     Jido.Persist.thaw(jido_instance, agent_module, key)
   end
@@ -489,36 +491,53 @@ defmodule Jido do
 
   See `Jido.Await.completion/3` for details.
   """
-  defdelegate await(server, timeout_ms \\ 10_000, opts \\ []),
-    to: Jido.Await,
-    as: :completion
+  @spec await(Jido.Await.server(), timeout(), keyword()) ::
+          {:ok, Jido.Await.completion()} | {:error, term()}
+  def await(server, timeout_ms \\ RuntimeDefaults.await_timeout(), opts \\ []) do
+    Jido.Await.completion(server, timeout_ms, opts)
+  end
 
   @doc """
   Wait for a child agent to reach a terminal status.
 
   See `Jido.Await.child/4` for details.
   """
-  defdelegate await_child(server, child_tag, timeout_ms \\ 30_000, opts \\ []),
-    to: Jido.Await,
-    as: :child
+  @spec await_child(Jido.Await.server(), term(), timeout(), keyword()) ::
+          {:ok, Jido.Await.completion()} | {:error, term()}
+  def await_child(
+        server,
+        child_tag,
+        timeout_ms \\ RuntimeDefaults.await_child_timeout(),
+        opts \\ []
+      ) do
+    Jido.Await.child(server, child_tag, timeout_ms, opts)
+  end
 
   @doc """
   Wait for all agents to reach terminal status.
 
   See `Jido.Await.all/3` for details.
   """
-  defdelegate await_all(servers, timeout_ms \\ 10_000, opts \\ []),
-    to: Jido.Await,
-    as: :all
+  @spec await_all([Jido.Await.server()], timeout(), keyword()) ::
+          {:ok, %{Jido.Await.server() => Jido.Await.completion()}}
+          | {:error, :timeout}
+          | {:error, {Jido.Await.server(), term()}}
+  def await_all(servers, timeout_ms \\ RuntimeDefaults.await_timeout(), opts \\ []) do
+    Jido.Await.all(servers, timeout_ms, opts)
+  end
 
   @doc """
   Wait for any agent to reach terminal status.
 
   See `Jido.Await.any/3` for details.
   """
-  defdelegate await_any(servers, timeout_ms \\ 10_000, opts \\ []),
-    to: Jido.Await,
-    as: :any
+  @spec await_any([Jido.Await.server()], timeout(), keyword()) ::
+          {:ok, {Jido.Await.server(), Jido.Await.completion()}}
+          | {:error, :timeout}
+          | {:error, {Jido.Await.server(), term()}}
+  def await_any(servers, timeout_ms \\ RuntimeDefaults.await_timeout(), opts \\ []) do
+    Jido.Await.any(servers, timeout_ms, opts)
+  end
 
   @doc """
   Get the PIDs of all children of a parent agent.

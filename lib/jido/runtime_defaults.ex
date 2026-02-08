@@ -6,8 +6,16 @@ defmodule Jido.RuntimeDefaults do
 
       config :jido, Jido.RuntimeDefaults,
         agent_server_call_timeout: 10_000,
+        agent_server_shutdown_timeout: 5_000,
         await_timeout: 10_000,
+        await_child_timeout: 30_000,
         plugin_hook_timeout: 1_000,
+        stop_child_shutdown_timeout: 5_000,
+        instance_manager_stop_timeout: 5_000,
+        sensor_runtime_shutdown_timeout: 5_000,
+        jido_supervisor_shutdown_timeout: 10_000,
+        agent_supervisor_max_restarts: 1_000,
+        agent_supervisor_max_seconds: 5,
         max_agents: 10_000,
         max_tasks: 1_000,
         system_task_max_children: 2_000,
@@ -19,8 +27,16 @@ defmodule Jido.RuntimeDefaults do
   @config_key __MODULE__
 
   @agent_server_call_timeout 10_000
+  @agent_server_shutdown_timeout 5_000
   @await_timeout 10_000
+  @await_child_timeout 30_000
   @plugin_hook_timeout 1_000
+  @stop_child_shutdown_timeout 5_000
+  @instance_manager_stop_timeout 5_000
+  @sensor_runtime_shutdown_timeout 5_000
+  @jido_supervisor_shutdown_timeout 10_000
+  @agent_supervisor_max_restarts 1_000
+  @agent_supervisor_max_seconds 5
   @hibernate_timeout 2_000
   @max_queue_size 10_000
   @max_agents 10_000
@@ -33,11 +49,42 @@ defmodule Jido.RuntimeDefaults do
   def agent_server_call_timeout,
     do: get(:agent_server_call_timeout, @agent_server_call_timeout)
 
+  @spec agent_server_shutdown_timeout() :: pos_integer()
+  def agent_server_shutdown_timeout,
+    do: get(:agent_server_shutdown_timeout, @agent_server_shutdown_timeout)
+
   @spec await_timeout() :: pos_integer()
   def await_timeout, do: get(:await_timeout, @await_timeout)
 
+  @spec await_child_timeout() :: pos_integer()
+  def await_child_timeout, do: get(:await_child_timeout, @await_child_timeout)
+
   @spec plugin_hook_timeout() :: pos_integer()
   def plugin_hook_timeout, do: get(:plugin_hook_timeout, @plugin_hook_timeout)
+
+  @spec stop_child_shutdown_timeout() :: pos_integer()
+  def stop_child_shutdown_timeout,
+    do: get(:stop_child_shutdown_timeout, @stop_child_shutdown_timeout)
+
+  @spec instance_manager_stop_timeout() :: pos_integer()
+  def instance_manager_stop_timeout,
+    do: get(:instance_manager_stop_timeout, @instance_manager_stop_timeout)
+
+  @spec sensor_runtime_shutdown_timeout() :: pos_integer()
+  def sensor_runtime_shutdown_timeout,
+    do: get(:sensor_runtime_shutdown_timeout, @sensor_runtime_shutdown_timeout)
+
+  @spec jido_supervisor_shutdown_timeout() :: pos_integer()
+  def jido_supervisor_shutdown_timeout,
+    do: get(:jido_supervisor_shutdown_timeout, @jido_supervisor_shutdown_timeout)
+
+  @spec agent_supervisor_max_restarts() :: pos_integer()
+  def agent_supervisor_max_restarts,
+    do: get(:agent_supervisor_max_restarts, @agent_supervisor_max_restarts)
+
+  @spec agent_supervisor_max_seconds() :: pos_integer()
+  def agent_supervisor_max_seconds,
+    do: get(:agent_supervisor_max_seconds, @agent_supervisor_max_seconds)
 
   @spec hibernate_timeout() :: pos_integer()
   def hibernate_timeout, do: get(:hibernate_timeout, @hibernate_timeout)

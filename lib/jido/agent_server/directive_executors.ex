@@ -249,6 +249,7 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.StopChild do
   require Logger
 
   alias Jido.AgentServer.State
+  alias Jido.RuntimeDefaults
 
   def exec(%{tag: tag, reason: reason}, _input_signal, state) do
     case State.get_child(state, tag) do
@@ -281,7 +282,7 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.StopChild do
 
   defp start_stop_child_task(task_sup, state, tag, pid, reason) do
     case Task.Supervisor.start_child(task_sup, fn ->
-           GenServer.stop(pid, reason, 5_000)
+           GenServer.stop(pid, reason, RuntimeDefaults.stop_child_shutdown_timeout())
          end) do
       {:ok, _pid} ->
         :ok

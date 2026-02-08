@@ -12,8 +12,8 @@ defmodule JidoTest.AgentServer.LifecycleContractTest do
 
     @impl true
     def init(%LifecycleState{} = lifecycle, %State{} = state) do
-      if is_list(lifecycle.persistence) do
-        case Keyword.get(lifecycle.persistence, :test_pid) do
+      if is_list(lifecycle.storage) do
+        case Keyword.get(lifecycle.storage, :test_pid) do
           pid when is_pid(pid) ->
             send(pid, {:lifecycle_init_args, lifecycle, state.id})
 
@@ -44,7 +44,7 @@ defmodule JidoTest.AgentServer.LifecycleContractTest do
         pool: :sessions,
         pool_key: "session-1",
         idle_timeout: 1_234,
-        persistence: [test_pid: self()]
+        storage: [test_pid: self()]
       )
 
     assert_receive {:lifecycle_init_args, lifecycle, ^id}, 500

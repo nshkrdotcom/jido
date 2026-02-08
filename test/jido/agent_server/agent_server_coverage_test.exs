@@ -516,4 +516,11 @@ defmodule JidoTest.AgentServerCoverageTest do
       assert AgentServer.alive?(via)
     end
   end
+
+  describe "whereis/2 safety" do
+    test "returns nil when registry is not running" do
+      missing_registry = :"missing_registry_#{System.unique_integer([:positive])}"
+      assert nil == AgentServer.whereis(missing_registry, "agent-id")
+    end
+  end
 end

@@ -33,7 +33,7 @@ defmodule JidoTest.Storage.ETSTest do
     test "get_checkpoint/2 returns :not_found for missing key" do
       opts = [table: unique_table(:get_missing)]
 
-      assert :not_found = ETS.get_checkpoint(:nonexistent_key, opts)
+      assert {:error, :not_found} = ETS.get_checkpoint(:nonexistent_key, opts)
     end
 
     test "put_checkpoint/3 stores and get_checkpoint/2 retrieves data" do
@@ -60,7 +60,7 @@ defmodule JidoTest.Storage.ETSTest do
       assert {:ok, _} = ETS.get_checkpoint(:to_delete, opts)
 
       assert :ok = ETS.delete_checkpoint(:to_delete, opts)
-      assert :not_found = ETS.get_checkpoint(:to_delete, opts)
+      assert {:error, :not_found} = ETS.get_checkpoint(:to_delete, opts)
     end
 
     test "delete_checkpoint/2 succeeds even if key doesn't exist" do
@@ -94,7 +94,7 @@ defmodule JidoTest.Storage.ETSTest do
     test "load_thread/2 returns :not_found for missing thread" do
       opts = [table: unique_table(:load_missing)]
 
-      assert :not_found = ETS.load_thread("nonexistent_thread", opts)
+      assert {:error, :not_found} = ETS.load_thread("nonexistent_thread", opts)
     end
 
     test "append_thread/3 creates thread with entries" do
@@ -194,7 +194,7 @@ defmodule JidoTest.Storage.ETSTest do
       assert {:ok, _} = ETS.load_thread(thread_id, opts)
 
       assert :ok = ETS.delete_thread(thread_id, opts)
-      assert :not_found = ETS.load_thread(thread_id, opts)
+      assert {:error, :not_found} = ETS.load_thread(thread_id, opts)
     end
 
     test "delete_thread/2 succeeds even if thread doesn't exist" do

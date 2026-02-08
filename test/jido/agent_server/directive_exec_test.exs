@@ -161,7 +161,8 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
       child_spec = {Task, fn -> :ok end}
       directive = %Directive.Spawn{child_spec: child_spec, tag: :worker}
 
-      assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
+      assert {:ok, new_state} = DirectiveExec.exec(directive, input_signal, state)
+      assert Map.has_key?(new_state.children, :worker)
       assert_receive {:spawn_called, ^child_spec}
     end
 
@@ -215,7 +216,8 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
       child_spec = {Task, fn -> :ok end}
       directive = %Directive.Spawn{child_spec: child_spec, tag: :worker}
 
-      assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
+      assert {:ok, new_state} = DirectiveExec.exec(directive, input_signal, state)
+      assert Map.has_key?(new_state.children, :worker)
       assert_receive {:spawn_called, ^child_spec}
     end
 
@@ -250,16 +252,18 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
       signal = Signal.new!(%{type: "scheduled.ping", source: "/test", data: %{}})
       directive = %Directive.Schedule{delay_ms: 10, message: signal}
 
-      assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
-      assert_receive {:scheduled_signal, received_signal}, 100
+      assert {:ok, scheduled_state} = DirectiveExec.exec(directive, input_signal, state)
+      assert map_size(scheduled_state.scheduled_timers) == 1
+      assert_receive {:scheduled_signal, _message_ref, received_signal}, 100
       assert received_signal.type == "scheduled.ping"
     end
 
     test "wraps non-signal message in signal", %{state: state, input_signal: input_signal} do
       directive = %Directive.Schedule{delay_ms: 10, message: :timeout}
 
-      assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
-      assert_receive {:scheduled_signal, received_signal}, 100
+      assert {:ok, scheduled_state} = DirectiveExec.exec(directive, input_signal, state)
+      assert map_size(scheduled_state.scheduled_timers) == 1
+      assert_receive {:scheduled_signal, _message_ref, received_signal}, 100
       assert received_signal.type == "jido.scheduled"
       assert received_signal.data.message == :timeout
     end

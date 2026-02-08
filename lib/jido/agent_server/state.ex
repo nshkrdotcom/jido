@@ -12,6 +12,7 @@ defmodule Jido.AgentServer.State do
 
   alias Jido.AgentServer.{ChildInfo, Options}
   alias Jido.AgentServer.State.Lifecycle, as: LifecycleState
+  alias Jido.RuntimeDefaults
 
   @type status :: :initializing | :idle | :processing | :stopping
 
@@ -35,6 +36,8 @@ defmodule Jido.AgentServer.State do
 
               # Hierarchy
               parent: Zoi.any(description: "Parent reference") |> Zoi.optional(),
+              parent_monitor_ref:
+                Zoi.any(description: "Monitor reference for parent process") |> Zoi.optional(),
               children: Zoi.map(description: "Map of tag => ChildInfo") |> Zoi.default(%{}),
               on_parent_death:
                 Zoi.atom(description: "Behavior on parent death") |> Zoi.default(:stop),
@@ -51,7 +54,9 @@ defmodule Jido.AgentServer.State do
               default_dispatch: Zoi.any(description: "Default dispatch config") |> Zoi.optional(),
               error_policy:
                 Zoi.any(description: "Error handling policy") |> Zoi.default(:log_only),
-              max_queue_size: Zoi.integer(description: "Max queue size") |> Zoi.default(10_000),
+              max_queue_size:
+                Zoi.integer(description: "Max queue size")
+                |> Zoi.default(RuntimeDefaults.max_queue_size()),
               registry: Zoi.atom(description: "Registry module"),
               spawn_fun: Zoi.any(description: "Custom spawn function") |> Zoi.optional(),
 
@@ -67,6 +72,9 @@ defmodule Jido.AgentServer.State do
               metrics: Zoi.map(description: "Runtime metrics") |> Zoi.default(%{}),
               completion_waiters:
                 Zoi.map(description: "Map of ref => waiter for completion notifications")
+                |> Zoi.default(%{}),
+              scheduled_timers:
+                Zoi.map(description: "Map of schedule message ref => timer ref")
                 |> Zoi.default(%{}),
 
               # Lifecycle (InstanceManager integration: attachment tracking, idle timeout, persistence)
@@ -117,6 +125,7 @@ defmodule Jido.AgentServer.State do
         processing: false,
         queue: :queue.new(),
         parent: opts.parent,
+        parent_monitor_ref: nil,
         children: %{},
         on_parent_death: opts.on_parent_death,
         jido: opts.jido,
@@ -130,6 +139,7 @@ defmodule Jido.AgentServer.State do
         error_count: 0,
         metrics: %{},
         completion_waiters: %{},
+        scheduled_timers: %{},
         lifecycle: lifecycle,
         debug: opts.debug,
         debug_events: []
@@ -262,6 +272,24 @@ defmodule Jido.AgentServer.State do
   @spec increment_error_count(t()) :: t()
   def increment_error_count(%__MODULE__{error_count: count} = state) do
     %{state | error_count: count + 1}
+  end
+
+  @doc """
+  Tracks a scheduled timer by message reference.
+  """
+  @spec put_scheduled_timer(t(), reference(), reference()) :: t()
+  def put_scheduled_timer(%__MODULE__{} = state, message_ref, timer_ref)
+      when is_reference(message_ref) and is_reference(timer_ref) do
+    %{state | scheduled_timers: Map.put(state.scheduled_timers, message_ref, timer_ref)}
+  end
+
+  @doc """
+  Removes a scheduled timer by message reference.
+  """
+  @spec pop_scheduled_timer(t(), reference()) :: {reference() | nil, t()}
+  def pop_scheduled_timer(%__MODULE__{} = state, message_ref) when is_reference(message_ref) do
+    {timer_ref, remaining} = Map.pop(state.scheduled_timers, message_ref)
+    {timer_ref, %{state | scheduled_timers: remaining}}
   end
 
   # Debug mode constants

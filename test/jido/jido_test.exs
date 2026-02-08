@@ -48,6 +48,16 @@ defmodule JidoTest.JidoTest do
     end
   end
 
+  describe "dynamic supervisor guardrails" do
+    test "respects configured max_agents limit" do
+      instance = :"jido_max_children_#{System.unique_integer([:positive])}"
+      {:ok, _pid} = start_supervised({Jido, name: instance, max_agents: 1})
+
+      assert {:ok, _} = Jido.start_agent(instance, Minimal, id: "max-agents-1")
+      assert {:error, :max_children} = Jido.start_agent(instance, Minimal, id: "max-agents-2")
+    end
+  end
+
   describe "await delegates" do
     test "await/3 delegates to Jido.Await.completion", %{jido: jido} do
       {:ok, pid} = Jido.start_agent(jido, Minimal, id: "await-delegate-test")

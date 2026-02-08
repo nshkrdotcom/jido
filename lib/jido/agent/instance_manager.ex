@@ -74,6 +74,7 @@ defmodule Jido.Agent.InstanceManager do
   require Logger
 
   alias Jido.Agent.Persistence
+  alias Jido.RuntimeDefaults
 
   @type manager_name :: atom()
   @type key :: term()
@@ -130,25 +131,28 @@ defmodule Jido.Agent.InstanceManager do
       agent: Keyword.fetch!(opts, :agent),
       idle_timeout: Keyword.get(opts, :idle_timeout, :infinity),
       persistence: Keyword.get(opts, :persistence),
-      agent_opts: Keyword.get(opts, :agent_opts, [])
+      agent_opts: Keyword.get(opts, :agent_opts, []),
+      max_agents: Keyword.get(opts, :max_agents, RuntimeDefaults.max_agents())
     }
 
     :persistent_term.put({__MODULE__, name}, config)
 
     children = [
       {Registry, keys: :unique, name: registry_name(name)},
-      {DynamicSupervisor, strategy: :one_for_one, name: dynamic_supervisor_name(name)},
+      {DynamicSupervisor,
+       strategy: :one_for_one,
+       max_children: config.max_agents,
+       name: dynamic_supervisor_name(name)},
       {Jido.Agent.InstanceManager.Cleanup, name}
     ]
 
-    Supervisor.init(children, strategy: :one_for_all)
+    Supervisor.init(children, strategy: :one_for_one)
   end
 
   @doc false
   def stop_manager(name) do
-    # Clean up persistent_term config when manager stops
-    :persistent_term.erase({__MODULE__, name})
     Supervisor.stop(supervisor_name(name))
+    :persistent_term.erase({__MODULE__, name})
   end
 
   # ---------------------------------------------------------------------------
@@ -194,11 +198,7 @@ defmodule Jido.Agent.InstanceManager do
   def lookup(manager, key) do
     case Registry.lookup(registry_name(manager), key) do
       [{pid, _}] ->
-        if Process.alive?(pid) do
-          {:ok, pid}
-        else
-          :error
-        end
+        {:ok, pid}
 
       [] ->
         :error

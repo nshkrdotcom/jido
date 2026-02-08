@@ -2,6 +2,7 @@ defmodule Jido do
   use Supervisor
 
   alias Jido.Agent.WorkerPool
+  alias Jido.RuntimeDefaults
 
   @moduledoc """
   自動 (Jido) - A foundational framework for building autonomous, distributed agent systems in Elixir.
@@ -245,8 +246,16 @@ defmodule Jido do
   @spec stop(atom()) :: :ok
   def stop(name \\ @default_instance) do
     case Process.whereis(name) do
-      nil -> :ok
-      pid -> Supervisor.stop(pid)
+      nil ->
+        :ok
+
+      pid ->
+        try do
+          Supervisor.stop(pid)
+        catch
+          :exit, {:noproc, _} -> :ok
+          :exit, {:normal, _} -> :ok
+        end
     end
   end
 
@@ -284,11 +293,13 @@ defmodule Jido do
 
     base_children = [
       {Task.Supervisor,
-       name: task_supervisor_name(name), max_children: Keyword.get(opts, :max_tasks, 1000)},
+       name: task_supervisor_name(name),
+       max_children: Keyword.get(opts, :max_tasks, RuntimeDefaults.max_tasks())},
       {Registry, keys: :unique, name: registry_name(name)},
       {DynamicSupervisor,
        name: agent_supervisor_name(name),
        strategy: :one_for_one,
+       max_children: Keyword.get(opts, :max_agents, RuntimeDefaults.max_agents()),
        max_restarts: 1000,
        max_seconds: 5}
     ]

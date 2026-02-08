@@ -32,6 +32,7 @@ defmodule Jido.AgentServer.Lifecycle.Keyed do
   require Logger
 
   alias Jido.Agent.Persistence
+  alias Jido.RuntimeDefaults
 
   @impl true
   def init(_opts, state) do
@@ -147,6 +148,8 @@ defmodule Jido.AgentServer.Lifecycle.Keyed do
   def terminate(reason, state) do
     lifecycle = state.lifecycle
 
+    cleanup_runtime_refs(lifecycle)
+
     if clean_shutdown?(reason) && lifecycle.persistence do
       hibernate_agent(state)
     end
@@ -166,13 +169,25 @@ defmodule Jido.AgentServer.Lifecycle.Keyed do
     agent = state.agent
     agent_module = state.agent_module
 
-    case Persistence.hibernate(persistence, agent_module, pool_key, agent) do
-      :ok ->
+    task =
+      Task.async(fn ->
+        Persistence.hibernate(persistence, agent_module, pool_key, agent)
+      end)
+
+    timeout = RuntimeDefaults.hibernate_timeout()
+
+    case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
+      {:ok, :ok} ->
         Logger.debug("Lifecycle hibernated agent for #{lifecycle.pool}/#{inspect(pool_key)}")
 
-      {:error, reason} ->
+      {:ok, {:error, reason}} ->
         Logger.error(
           "Lifecycle hibernate failed for #{lifecycle.pool}/#{inspect(pool_key)}: #{inspect(reason)}"
+        )
+
+      nil ->
+        Logger.error(
+          "Lifecycle hibernate timed out for #{lifecycle.pool}/#{inspect(pool_key)} after #{timeout}ms"
         )
     end
   end
@@ -211,5 +226,17 @@ defmodule Jido.AgentServer.Lifecycle.Keyed do
       {ref, _pid} -> {ref, Map.delete(monitors, ref)}
       nil -> {nil, monitors}
     end
+  end
+
+  defp cleanup_runtime_refs(lifecycle) do
+    Enum.each(lifecycle.attachment_monitors, fn {ref, _pid} ->
+      Process.demonitor(ref, [:flush])
+    end)
+
+    if lifecycle.idle_timer do
+      :erlang.cancel_timer(lifecycle.idle_timer)
+    end
+
+    :ok
   end
 end

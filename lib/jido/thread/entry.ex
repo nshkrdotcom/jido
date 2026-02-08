@@ -53,7 +53,7 @@ defmodule Jido.Thread.Entry do
     now = System.system_time(:millisecond)
 
     %__MODULE__{
-      id: fetch_attr(attrs, :id),
+      id: fetch_attr(attrs, :id, "entry_" <> Jido.Util.generate_id()),
       seq: fetch_attr(attrs, :seq, 0),
       at: fetch_attr(attrs, :at, now),
       kind: fetch_attr(attrs, :kind, :note),
@@ -62,7 +62,7 @@ defmodule Jido.Thread.Entry do
     }
   end
 
-  defp fetch_attr(attrs, key, default \\ nil) do
+  defp fetch_attr(attrs, key, default) do
     case Map.get(attrs, key) || Map.get(attrs, Atom.to_string(key)) do
       nil -> default
       value -> value

@@ -94,6 +94,28 @@ defmodule JidoTest.AgentServer.PluginSubscriptionsTest do
     end
   end
 
+  defmodule CrashSensor do
+    @moduledoc false
+    use Jido.Sensor,
+      name: "crash_sensor",
+      description: "A sensor that crashes on demand",
+      schema: Zoi.object(%{}, coerce: true)
+
+    @impl Jido.Sensor
+    def init(_config, context) do
+      {:ok, %{context: context}}
+    end
+
+    @impl Jido.Sensor
+    def handle_event(:crash, _state) do
+      raise "intentional crash for trap_exit test"
+    end
+
+    def handle_event(_event, state) do
+      {:ok, state}
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Test Action Module
   # ---------------------------------------------------------------------------
@@ -166,6 +188,19 @@ defmodule JidoTest.AgentServer.PluginSubscriptionsTest do
       actions: [JidoTest.AgentServer.PluginSubscriptionsTest.SimpleAction]
   end
 
+  defmodule PluginWithCrashSensor do
+    @moduledoc false
+    use Jido.Plugin,
+      name: "plugin_with_crash_sensor",
+      state_key: :crash_sensor_plugin,
+      actions: [JidoTest.AgentServer.PluginSubscriptionsTest.SimpleAction]
+
+    @impl Jido.Plugin
+    def subscriptions(_config, _context) do
+      [{JidoTest.AgentServer.PluginSubscriptionsTest.CrashSensor, %{}}]
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Test Agent Modules
   # ---------------------------------------------------------------------------
@@ -206,6 +241,13 @@ defmodule JidoTest.AgentServer.PluginSubscriptionsTest do
         JidoTest.AgentServer.PluginSubscriptionsTest.PluginWithSensor,
         JidoTest.AgentServer.PluginSubscriptionsTest.PluginWithMultipleSensors
       ]
+  end
+
+  defmodule AgentWithCrashSensorPlugin do
+    @moduledoc false
+    use Jido.Agent,
+      name: "agent_with_crash_sensor_plugin",
+      plugins: [JidoTest.AgentServer.PluginSubscriptionsTest.PluginWithCrashSensor]
   end
 
   # ---------------------------------------------------------------------------
@@ -254,6 +296,21 @@ defmodule JidoTest.AgentServer.PluginSubscriptionsTest do
 
         sensor_count == 0
       end)
+
+      GenServer.stop(pid)
+    end
+
+    test "sensor runtime is started under supervisor and not linked to AgentServer", %{jido: jido} do
+      {:ok, pid} = Jido.AgentServer.start_link(agent: AgentWithSensorPlugin, jido: jido)
+
+      {:ok, state} = Jido.AgentServer.state(pid)
+
+      [{_tag, child_info}] =
+        state.children
+        |> Enum.filter(fn {tag, _} -> match?({:sensor, _, _}, tag) end)
+
+      links = Process.info(child_info.pid, :links) |> elem(1)
+      refute pid in links
 
       GenServer.stop(pid)
     end
@@ -426,6 +483,34 @@ defmodule JidoTest.AgentServer.PluginSubscriptionsTest do
       eventually(fn ->
         not Process.alive?(pid)
       end)
+    end
+  end
+
+  describe "linked sensor crashes" do
+    test "crashing sensor does not crash AgentServer", %{jido: jido} do
+      Process.flag(:trap_exit, true)
+
+      {:ok, pid} = Jido.AgentServer.start_link(agent: AgentWithCrashSensorPlugin, jido: jido)
+      {:ok, state} = Jido.AgentServer.state(pid)
+
+      [{_tag, child_info}] =
+        state.children
+        |> Enum.filter(fn {tag, _} -> match?({:sensor, _, _}, tag) end)
+
+      Runtime.event(child_info.pid, :crash)
+
+      eventually(fn -> not Process.alive?(child_info.pid) end)
+
+      refute_receive {:EXIT, ^pid, _reason}, 100
+      assert Process.alive?(pid)
+
+      eventually_state(pid, fn latest_state ->
+        latest_state.children
+        |> Enum.count(fn {tag, _} -> match?({:sensor, _, _}, tag) end)
+        |> Kernel.==(0)
+      end)
+
+      GenServer.stop(pid)
     end
   end
 end

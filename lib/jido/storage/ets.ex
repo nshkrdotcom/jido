@@ -127,9 +127,21 @@ defmodule Jido.Storage.ETS do
           {:ok, Thread.t()} | {:error, term()}
   def append_thread(thread_id, entries, opts) do
     threads_table = threads_table(opts)
-    meta_table = meta_table(opts)
     ensure_tables(opts)
 
+    lock_key = {{__MODULE__, threads_table, thread_id}, self()}
+
+    case :global.trans(lock_key, fn -> do_append_thread(thread_id, entries, opts) end) do
+      {:aborted, reason} -> {:error, reason}
+      result -> result
+    end
+  rescue
+    ArgumentError -> {:error, :table_not_found}
+  end
+
+  defp do_append_thread(thread_id, entries, opts) do
+    threads_table = threads_table(opts)
+    meta_table = meta_table(opts)
     expected_rev = Keyword.get(opts, :expected_rev)
     now = System.system_time(:millisecond)
 
@@ -172,8 +184,6 @@ defmodule Jido.Storage.ETS do
 
       {:ok, reconstruct_thread(thread_id, load_all_entries(threads_table, thread_id), meta)}
     end
-  rescue
-    ArgumentError -> {:error, :table_not_found}
   end
 
   @impl true

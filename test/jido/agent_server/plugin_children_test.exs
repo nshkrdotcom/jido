@@ -179,6 +179,18 @@ defmodule JidoTest.AgentServer.PluginChildrenTest do
 
       GenServer.stop(pid)
     end
+
+    test "child is started under supervisor and not linked to AgentServer", %{jido: jido} do
+      {:ok, pid} = Jido.AgentServer.start_link(agent: SingleChildAgent, jido: jido)
+
+      {:ok, state} = Jido.AgentServer.state(pid)
+      [{_tag, child_info}] = Map.to_list(state.children)
+
+      links = Process.info(child_info.pid, :links) |> elem(1)
+      refute pid in links
+
+      GenServer.stop(pid)
+    end
   end
 
   describe "child_spec/1 with multiple children" do

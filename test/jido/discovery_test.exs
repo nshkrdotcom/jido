@@ -19,10 +19,15 @@ defmodule JidoTest.DiscoveryTest do
   end
 
   describe "init_async/0" do
-    test "returns a Task" do
-      task = Discovery.init_async()
-      assert %Task{} = task
-      Task.await(task)
+    test "starts async initialization and populates catalog" do
+      :persistent_term.erase(:jido_discovery_catalog)
+
+      assert {:ok, pid} = Discovery.init_async()
+      assert is_pid(pid)
+
+      assert_eventually(fn ->
+        match?({:ok, _catalog}, Discovery.catalog())
+      end)
     end
   end
 
@@ -252,6 +257,18 @@ defmodule JidoTest.DiscoveryTest do
       assert {:error, :not_initialized} = Discovery.catalog()
 
       Discovery.refresh()
+    end
+  end
+
+  defp assert_eventually(fun, attempts \\ 30)
+  defp assert_eventually(_fun, 0), do: flunk("condition did not become true")
+
+  defp assert_eventually(fun, attempts) do
+    if fun.() do
+      :ok
+    else
+      Process.sleep(10)
+      assert_eventually(fun, attempts - 1)
     end
   end
 end

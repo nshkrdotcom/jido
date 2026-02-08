@@ -239,6 +239,15 @@ defmodule JidoTest.AgentServerCoverageTest do
       signal = Signal.new!("increment", %{}, source: "/test")
       assert {:error, :not_found} = AgentServer.call(:nonexistent_atom_server, signal)
     end
+
+    test "dead pid returns not_found instead of exiting caller", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: SimpleTestAgent, jido: jido)
+      GenServer.stop(pid)
+
+      signal = Signal.new!("increment", %{}, source: "/test")
+      assert {:error, :not_found} = AgentServer.call(pid, signal)
+      assert {:error, :not_found} = AgentServer.state(pid)
+    end
   end
 
   describe "agent resolution with defaults" do
@@ -374,6 +383,33 @@ defmodule JidoTest.AgentServerCoverageTest do
       assert result.result == "something went wrong"
 
       GenServer.stop(pid)
+    end
+
+    test "cleans timed out completion waiters from server state", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: CompletionAgent, jido: jido)
+
+      assert match?({:error, _}, AgentServer.await_completion(pid, timeout: 30))
+
+      eventually(fn ->
+        {:ok, state} = AgentServer.state(pid)
+        map_size(state.completion_waiters) == 0
+      end)
+
+      GenServer.stop(pid)
+    end
+
+    test "pending waiters receive shutdown error when server stops", %{jido: jido} do
+      {:ok, pid} = AgentServer.start(agent: CompletionAgent, jido: jido)
+
+      task = Task.async(fn -> AgentServer.await_completion(pid, timeout: 5_000) end)
+
+      eventually(fn ->
+        {:ok, state} = AgentServer.state(pid)
+        map_size(state.completion_waiters) == 1
+      end)
+
+      GenServer.stop(pid, :shutdown)
+      assert {:ok, {:error, :shutdown}} = Task.yield(task, 1_000)
     end
   end
 

@@ -11,6 +11,7 @@ defmodule Jido.AgentServer.Options do
   """
 
   alias Jido.AgentServer.ParentRef
+  alias Jido.RuntimeDefaults
 
   @type error_policy ::
           :log_only
@@ -43,7 +44,7 @@ defmodule Jido.AgentServer.Options do
               max_queue_size:
                 Zoi.integer(description: "Max directive queue size")
                 |> Zoi.min(1)
-                |> Zoi.default(10_000),
+                |> Zoi.default(RuntimeDefaults.max_queue_size()),
               parent: Zoi.any(description: "Parent reference for hierarchy") |> Zoi.optional(),
               on_parent_death:
                 Zoi.atom(description: "Behavior when parent dies")

@@ -371,7 +371,7 @@ defmodule Jido.MixProject do
       {:poolboy, "~> 1.5"},
       {:telemetry_metrics, "~> 1.1"},
       {:sched_ex, "~> 1.1"},
-      {:uniq, "~> 0.6.1"},
+      {:uniq, "~> 0.6.0"},
 
       # Development & Test Dependencies
       {:git_ops, "~> 2.9", only: :dev, runtime: false},
@@ -380,7 +380,7 @@ defmodule Jido.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
-      {:excoveralls, "~> 0.18.3", only: [:dev, :test]},
+      {:excoveralls, "~> 0.18", only: [:dev, :test]},
       {:expublish, "~> 2.7", only: [:dev], runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
       {:mock, "~> 0.3.0", only: :test},

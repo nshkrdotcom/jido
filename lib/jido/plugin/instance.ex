@@ -120,7 +120,8 @@ defmodule Jido.Plugin.Instance do
   def derive_state_key(base_key, nil), do: base_key
 
   def derive_state_key(base_key, as_alias) when is_atom(as_alias) do
-    String.to_atom("#{base_key}_#{as_alias}")
+    alias_text = validate_alias!(as_alias)
+    String.to_atom("#{base_key}_#{alias_text}")
   end
 
   @doc """
@@ -138,7 +139,22 @@ defmodule Jido.Plugin.Instance do
   def derive_route_prefix(base_name, nil), do: base_name
 
   def derive_route_prefix(base_name, as_alias) when is_atom(as_alias) do
-    "#{as_alias}.#{base_name}"
+    alias_text = validate_alias!(as_alias)
+    "#{alias_text}.#{base_name}"
+  end
+
+  @alias_regex ~r/^[a-z][a-z0-9_]*$/
+  @max_alias_length 64
+
+  defp validate_alias!(as_alias) do
+    alias_text = Atom.to_string(as_alias)
+
+    if byte_size(alias_text) > @max_alias_length or not Regex.match?(@alias_regex, alias_text) do
+      raise ArgumentError,
+            "invalid plugin alias #{inspect(as_alias)}; aliases must match #{inspect(@alias_regex)} and be at most #{@max_alias_length} characters"
+    end
+
+    alias_text
   end
 
   # Normalizes plugin declaration to {module, as_option, config_map}

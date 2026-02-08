@@ -422,6 +422,36 @@ defmodule JidoTest.Sensor.RuntimeTest do
   end
 
   describe "timer-based events" do
+    test "tracks scheduled tick timer refs in runtime state" do
+      {:ok, pid} =
+        Runtime.start_link(
+          sensor: SchedulingSensor,
+          config: %{interval: 200},
+          context: %{agent_ref: self()}
+        )
+
+      state = :sys.get_state(pid)
+      assert map_size(state.timers) == 1
+      assert is_reference(state.timers[:tick])
+
+      GenServer.stop(pid)
+    end
+
+    test "tracks custom scheduled event timer refs in runtime state" do
+      {:ok, pid} =
+        Runtime.start_link(
+          sensor: CustomEventSchedulingSensor,
+          config: %{interval: 200},
+          context: %{agent_ref: self()}
+        )
+
+      state = :sys.get_state(pid)
+      assert map_size(state.timers) == 1
+      assert is_reference(state.timers[{:scheduled_event, :custom_event}])
+
+      GenServer.stop(pid)
+    end
+
     test "schedules and receives tick events" do
       {:ok, pid} =
         Runtime.start_link(

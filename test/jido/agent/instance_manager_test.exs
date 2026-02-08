@@ -146,7 +146,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
       assert_receive {:DOWN, ^ref, :process, ^pid, _reason}, 1000
 
       # Lookup should return error
-      assert InstanceManager.lookup(manager, "stop-key") == :error
+      eventually(fn -> InstanceManager.lookup(manager, "stop-key") == :error end)
     end
 
     test "stop/2 returns error for non-existent key", %{manager: manager} do

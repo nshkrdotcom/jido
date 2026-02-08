@@ -131,6 +131,7 @@ defmodule Jido.Agent do
 
   alias Jido.Action.Schema
   alias Jido.Agent
+  alias Jido.Agent.DefaultPlugins
   alias Jido.Agent.Directive
   alias Jido.Agent.State, as: StateHelper
   alias Jido.Error
@@ -941,6 +942,8 @@ defmodule Jido.Agent do
     end
   end
 
+  # credo:disable-for-lines:60 Credo.Check.Refactor.CyclomaticComplexity
+  # credo:disable-for-lines:60 Credo.Check.Refactor.Nesting
   defp __quoted_callback_restore__ do
     quote location: :keep do
       @impl true
@@ -1216,10 +1219,10 @@ defmodule Jido.Agent do
       if jido_module != nil and function_exported?(jido_module, :__default_plugins__, 0) do
         jido_module.__default_plugins__()
       else
-        Jido.Agent.DefaultPlugins.package_defaults()
+        DefaultPlugins.package_defaults()
       end
 
-    Jido.Agent.DefaultPlugins.apply_agent_overrides(base_defaults, agent_opts[:default_plugins])
+    DefaultPlugins.apply_agent_overrides(base_defaults, agent_opts[:default_plugins])
   end
 
   defp __validate_and_create_plugin_instance__(plugin_decl) do

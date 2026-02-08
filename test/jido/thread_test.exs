@@ -8,6 +8,8 @@ defmodule JidoTest.ThreadTest do
     test "creates entry with defaults" do
       entry = Entry.new(%{})
 
+      assert is_binary(entry.id)
+      assert String.starts_with?(entry.id, "entry_")
       assert entry.seq == 0
       assert entry.kind == :note
       assert entry.payload == %{}

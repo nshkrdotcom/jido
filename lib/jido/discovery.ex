@@ -65,6 +65,7 @@ defmodule Jido.Discovery do
   require Logger
 
   @catalog_key :jido_discovery_catalog
+  @system_task_supervisor Jido.SystemTaskSupervisor
 
   @type component_type :: :actions | :sensors | :agents | :plugins | :demos
   @type component_metadata :: %{
@@ -84,9 +85,9 @@ defmodule Jido.Discovery do
   Call this from your application supervisor's start callback.
   The catalog will be built in the background without blocking startup.
   """
-  @spec init_async() :: Task.t()
+  @spec init_async() :: {:ok, pid()} | {:error, term()}
   def init_async do
-    Task.async(fn ->
+    start_async_task(fn ->
       catalog = build_catalog()
       :persistent_term.put(@catalog_key, catalog)
       :ok
@@ -218,6 +219,13 @@ defmodule Jido.Discovery do
     {:ok, :persistent_term.get(@catalog_key)}
   rescue
     ArgumentError -> {:error, :not_initialized}
+  end
+
+  defp start_async_task(fun) when is_function(fun, 0) do
+    case Process.whereis(@system_task_supervisor) do
+      nil -> Task.start(fun)
+      _pid -> Task.Supervisor.start_child(@system_task_supervisor, fun)
+    end
   end
 
   defp build_catalog do

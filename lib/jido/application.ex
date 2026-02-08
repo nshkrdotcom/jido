@@ -2,9 +2,14 @@ defmodule Jido.Application do
   @moduledoc false
   use Application
 
+  alias Jido.RuntimeDefaults
+
   @doc false
   def start(_type, _args) do
     children = [
+      # System-wide supervisor for fire-and-forget async tasks
+      {Task.Supervisor,
+       name: Jido.SystemTaskSupervisor, max_children: RuntimeDefaults.system_task_max_children()},
       # Telemetry handler for agent and strategy metrics
       Jido.Telemetry
     ]

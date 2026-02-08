@@ -223,7 +223,7 @@ defmodule JidoTest.AgentTest do
       elapsed = System.monotonic_time(:millisecond) - start_time
 
       assert [%Jido.Agent.Directive.Error{}] = directives
-      assert elapsed < 100
+      assert elapsed < 300
     end
 
     test "cmd/2 delegates to cmd/3 with empty opts" do

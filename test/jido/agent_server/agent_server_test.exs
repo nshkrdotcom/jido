@@ -512,12 +512,20 @@ defmodule JidoTest.AgentServerTest do
       signal = Signal.new!("start_schedule", %{}, source: "/test")
       {:ok, _agent} = AgentServer.call(pid, signal)
 
+      eventually_state(pid, fn state ->
+        map_size(Map.get(state, :scheduled_timers, %{})) == 1
+      end)
+
       # Before delay
       {:ok, state1} = AgentServer.state(pid)
       assert state1.agent.state.pings == 0
 
       # Wait for scheduled signal (50ms delay + processing)
       eventually_state(pid, fn state -> state.agent.state.pings == 1 end, timeout: 200)
+
+      eventually_state(pid, fn state ->
+        map_size(Map.get(state, :scheduled_timers, %{})) == 0
+      end)
 
       GenServer.stop(pid)
     end

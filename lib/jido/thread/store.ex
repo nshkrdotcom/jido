@@ -21,6 +21,7 @@ defmodule Jido.Thread.Store do
   @type adapter_state :: term()
   @type t :: %__MODULE__{adapter: module(), adapter_state: adapter_state()}
 
+  @enforce_keys [:adapter, :adapter_state]
   defstruct [:adapter, :adapter_state]
 
   @doc "Initialize adapter state"

@@ -25,14 +25,25 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Emit do
 
   defp dispatch_signal(traced_signal, cfg, state) do
     if Code.ensure_loaded?(Jido.Signal.Dispatch) do
-      task_sup =
-        if state.jido, do: Jido.task_supervisor_name(state.jido), else: Jido.TaskSupervisor
-
-      Task.Supervisor.start_child(task_sup, fn ->
-        Jido.Signal.Dispatch.dispatch(traced_signal, cfg)
-      end)
+      dispatch_signal_async(traced_signal, cfg, state)
     else
       Logger.warning("Jido.Signal.Dispatch not available, skipping emit")
+    end
+  end
+
+  defp dispatch_signal_async(traced_signal, cfg, state) do
+    task_sup =
+      if state.jido, do: Jido.task_supervisor_name(state.jido), else: Jido.TaskSupervisor
+
+    case Task.Supervisor.start_child(task_sup, fn ->
+           Jido.Signal.Dispatch.dispatch(traced_signal, cfg)
+         end) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Emit dispatch dropped: failed to start async task (#{inspect(reason)})")
+        :ok
     end
   end
 end
@@ -52,6 +63,8 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Spawn do
 
   require Logger
 
+  alias Jido.AgentServer.{ChildInfo, State}
+
   def exec(%{child_spec: child_spec, tag: tag}, _input_signal, state) do
     result =
       if is_function(state.spawn_fun, 1) do
@@ -66,11 +79,11 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Spawn do
     case result do
       {:ok, pid} ->
         Logger.debug("Spawned child process #{inspect(pid)} with tag #{inspect(tag)}")
-        {:ok, state}
+        {:ok, maybe_track_spawned_child(state, pid, tag, child_spec)}
 
       {:ok, pid, _info} ->
         Logger.debug("Spawned child process #{inspect(pid)} with tag #{inspect(tag)}")
-        {:ok, state}
+        {:ok, maybe_track_spawned_child(state, pid, tag, child_spec)}
 
       {:error, reason} ->
         Logger.error("Failed to spawn child: #{inspect(reason)}")
@@ -80,12 +93,37 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Spawn do
         {:ok, state}
     end
   end
+
+  defp maybe_track_spawned_child(state, _pid, nil, _child_spec), do: state
+
+  defp maybe_track_spawned_child(state, pid, tag, child_spec) when is_pid(pid) do
+    ref = Process.monitor(pid)
+    module = child_spec_module(child_spec)
+
+    child_info =
+      ChildInfo.new!(%{
+        pid: pid,
+        ref: ref,
+        module: module,
+        id: "#{inspect(tag)}-#{inspect(pid)}",
+        tag: tag,
+        meta: %{directive: :spawn}
+      })
+
+    State.add_child(state, tag, child_info)
+  end
+
+  defp child_spec_module(%{start: {module, _fun, _args}}), do: module
+  defp child_spec_module({module, _args}) when is_atom(module), do: module
+  defp child_spec_module(module) when is_atom(module), do: module
+  defp child_spec_module(_), do: nil
 end
 
 defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Schedule do
   @moduledoc false
 
   alias Jido.AgentServer.Signal.Scheduled
+  alias Jido.AgentServer.State
   alias Jido.Tracing.Context, as: TraceContext
 
   def exec(%{delay_ms: delay, message: message}, input_signal, state) do
@@ -107,8 +145,9 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Schedule do
         {:error, _} -> signal
       end
 
-    Process.send_after(self(), {:scheduled_signal, traced_signal}, delay)
-    {:ok, state}
+    message_ref = make_ref()
+    timer_ref = Process.send_after(self(), {:scheduled_signal, message_ref, traced_signal}, delay)
+    {:ok, State.put_scheduled_timer(state, message_ref, timer_ref)}
   end
 end
 
@@ -186,14 +225,25 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.StopChild do
           "AgentServer #{state.id} stopping child #{inspect(tag)} with reason #{inspect(reason)}"
         )
 
-        task_sup =
-          if state.jido, do: Jido.task_supervisor_name(state.jido), else: Jido.TaskSupervisor
-
-        Task.Supervisor.start_child(task_sup, fn ->
-          GenServer.stop(pid, reason, 5_000)
-        end)
+        start_async_stop_child(state, tag, pid, reason)
 
         {:ok, state}
+    end
+  end
+
+  defp start_async_stop_child(state, tag, pid, reason) do
+    task_sup = if state.jido, do: Jido.task_supervisor_name(state.jido), else: Jido.TaskSupervisor
+
+    case Task.Supervisor.start_child(task_sup, fn ->
+           GenServer.stop(pid, reason, 5_000)
+         end) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, task_reason} ->
+        Logger.warning(
+          "AgentServer #{state.id} failed to start async stop for child #{inspect(tag)}: #{inspect(task_reason)}"
+        )
     end
   end
 end

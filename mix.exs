@@ -353,8 +353,10 @@ defmodule Jido.MixProject do
   defp deps do
     [
       # Jido Ecosystem
-      jido_action_dep(),
-      {:jido_signal, "~> 2.0.0-rc.4"},
+      {:jido_action, path: "../jido_action"},
+      # {:jido_action, "~> 2.0.0-rc.5"},
+      {:jido_signal, path: "../jido_signal"},
+      # {:jido_signal, "~> 2.0.0-rc.5"},
 
       # Jido Deps
       {:deep_merge, "~> 1.0"},
@@ -386,16 +388,6 @@ defmodule Jido.MixProject do
       # Code generation
       {:igniter, "~> 0.7", optional: true}
     ]
-  end
-
-  defp jido_action_dep do
-    local_path = Path.expand("../jido_action", __DIR__)
-
-    if File.dir?(local_path) do
-      {:jido_action, path: local_path}
-    else
-      {:jido_action, "~> 2.0.0-rc.4"}
-    end
   end
 
   defp aliases do

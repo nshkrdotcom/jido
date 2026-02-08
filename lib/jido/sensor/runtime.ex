@@ -48,6 +48,7 @@ defmodule Jido.Sensor.Runtime do
 
   require Logger
 
+  alias Jido.Runtime.Tasking
   alias Jido.RuntimeDefaults
   alias Jido.Signal.Dispatch
   @system_task_supervisor Jido.SystemTaskSupervisor
@@ -145,6 +146,19 @@ defmodule Jido.Sensor.Runtime do
   @impl GenServer
   def handle_cast({:external_event, event}, state) do
     handle_sensor_event(event, state)
+  end
+
+  @impl GenServer
+  def handle_info({:timeout, timer_ref, {:sensor_timer, key, event}}, state)
+      when is_reference(timer_ref) do
+    case Map.get(state.timers, key) do
+      ^timer_ref ->
+        state = clear_timer_ref(state, key)
+        handle_sensor_event(event, state)
+
+      _other_ref ->
+        {:noreply, state}
+    end
   end
 
   @impl GenServer
@@ -283,13 +297,13 @@ defmodule Jido.Sensor.Runtime do
   end
 
   defp schedule_event(state, :tick, interval_ms) do
-    timer_ref = Process.send_after(self(), :tick, interval_ms)
+    timer_ref = :erlang.start_timer(interval_ms, self(), {:sensor_timer, :tick, :tick})
     put_timer_ref(state, :tick, timer_ref)
   end
 
   defp schedule_event(state, event, interval_ms) do
     key = {:scheduled_event, event}
-    timer_ref = Process.send_after(self(), {:scheduled_event, event}, interval_ms)
+    timer_ref = :erlang.start_timer(interval_ms, self(), {:sensor_timer, key, event})
     put_timer_ref(state, key, timer_ref)
   end
 
@@ -317,18 +331,17 @@ defmodule Jido.Sensor.Runtime do
   end
 
   defp dispatch_async(signal, agent_ref) do
-    task = fn -> Dispatch.dispatch(signal, agent_ref) end
-
-    case Process.whereis(@system_task_supervisor) do
-      nil ->
-        _ = Task.start(task)
+    case Tasking.start_child(
+           fn ->
+             Dispatch.dispatch(signal, agent_ref)
+           end,
+           candidates: [@system_task_supervisor]
+         ) do
+      {:ok, _task_pid} ->
         :ok
 
-      _pid ->
-        case Task.Supervisor.start_child(@system_task_supervisor, task) do
-          {:ok, _task_pid} -> :ok
-          {:error, reason} -> Logger.warning("Sensor dispatch task failed: #{inspect(reason)}")
-        end
+      {:error, reason} ->
+        Logger.warning("Sensor dispatch dropped: failed to start async task (#{inspect(reason)})")
     end
   end
 

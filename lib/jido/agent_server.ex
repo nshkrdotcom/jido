@@ -169,6 +169,7 @@ defmodule Jido.AgentServer do
   alias Jido.Agent.Directive
   alias Jido.AgentServer.Signal.{ChildExit, ChildStarted, Orphaned}
   alias Jido.AgentServer.State.Lifecycle
+  alias Jido.Runtime.Tasking
   alias Jido.RuntimeDefaults
   alias Jido.Sensor.Runtime, as: SensorRuntime
   alias Jido.Signal
@@ -176,7 +177,7 @@ defmodule Jido.AgentServer do
   alias Jido.Tracing.Context, as: TraceContext
   alias Jido.Tracing.Trace
 
-  @type server :: pid() | atom() | {:via, module(), term()} | String.t()
+  @type server :: pid() | atom() | {:via, module(), term()}
   # ---------------------------------------------------------------------------
   # Public API
   # ---------------------------------------------------------------------------
@@ -280,7 +281,12 @@ defmodule Jido.AgentServer do
   ## Examples
 
       {:ok, agent} = Jido.AgentServer.call(pid, signal)
-      {:ok, agent} = Jido.AgentServer.call("agent-id", signal, 10_000)
+
+      server = Jido.AgentServer.via_tuple("agent-id", Jido.Registry)
+      {:ok, agent} = Jido.AgentServer.call(server, signal, 10_000)
+
+      {:ok, pid} = Jido.AgentServer.whereis("agent-id")
+      {:ok, agent} = Jido.AgentServer.call(pid, signal, 10_000)
   """
   @spec call(server(), Signal.t(), timeout()) :: {:ok, struct()} | {:error, term()}
   def call(server, %Signal{} = signal, timeout \\ RuntimeDefaults.agent_server_call_timeout()) do
@@ -303,7 +309,12 @@ defmodule Jido.AgentServer do
   ## Examples
 
       :ok = Jido.AgentServer.cast(pid, signal)
-      :ok = Jido.AgentServer.cast("agent-id", signal)
+
+      server = Jido.AgentServer.via_tuple("agent-id", Jido.Registry)
+      :ok = Jido.AgentServer.cast(server, signal)
+
+      {:ok, pid} = Jido.AgentServer.whereis("agent-id")
+      :ok = Jido.AgentServer.cast(pid, signal)
   """
   @spec cast(server(), Signal.t()) :: :ok | {:error, term()}
   def cast(server, %Signal{} = signal) do
@@ -324,7 +335,12 @@ defmodule Jido.AgentServer do
   ## Examples
 
       {:ok, state} = Jido.AgentServer.state(pid)
-      {:ok, state} = Jido.AgentServer.state("agent-id")
+
+      server = Jido.AgentServer.via_tuple("agent-id", Jido.Registry)
+      {:ok, state} = Jido.AgentServer.state(server)
+
+      {:ok, pid} = Jido.AgentServer.whereis("agent-id")
+      {:ok, state} = Jido.AgentServer.state(pid)
   """
   @spec state(server()) :: {:ok, State.t()} | {:error, term()}
   def state(server) do
@@ -2368,25 +2384,22 @@ defmodule Jido.AgentServer do
        when is_function(fun, 0) do
     timeout_ms = RuntimeDefaults.plugin_hook_timeout()
 
-    task_sup =
-      if is_atom(jido), do: Jido.task_supervisor_name(jido), else: Jido.SystemTaskSupervisor
+    case Tasking.resolve_task_supervisor(jido: jido) do
+      {:ok, task_supervisor} ->
+        run_plugin_callback_task(task_supervisor, plugin, callback, timeout_ms, fun)
 
-    case Process.whereis(task_sup) do
-      nil ->
+      {:error, :task_supervisor_not_found} ->
         # Fallback path for bootstrap/runtime edge cases.
         {:ok, fun.()}
-
-      sup_pid when is_pid(sup_pid) ->
-        run_plugin_callback_task(sup_pid, plugin, callback, timeout_ms, fun)
     end
   end
 
-  defp run_plugin_callback_task(sup_pid, plugin, callback, timeout_ms, fun)
-       when is_pid(sup_pid) and is_integer(timeout_ms) and is_function(fun, 0) do
+  defp run_plugin_callback_task(task_supervisor, plugin, callback, timeout_ms, fun)
+       when is_atom(task_supervisor) and is_integer(timeout_ms) and is_function(fun, 0) do
     parent = self()
     result_ref = make_ref()
 
-    case Task.Supervisor.start_child(sup_pid, fn ->
+    case Task.Supervisor.start_child(task_supervisor, fn ->
            send(parent, {:plugin_hook_result, result_ref, fun.()})
          end) do
       {:ok, pid} ->

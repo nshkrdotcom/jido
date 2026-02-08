@@ -34,6 +34,7 @@ defmodule Jido.Await do
   """
 
   alias Jido.AgentServer
+  alias Jido.Runtime.Tasking
   alias Jido.RuntimeDefaults
 
   @type server :: AgentServer.server()
@@ -319,10 +320,7 @@ defmodule Jido.Await do
         send(caller, {:await_result, ref, server, result})
       end
 
-    case Process.whereis(@system_task_supervisor) do
-      nil -> {:error, :task_supervisor_not_found}
-      _pid -> Task.Supervisor.start_child(@system_task_supervisor, task)
-    end
+    Tasking.start_child(task, candidates: [@system_task_supervisor])
   end
 
   # ---------------------------------------------------------------------------

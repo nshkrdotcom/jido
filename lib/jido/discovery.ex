@@ -64,6 +64,8 @@ defmodule Jido.Discovery do
 
   require Logger
 
+  alias Jido.Runtime.Tasking
+
   @catalog_key :jido_discovery_catalog
   @system_task_supervisor Jido.SystemTaskSupervisor
 
@@ -233,10 +235,7 @@ defmodule Jido.Discovery do
   end
 
   defp start_async_task(fun) when is_function(fun, 0) do
-    case Process.whereis(@system_task_supervisor) do
-      nil -> {:error, :task_supervisor_not_found}
-      _pid -> Task.Supervisor.start_child(@system_task_supervisor, fun)
-    end
+    Tasking.start_child(fun, candidates: [@system_task_supervisor])
   end
 
   defp build_catalog do

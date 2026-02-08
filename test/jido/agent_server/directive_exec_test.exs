@@ -188,7 +188,14 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
       child_spec = {Task, fn -> :ok end}
       directive = %Directive.Spawn{child_spec: child_spec, tag: :worker}
 
-      assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
+      assert {:ok, new_state} = DirectiveExec.exec(directive, input_signal, state)
+      assert State.queue_length(new_state) == 1
+
+      assert {{:value, {^input_signal, %Directive.Error{context: :spawn} = error_directive}},
+              dequeued_state} = State.dequeue(new_state)
+
+      assert {:ok, ^dequeued_state} =
+               DirectiveExec.exec(error_directive, input_signal, dequeued_state)
     end
 
     test "handles spawn returning {:ok, pid, info} tuple", %{
@@ -273,8 +280,9 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
       directive = %Directive.Spawn{child_spec: child_spec, tag: :worker}
 
       # Contract: missing instance supervisor should not silently fallback.
-      assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
-      refute Map.has_key?(state.children, :worker)
+      assert {:ok, new_state} = DirectiveExec.exec(directive, input_signal, state)
+      refute Map.has_key?(new_state.children, :worker)
+      assert State.queue_length(new_state) == 1
     end
 
     test "tracks spawned child even when tag is nil", %{
@@ -405,8 +413,12 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
         meta: %{}
       }
 
-      assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
-      refute Map.has_key?(state.children, :failing_child)
+      assert {:ok, new_state} = DirectiveExec.exec(directive, input_signal, state)
+      refute Map.has_key?(new_state.children, :failing_child)
+      assert State.queue_length(new_state) == 1
+
+      assert {{:value, {^input_signal, %Directive.Error{context: :spawn_agent}}}, _dequeued} =
+               State.dequeue(new_state)
     end
 
     test "resolve_agent_module handles non-module non-struct agent (unknown type)", %{
@@ -422,7 +434,8 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
       }
 
       # This will fail to spawn but should handle gracefully
-      assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
+      assert {:ok, new_state} = DirectiveExec.exec(directive, input_signal, state)
+      assert State.queue_length(new_state) == 1
     end
   end
 

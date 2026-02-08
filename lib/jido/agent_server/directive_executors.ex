@@ -3,6 +3,7 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Emit do
 
   require Logger
 
+  alias Jido.Runtime.Tasking
   alias Jido.Tracing.Context, as: TraceContext
 
   def exec(%{signal: signal, dispatch: dispatch}, input_signal, state) do
@@ -32,20 +33,12 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Emit do
   end
 
   defp dispatch_signal_async(traced_signal, cfg, state) do
-    case resolve_task_supervisor(state) do
-      {:ok, task_sup} ->
-        start_dispatch_task(task_sup, traced_signal, cfg)
-
-      {:error, reason} ->
-        Logger.warning("Emit dispatch dropped: missing task supervisor (#{inspect(reason)})")
-        :ok
-    end
-  end
-
-  defp start_dispatch_task(task_sup, traced_signal, cfg) do
-    case Task.Supervisor.start_child(task_sup, fn ->
-           Jido.Signal.Dispatch.dispatch(traced_signal, cfg)
-         end) do
+    case Tasking.start_child(
+           fn ->
+             Jido.Signal.Dispatch.dispatch(traced_signal, cfg)
+           end,
+           jido: state.jido
+         ) do
       {:ok, _pid} ->
         :ok
 
@@ -53,18 +46,6 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Emit do
         Logger.warning("Emit dispatch dropped: failed to start async task (#{inspect(reason)})")
         :ok
     end
-  end
-
-  defp resolve_task_supervisor(state) do
-    jido = state.jido
-    candidates = [Jido.task_supervisor_name(jido), Jido.SystemTaskSupervisor]
-
-    Enum.find_value(candidates, {:error, :not_found}, fn supervisor ->
-      case Process.whereis(supervisor) do
-        pid when is_pid(pid) -> {:ok, supervisor}
-        nil -> false
-      end
-    end)
   end
 end
 
@@ -83,9 +64,10 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Spawn do
 
   require Logger
 
+  alias Jido.Agent.Directive
   alias Jido.AgentServer.{ChildInfo, State}
 
-  def exec(%{child_spec: child_spec, tag: tag}, _input_signal, state) do
+  def exec(%{child_spec: child_spec, tag: tag}, input_signal, state) do
     result =
       if is_function(state.spawn_fun, 1) do
         state.spawn_fun.(child_spec)
@@ -105,8 +87,7 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Spawn do
         {:ok, maybe_track_spawned_child(state, pid, tag, child_spec)}
 
       {:error, reason} ->
-        Logger.error("Failed to spawn child: #{inspect(reason)}")
-        {:ok, state}
+        {:ok, enqueue_spawn_error(state, input_signal, child_spec, tag, reason)}
 
       :ignored ->
         {:ok, state}
@@ -138,6 +119,28 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Spawn do
   defp child_spec_module({module, _args}) when is_atom(module), do: module
   defp child_spec_module(module) when is_atom(module), do: module
   defp child_spec_module(_), do: nil
+
+  defp enqueue_spawn_error(state, input_signal, child_spec, tag, reason) do
+    error =
+      Jido.Error.execution_error(
+        "Failed to spawn child",
+        details: %{reason: inspect(reason), tag: tag, child_spec: inspect(child_spec)}
+      )
+
+    directive = %Directive.Error{error: error, context: :spawn}
+
+    case State.enqueue(state, input_signal, directive) do
+      {:ok, enqueued_state} ->
+        enqueued_state
+
+      {:error, :queue_overflow} ->
+        Logger.error(
+          "Failed to enqueue spawn error directive due to queue overflow: #{inspect(reason)}"
+        )
+
+        state
+    end
+  end
 
   defp resolve_agent_supervisor(state) do
     case state.jido do
@@ -194,10 +197,11 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.SpawnAgent do
 
   require Logger
 
+  alias Jido.Agent.Directive
   alias Jido.AgentServer
   alias Jido.AgentServer.{ChildInfo, State}
 
-  def exec(%{agent: agent, tag: tag, opts: opts, meta: meta}, _input_signal, state) do
+  def exec(%{agent: agent, tag: tag, opts: opts, meta: meta}, input_signal, state) do
     child_id = opts[:id] || "#{state.id}/#{tag}"
     normalized_meta = normalize_spawn_agent_meta(meta)
 
@@ -236,14 +240,40 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.SpawnAgent do
         {:ok, new_state}
 
       {:error, reason} ->
-        Logger.error("AgentServer #{state.id} failed to spawn child: #{inspect(reason)}")
-        {:ok, state}
+        {:ok, enqueue_spawn_agent_error(state, input_signal, agent, tag, child_id, reason)}
     end
   end
 
   defp resolve_agent_module(agent) when is_atom(agent), do: agent
   defp resolve_agent_module(%{__struct__: module}), do: module
   defp resolve_agent_module(_), do: nil
+
+  defp enqueue_spawn_agent_error(state, input_signal, agent, tag, child_id, reason) do
+    error =
+      Jido.Error.execution_error(
+        "Failed to spawn child agent",
+        details: %{
+          reason: inspect(reason),
+          tag: tag,
+          child_id: child_id,
+          agent: inspect(agent)
+        }
+      )
+
+    directive = %Directive.Error{error: error, context: :spawn_agent}
+
+    case State.enqueue(state, input_signal, directive) do
+      {:ok, enqueued_state} ->
+        enqueued_state
+
+      {:error, :queue_overflow} ->
+        Logger.error(
+          "Failed to enqueue spawn_agent error directive due to queue overflow: #{inspect(reason)}"
+        )
+
+        state
+    end
+  end
 
   defp normalize_spawn_agent_meta(meta) when is_map(meta), do: meta
   defp normalize_spawn_agent_meta(_meta), do: %{}
@@ -255,6 +285,7 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.StopChild do
   require Logger
 
   alias Jido.AgentServer.State
+  alias Jido.Runtime.Tasking
   alias Jido.RuntimeDefaults
 
   def exec(%{tag: tag, reason: reason}, _input_signal, state) do
@@ -275,23 +306,12 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.StopChild do
   end
 
   defp start_async_stop_child(state, tag, pid, reason) do
-    case resolve_task_supervisor(state) do
-      {:ok, task_sup} ->
-        start_stop_child_task(task_sup, state, tag, pid, reason)
-
-      {:error, task_reason} ->
-        Logger.warning(
-          "AgentServer #{state.id} failed to resolve async stop supervisor for child #{inspect(tag)}: #{inspect(task_reason)}"
-        )
-
-        stop_child_now(state, tag, pid, reason)
-    end
-  end
-
-  defp start_stop_child_task(task_sup, state, tag, pid, reason) do
-    case Task.Supervisor.start_child(task_sup, fn ->
-           GenServer.stop(pid, reason, RuntimeDefaults.stop_child_shutdown_timeout())
-         end) do
+    case Tasking.start_child(
+           fn ->
+             GenServer.stop(pid, reason, RuntimeDefaults.stop_child_shutdown_timeout())
+           end,
+           jido: state.jido
+         ) do
       {:ok, _pid} ->
         :ok
 
@@ -314,18 +334,6 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.StopChild do
       )
 
       :ok
-  end
-
-  defp resolve_task_supervisor(state) do
-    jido = state.jido
-    candidates = [Jido.task_supervisor_name(jido), Jido.SystemTaskSupervisor]
-
-    Enum.find_value(candidates, {:error, :not_found}, fn supervisor ->
-      case Process.whereis(supervisor) do
-        pid when is_pid(pid) -> {:ok, supervisor}
-        nil -> false
-      end
-    end)
   end
 end
 

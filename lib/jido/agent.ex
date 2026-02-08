@@ -654,7 +654,14 @@ defmodule Jido.Agent do
         opts = if is_list(opts), do: Map.new(opts), else: opts
 
         initial_state = __build_initial_state__(opts)
-        id = opts[:id] || Jido.Util.generate_id()
+
+        id =
+          case opts[:id] do
+            nil -> Jido.Util.generate_id()
+            "" -> Jido.Util.generate_id()
+            id when is_binary(id) -> id
+            other -> to_string(other)
+          end
 
         agent = %Agent{
           id: id,

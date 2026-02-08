@@ -144,7 +144,9 @@ defmodule Jido.Agent do
   @schema Zoi.struct(
             __MODULE__,
             %{
-              id: Zoi.string(description: "Unique agent identifier"),
+              id:
+                Zoi.string(description: "Unique agent identifier")
+                |> Zoi.optional(),
               name:
                 Zoi.string(description: "Agent name")
                 |> Zoi.optional(),

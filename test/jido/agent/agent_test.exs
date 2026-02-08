@@ -311,6 +311,11 @@ defmodule JidoTest.AgentTest do
   end
 
   describe "base module functions" do
+    test "Agent struct literal allows missing id" do
+      agent = %Agent{}
+      assert agent.id == nil
+    end
+
     test "Agent.new/1 creates agent from attrs (map)" do
       {:ok, agent} = Agent.new(%{name: "test_agent", id: "test-123"})
       assert agent.id == "test-123"

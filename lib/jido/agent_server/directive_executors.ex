@@ -283,6 +283,8 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.StopChild do
         Logger.warning(
           "AgentServer #{state.id} failed to resolve async stop supervisor for child #{inspect(tag)}: #{inspect(task_reason)}"
         )
+
+        stop_child_now(state, tag, pid, reason)
     end
   end
 
@@ -297,7 +299,21 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.StopChild do
         Logger.warning(
           "AgentServer #{state.id} failed to start async stop for child #{inspect(tag)}: #{inspect(task_reason)}"
         )
+
+        stop_child_now(state, tag, pid, reason)
     end
+  end
+
+  defp stop_child_now(state, tag, pid, reason) when is_pid(pid) do
+    GenServer.stop(pid, reason, RuntimeDefaults.stop_child_shutdown_timeout())
+    :ok
+  catch
+    :exit, stop_reason ->
+      Logger.warning(
+        "AgentServer #{state.id} failed to synchronously stop child #{inspect(tag)}: #{inspect(stop_reason)}"
+      )
+
+      :ok
   end
 
   defp resolve_task_supervisor(state) do

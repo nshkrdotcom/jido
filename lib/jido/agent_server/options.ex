@@ -141,7 +141,7 @@ defmodule Jido.AgentServer.Options do
       end
 
     jido_instance = Map.get(attrs, :jido, Jido)
-    registry = Jido.registry_name(jido_instance)
+    registry = Map.get(attrs, :registry, Jido.registry_name(jido_instance))
     attrs = Map.put(attrs, :jido, jido_instance)
 
     attrs

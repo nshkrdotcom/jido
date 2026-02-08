@@ -245,6 +245,27 @@ defmodule JidoTest.Storage.ETSTest do
       assert loaded.rev == 4
     end
 
+    test "concurrent appends serialize and preserve all entries" do
+      opts = [table: unique_table(:concurrent_append)]
+      thread_id = "thread_#{System.unique_integer([:positive])}"
+      count = 25
+
+      tasks =
+        for n <- 1..count do
+          Task.async(fn ->
+            ETS.append_thread(thread_id, [%{kind: :note, payload: %{n: n}}], opts)
+          end)
+        end
+
+      results = Enum.map(tasks, &Task.await(&1, 5_000))
+      assert Enum.all?(results, &match?({:ok, %Thread{}}, &1))
+
+      {:ok, loaded} = ETS.load_thread(thread_id, opts)
+      assert loaded.rev == count
+      assert Thread.entry_count(loaded) == count
+      assert Enum.map(loaded.entries, & &1.seq) == Enum.to_list(0..(count - 1))
+    end
+
     test "entries get unique IDs assigned" do
       opts = [table: unique_table(:entry_ids)]
       thread_id = "thread_#{System.unique_integer([:positive])}"

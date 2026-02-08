@@ -122,6 +122,16 @@ defmodule JidoTest.AgentServerTest do
       assert AgentServer.whereis(Jido.registry_name(jido), "dynamic-test") == pid
       DynamicSupervisor.terminate_child(Jido.agent_supervisor_name(jido), pid)
     end
+
+    test "returns already_started when id is already registered", %{jido: jido} do
+      id = "duplicate-id-#{System.unique_integer([:positive])}"
+      {:ok, pid} = AgentServer.start(agent: TestAgent, id: id, jido: jido)
+
+      assert {:error, {:already_started, ^pid}} =
+               AgentServer.start(agent: TestAgent, id: id, jido: jido)
+
+      DynamicSupervisor.terminate_child(Jido.agent_supervisor_name(jido), pid)
+    end
   end
 
   describe "call/3 (sync)" do
@@ -419,7 +429,7 @@ defmodule JidoTest.AgentServerTest do
       GenServer.stop(pid)
     end
 
-    test "transitions to processing during signal handling", %{jido: jido} do
+    test "serializes blocking call handling inside the server process", %{jido: jido} do
       defmodule SlowAction do
         @moduledoc false
         use Jido.Action,
@@ -462,12 +472,8 @@ defmodule JidoTest.AgentServerTest do
 
       assert_receive {:slow_action_started, ^unblock_ref, action_pid}, 500
 
-      # Call handling is offloaded; state stays responsive while action is blocked.
-      eventually_state(pid, fn state ->
-        state.status in [:idle, :processing]
-      end)
-
       assert Task.yield(task, 0) == nil
+      assert {:timeout, _} = catch_exit(GenServer.call(pid, :get_state, 50))
 
       send(action_pid, {:unblock_slow_action, unblock_ref})
       Task.await(task, 2_000)
@@ -986,6 +992,38 @@ defmodule JidoTest.AgentServerTest do
         plugins: [ScheduledPlugin]
     end
 
+    defmodule FastScheduledAction do
+      @moduledoc false
+      use Jido.Action,
+        name: "fast_scheduled_action",
+        schema: []
+
+      @impl true
+      def run(_params, context) do
+        count = Map.get(context.state, :scheduled_count, 0)
+        {:ok, %{scheduled_count: count + 1}}
+      end
+    end
+
+    defmodule FastScheduledPlugin do
+      @moduledoc false
+      use Jido.Plugin,
+        name: "fast_scheduled_plugin",
+        state_key: :fast_scheduled_plugin,
+        actions: [FastScheduledAction],
+        schedules: [
+          {"*/1 * * * * *", FastScheduledAction}
+        ]
+    end
+
+    defmodule AgentWithFastScheduledPlugin do
+      @moduledoc false
+      use Jido.Agent,
+        name: "agent_with_fast_scheduled_plugin",
+        schema: [scheduled_count: [type: :integer, default: 0]],
+        plugins: [FastScheduledPlugin]
+    end
+
     test "registers plugin schedules on startup", %{jido: jido} do
       {:ok, pid} = AgentServer.start_link(agent: AgentWithScheduledPlugin, jido: jido)
       eventually_state(pid, fn state -> map_size(state.cron_jobs) == 1 end)
@@ -999,6 +1037,21 @@ defmodule JidoTest.AgentServerTest do
       cron_pid = Map.get(state.cron_jobs, job_id)
       assert is_pid(cron_pid)
       assert Process.alive?(cron_pid)
+
+      GenServer.stop(pid)
+    end
+
+    test "delivers plugin schedule ticks to the agent", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: AgentWithFastScheduledPlugin, jido: jido)
+
+      eventually_state(
+        pid,
+        fn state -> map_size(state.cron_jobs) == 1 and state.agent.state.scheduled_count >= 1 end,
+        timeout: 2_500
+      )
+
+      {:ok, state} = AgentServer.state(pid)
+      assert state.agent.state.scheduled_count >= 1
 
       GenServer.stop(pid)
     end

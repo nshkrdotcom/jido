@@ -168,41 +168,17 @@ defmodule Jido.AgentServer.Lifecycle.Keyed do
     pool_key = lifecycle.pool_key
     agent = state.agent
 
-    task_fun = fn ->
-      case Persist.hibernate(storage, agent) do
-        :ok ->
-          Logger.debug("Lifecycle hibernated agent for #{lifecycle.pool}/#{inspect(pool_key)}")
+    case Persist.hibernate(storage, agent) do
+      :ok ->
+        Logger.debug("Lifecycle hibernated agent for #{lifecycle.pool}/#{inspect(pool_key)}")
 
-        {:error, reason} ->
-          Logger.error(
-            "Lifecycle hibernate failed for #{lifecycle.pool}/#{inspect(pool_key)}: #{inspect(reason)}"
-          )
-      end
+      {:error, reason} ->
+        Logger.error(
+          "Lifecycle hibernate failed for #{lifecycle.pool}/#{inspect(pool_key)}: #{inspect(reason)}"
+        )
     end
 
-    maybe_start_hibernate_task(task_fun)
-  end
-
-  defp maybe_start_hibernate_task(task_fun) when is_function(task_fun, 0) do
-    case Process.whereis(Jido.SystemTaskSupervisor) do
-      pid when is_pid(pid) ->
-        case Task.Supervisor.start_child(Jido.SystemTaskSupervisor, task_fun) do
-          {:ok, _task_pid} -> :ok
-          {:error, _reason} -> safe_start_hibernate_task(task_fun)
-        end
-
-      nil ->
-        safe_start_hibernate_task(task_fun)
-    end
-  end
-
-  defp safe_start_hibernate_task(task_fun) when is_function(task_fun, 0) do
-    _ = Task.start(task_fun)
     :ok
-  rescue
-    _ -> :ok
-  catch
-    :exit, _ -> :ok
   end
 
   defp maybe_start_idle_timer(state) do

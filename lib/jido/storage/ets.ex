@@ -259,6 +259,8 @@ defmodule Jido.Storage.ETS do
   end
 
   defp run_locked_append(thread_id, entries, opts, threads_table) do
+    # :global.trans/2 expects {resource_id, requester_id}. The resource part must stay
+    # stable for contention, while requester_id tracks lock ownership per caller pid.
     lock_key = {{__MODULE__, threads_table, thread_id}, self()}
 
     case :global.trans(lock_key, fn -> do_append_thread(thread_id, entries, opts) end) do

@@ -202,22 +202,64 @@ defmodule Jido.Persist do
   defp flush_journal(_adapter, _opts, %Thread{entries: []}), do: :ok
 
   defp flush_journal(adapter, opts, %Thread{} = thread) do
-    Logger.debug("Persist: flushing #{length(thread.entries)} entries for thread #{thread.id}")
-
-    case adapter.append_thread(thread.id, thread.entries, [{:expected_rev, 0} | opts]) do
-      {:ok, _updated_thread} ->
-        :ok
-
-      {:error, :conflict} ->
-        Logger.debug("Persist: conflict on append, thread may already be persisted")
-        :ok
-
+    with {:ok, persisted_rev} <- current_persisted_rev(adapter, opts, thread.id),
+         :ok <- validate_flush_rev(thread, persisted_rev),
+         delta_entries <- Enum.drop(thread.entries, persisted_rev),
+         :ok <- append_thread_delta(adapter, opts, thread, persisted_rev, delta_entries) do
+      :ok
+    else
       {:error, reason} = error ->
         Logger.error(
           "Persist: failed to flush journal for thread #{thread.id}: #{inspect(reason)}"
         )
 
         error
+    end
+  end
+
+  defp current_persisted_rev(adapter, opts, thread_id) do
+    case adapter.load_thread(thread_id, opts) do
+      {:ok, %Thread{rev: rev}} when is_integer(rev) and rev >= 0 ->
+        {:ok, rev}
+
+      {:error, :not_found} ->
+        {:ok, 0}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp validate_flush_rev(%Thread{rev: in_memory_rev}, persisted_rev)
+       when is_integer(in_memory_rev) and persisted_rev > in_memory_rev do
+    {:error, :thread_mismatch}
+  end
+
+  defp validate_flush_rev(_thread, _persisted_rev), do: :ok
+
+  defp append_thread_delta(_adapter, _opts, %Thread{id: thread_id}, persisted_rev, [])
+       when is_integer(persisted_rev) do
+    Logger.debug("Persist: thread #{thread_id} already flushed at rev=#{persisted_rev}")
+    :ok
+  end
+
+  defp append_thread_delta(adapter, opts, %Thread{} = thread, persisted_rev, delta_entries) do
+    Logger.debug(
+      "Persist: flushing #{length(delta_entries)} delta entries for thread #{thread.id} from rev=#{persisted_rev}"
+    )
+
+    case adapter.append_thread(thread.id, delta_entries, [{:expected_rev, persisted_rev} | opts]) do
+      {:ok, %Thread{rev: rev}} when rev == thread.rev ->
+        :ok
+
+      {:ok, %Thread{rev: _rev}} ->
+        {:error, :thread_mismatch}
+
+      {:error, :conflict} ->
+        {:error, :conflict}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

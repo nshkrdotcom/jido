@@ -464,8 +464,8 @@ defmodule JidoTest.AgentServerCoverageTest do
     end
   end
 
-  describe "async call signal handling" do
-    test "state queries remain responsive while blocking call action is running", %{jido: jido} do
+  describe "serialized call signal handling" do
+    test "state queries time out while blocking call action is running", %{jido: jido} do
       {:ok, pid} = AgentServer.start_link(agent: BlockingCallAgent, jido: jido)
 
       unblock_ref = make_ref()
@@ -480,7 +480,7 @@ defmodule JidoTest.AgentServerCoverageTest do
       call_task = Task.async(fn -> AgentServer.call(pid, signal, 2_000) end)
 
       assert_receive {:blocking_call_started, ^unblock_ref, action_pid}, 500
-      assert {:ok, _state} = GenServer.call(pid, :get_state, 100)
+      assert {:timeout, _} = catch_exit(GenServer.call(pid, :get_state, 100))
       send(action_pid, {:unblock_call, unblock_ref})
 
       assert {:ok, _agent} = Task.await(call_task, 2_000)

@@ -282,6 +282,7 @@ defmodule Jido.Agent.InstanceManager do
         # When thawing from storage we pass a struct, so keep the module explicit.
         agent_module: config.agent,
         id: key_to_id(key),
+        registry: registry_name(config.name),
         name: {:via, Registry, {registry_name(config.name), key}},
         # Instance manager lifecycle options
         lifecycle_mod: Jido.AgentServer.Lifecycle.Keyed,

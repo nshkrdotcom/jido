@@ -353,9 +353,11 @@ defmodule Jido.MixProject do
   defp deps do
     [
       # Jido Ecosystem
-      {:jido_action, path: "../jido_action"},
+      {:jido_action,
+       git: "https://github.com/nshkrdotcom/jido_action.git", branch: "refactor/otp-cleanup"},
       # {:jido_action, "~> 2.0.0-rc.5"},
-      {:jido_signal, path: "../jido_signal"},
+      {:jido_signal,
+       git: "https://github.com/nshkrdotcom/jido_signal.git", branch: "refactor/otp-cleanup"},
       # {:jido_signal, "~> 2.0.0-rc.5"},
 
       # Jido Deps

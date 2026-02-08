@@ -684,9 +684,10 @@ defmodule Jido.AgentServer do
 
     with {:ok, options} <- Options.new(opts),
          {:ok, agent_module, agent} <- resolve_agent(options),
-         {:ok, state} <- State.from_options(options, agent_module, agent) do
+         {:ok, state} <- State.from_options(options, agent_module, agent),
+         :ok <- register_server(state) do
       # Register in Registry
-      Registry.register(state.registry, state.id, %{})
+      :ok
 
       # Monitor parent if present
       state = maybe_monitor_parent(state)
@@ -696,6 +697,22 @@ defmodule Jido.AgentServer do
       {:error, reason} ->
         {:stop, reason}
     end
+  end
+
+  defp register_server(%State{} = state) do
+    case Registry.register(state.registry, state.id, %{}) do
+      {:ok, _} ->
+        :ok
+
+      {:error, {:already_registered, pid}} when pid == self() ->
+        :ok
+
+      {:error, {:already_registered, pid}} when is_pid(pid) ->
+        {:error, {:already_started, pid}}
+    end
+  rescue
+    ArgumentError ->
+      {:error, :invalid_registry}
   end
 
   @impl true
@@ -747,10 +764,16 @@ defmodule Jido.AgentServer do
   end
 
   @impl true
-  def handle_call({:signal, %Signal{} = signal}, from, state) do
-    # Defer signal execution to an async mailbox message so this callback stays non-blocking.
-    Process.send_after(self(), {:call_signal, from, signal}, 0)
-    {:noreply, state}
+  def handle_call({:signal, %Signal{} = signal}, _from, state) do
+    result = process_call_signal_with_trace(signal, state)
+
+    case apply_call_signal_result(result, state) do
+      {:ok, transformed_agent, new_state} ->
+        {:reply, {:ok, transformed_agent}, new_state}
+
+      {:error, reason, new_state} ->
+        {:reply, {:error, reason}, new_state}
+    end
   end
 
   def handle_call(:get_state, _from, state) do
@@ -872,29 +895,6 @@ defmodule Jido.AgentServer do
 
   def handle_info({:scheduled_signal, %Signal{} = signal}, state) do
     handle_signal_async(signal, state)
-  end
-
-  def handle_info({:call_signal, from, %Signal{} = signal}, state) do
-    case start_call_signal_task(from, signal, state) do
-      :ok ->
-        {:noreply, state}
-
-      {:error, reason} ->
-        GenServer.reply(from, {:error, reason})
-        {:noreply, state}
-    end
-  end
-
-  def handle_info({:call_signal_result, from, result}, state) do
-    case apply_call_signal_result(result, state) do
-      {:ok, transformed_agent, new_state} ->
-        GenServer.reply(from, {:ok, transformed_agent})
-        {:noreply, new_state}
-
-      {:error, reason, new_state} ->
-        GenServer.reply(from, {:error, reason})
-        {:noreply, new_state}
-    end
   end
 
   def handle_info(:post_init_start_children, state) do
@@ -1071,55 +1071,6 @@ defmodule Jido.AgentServer do
       process_call_signal(traced_signal, state)
     after
       TraceContext.clear()
-    end
-  end
-
-  defp start_call_signal_task(from, %Signal{} = signal, state) do
-    parent = self()
-
-    task_fun = fn ->
-      result = process_call_signal_with_trace(signal, state)
-      send(parent, {:call_signal_result, from, result})
-    end
-
-    case resolve_task_supervisor_for_call(state) do
-      {:ok, task_supervisor} ->
-        case Task.Supervisor.start_child(task_supervisor, task_fun) do
-          {:ok, _pid} -> :ok
-          {:error, reason} -> {:error, reason}
-        end
-
-      {:error, :not_found} ->
-        safe_task_start(task_fun)
-    end
-  end
-
-  defp safe_task_start(task_fun) when is_function(task_fun, 0) do
-    {:ok, _pid} = Task.start(task_fun)
-    :ok
-  catch
-    :exit, reason -> {:error, reason}
-  end
-
-  defp resolve_task_supervisor_for_call(%State{jido: jido}) when is_atom(jido) do
-    task_supervisor = Jido.task_supervisor_name(jido)
-
-    case Process.whereis(task_supervisor) do
-      pid when is_pid(pid) ->
-        {:ok, task_supervisor}
-
-      nil ->
-        case Process.whereis(Jido.SystemTaskSupervisor) do
-          pid when is_pid(pid) -> {:ok, Jido.SystemTaskSupervisor}
-          nil -> {:error, :not_found}
-        end
-    end
-  end
-
-  defp resolve_task_supervisor_for_call(_state) do
-    case Process.whereis(Jido.SystemTaskSupervisor) do
-      pid when is_pid(pid) -> {:ok, Jido.SystemTaskSupervisor}
-      nil -> {:error, :not_found}
     end
   end
 
@@ -1882,6 +1833,7 @@ defmodule Jido.AgentServer do
     } = schedule_spec
 
     agent_id = state.id
+    agent_ref = via_tuple(agent_id, state.registry)
 
     signal = Signal.new!(signal_type, %{}, source: "/agent/#{agent_id}/schedule")
 
@@ -1890,7 +1842,18 @@ defmodule Jido.AgentServer do
     result =
       Jido.Scheduler.run_every(
         fn ->
-          _ = Jido.AgentServer.cast(agent_id, signal)
+          case cast(agent_ref, signal) do
+            :ok ->
+              :ok
+
+            {:error, reason} ->
+              Logger.warning(
+                "AgentServer #{agent_id} failed to deliver schedule #{inspect(job_id)} tick: #{inspect(reason)}"
+              )
+
+              :ok
+          end
+
           :ok
         end,
         cron_expr,

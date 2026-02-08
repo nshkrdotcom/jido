@@ -32,10 +32,11 @@ defmodule Jido.AgentServer.Lifecycle.Keyed do
   require Logger
 
   alias Jido.Agent.Persistence
+  alias Jido.AgentServer.State.Lifecycle, as: LifecycleState
   alias Jido.RuntimeDefaults
 
   @impl true
-  def init(_opts, state) do
+  def init(_lifecycle, state) do
     # The lifecycle struct is already populated by State.from_options
     # Just start the idle timer if appropriate
     maybe_start_idle_timer(state)
@@ -215,7 +216,7 @@ defmodule Jido.AgentServer.Lifecycle.Keyed do
 
     if lifecycle.idle_timer do
       :erlang.cancel_timer(lifecycle.idle_timer)
-      %{state | lifecycle: %{lifecycle | idle_timer: nil}}
+      %{state | lifecycle: LifecycleState.clear_idle_timer(lifecycle)}
     else
       state
     end

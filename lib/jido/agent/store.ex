@@ -6,6 +6,10 @@ defmodule Jido.Agent.Store do
   hibernate/thaw functionality. The store is used by `Jido.Agent.InstanceManager` to
   persist agent state when idle and restore it on demand.
 
+  > #### Migration Note {: .info}
+  > Built-in adapters are compatibility wrappers over `Jido.Storage` checkpoint
+  > APIs. New integrations should prefer `Jido.Storage` + `Jido.Persist`.
+
   ## Built-in Adapters
 
   - `Jido.Agent.Store.ETS` - Fast, in-memory, not restart-safe (dev/test)

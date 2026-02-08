@@ -5,6 +5,17 @@ defmodule Jido.Thread.Store do
   Store operations return updated store state to preserve purity
   for adapters that don't use external processes.
 
+  ## 3-Tuple Contract
+
+  Read/mutate operations intentionally return 3-element tuples so callers can
+  thread adapter state explicitly:
+
+  - `{:ok, store, value}`
+  - `{:error, store, reason}`
+
+  This differs from runtime APIs that typically return `{:ok, value}`. The
+  contract is intentional and stable for pure adapter workflows.
+
   ## Example
 
       {:ok, store} = Thread.Store.new()

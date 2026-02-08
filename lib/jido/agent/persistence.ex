@@ -11,8 +11,11 @@ defmodule Jido.Agent.Persistence do
 
   Persistence is configured with a keyword list:
 
-  - `:store` - `{StoreModule, opts}` tuple (required)
+  - `:store` - `{StoreModule, opts}` tuple (legacy)
+  - `:storage` - `{StorageAdapter, opts}` tuple (preferred)
   - `:key_fun` - Custom key function `(agent_module, agent_id) -> key` (optional)
+
+  `:store` and `:storage` are both supported for migration compatibility.
 
   ## Agent Callbacks
 
@@ -72,12 +75,12 @@ defmodule Jido.Agent.Persistence do
   """
   @spec hibernate(config(), agent_module(), key(), struct()) :: :ok | {:error, term()}
   def hibernate(config, agent_module, key, agent) do
-    {store_module, store_opts} = Keyword.fetch!(config, :store)
+    {store_module, store_opts} = resolve_store_config(config)
     store_key = make_store_key(config, agent_module, key)
 
     case dump_agent(agent_module, agent) do
       {:ok, dump} ->
-        case store_module.put(store_key, dump, store_opts) do
+        case store_put(store_module, store_key, dump, store_opts) do
           :ok ->
             Logger.debug("Persistence hibernated agent for key #{inspect(key)}")
             :ok
@@ -124,10 +127,10 @@ defmodule Jido.Agent.Persistence do
   """
   @spec thaw(config(), agent_module(), key()) :: {:ok, struct()} | :not_found | {:error, term()}
   def thaw(config, agent_module, key) do
-    {store_module, store_opts} = Keyword.fetch!(config, :store)
+    {store_module, store_opts} = resolve_store_config(config)
     store_key = make_store_key(config, agent_module, key)
 
-    case store_module.get(store_key, store_opts) do
+    case store_get(store_module, store_key, store_opts) do
       {:ok, dump} ->
         case load_agent(agent_module, dump) do
           {:ok, agent} ->
@@ -209,6 +212,58 @@ defmodule Jido.Agent.Persistence do
     case Keyword.get(config, :key_fun) do
       nil -> {agent_module, key}
       fun when is_function(fun, 2) -> fun.(agent_module, key)
+    end
+  end
+
+  defp resolve_store_config(config) do
+    case Keyword.get(config, :store) do
+      {store_module, store_opts} when is_atom(store_module) and is_list(store_opts) ->
+        {store_module, store_opts}
+
+      nil ->
+        case Keyword.fetch!(config, :storage) do
+          {storage_module, storage_opts}
+          when is_atom(storage_module) and is_list(storage_opts) ->
+            {storage_module, storage_opts}
+        end
+    end
+  end
+
+  defp store_get(store_module, key, opts) do
+    case Code.ensure_loaded(store_module) do
+      {:module, _} ->
+        cond do
+          function_exported?(store_module, :get, 2) ->
+            store_module.get(key, opts)
+
+          function_exported?(store_module, :get_checkpoint, 2) ->
+            store_module.get_checkpoint(key, opts)
+
+          true ->
+            {:error, :unsupported_store_module}
+        end
+
+      {:error, _} ->
+        {:error, :unsupported_store_module}
+    end
+  end
+
+  defp store_put(store_module, key, dump, opts) do
+    case Code.ensure_loaded(store_module) do
+      {:module, _} ->
+        cond do
+          function_exported?(store_module, :put, 3) ->
+            store_module.put(key, dump, opts)
+
+          function_exported?(store_module, :put_checkpoint, 3) ->
+            store_module.put_checkpoint(key, dump, opts)
+
+          true ->
+            {:error, :unsupported_store_module}
+        end
+
+      {:error, _} ->
+        {:error, :unsupported_store_module}
     end
   end
 end

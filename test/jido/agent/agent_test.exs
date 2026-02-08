@@ -316,6 +316,12 @@ defmodule JidoTest.AgentTest do
       assert error.message == "Agent validation failed"
     end
 
+    test "Agent.new/1 normalizes nil id to generated id" do
+      {:ok, agent} = Agent.new(%{id: nil, name: "nil-id-agent"})
+      assert is_binary(agent.id)
+      assert agent.id != ""
+    end
+
     test "Agent.validate/2 validates state against schema" do
       {:ok, agent} = Agent.new(%{id: "test", schema: [count: [type: :integer, default: 0]]})
       {:ok, validated} = Agent.validate(agent)

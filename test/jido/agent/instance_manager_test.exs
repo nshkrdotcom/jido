@@ -83,7 +83,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
     end
 
     test "get/3 starts agent if not running", %{manager: manager} do
-      assert InstanceManager.lookup(manager, "key-1") == :error
+      assert InstanceManager.lookup(manager, "key-1") == {:error, :not_found}
 
       {:ok, pid} = InstanceManager.get(manager, "key-1")
       assert is_pid(pid)
@@ -146,7 +146,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
       assert_receive {:DOWN, ^ref, :process, ^pid, _reason}, 1000
 
       # Lookup should return error
-      eventually(fn -> InstanceManager.lookup(manager, "stop-key") == :error end)
+      eventually(fn -> InstanceManager.lookup(manager, "stop-key") == {:error, :not_found} end)
     end
 
     test "stop/2 returns error for non-existent key", %{manager: manager} do
@@ -398,6 +398,22 @@ defmodule JidoTest.Agent.InstanceManagerTest do
       # Stats are separate
       assert InstanceManager.stats(manager_a).count == 1
       assert InstanceManager.stats(manager_b).count == 1
+    end
+  end
+
+  describe "manager naming guards" do
+    test "rejects non-atom manager names for generated process names" do
+      assert_raise ArgumentError, ~r/manager must be an atom/i, fn ->
+        InstanceManager.supervisor_name("sessions")
+      end
+
+      assert_raise ArgumentError, ~r/manager must be an atom/i, fn ->
+        InstanceManager.registry_name("sessions")
+      end
+
+      assert_raise ArgumentError, ~r/manager must be an atom/i, fn ->
+        InstanceManager.dynamic_supervisor_name("sessions")
+      end
     end
   end
 end

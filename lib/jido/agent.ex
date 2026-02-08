@@ -144,9 +144,7 @@ defmodule Jido.Agent do
   @schema Zoi.struct(
             __MODULE__,
             %{
-              id:
-                Zoi.string(description: "Unique agent identifier")
-                |> Zoi.optional(),
+              id: Zoi.string(description: "Unique agent identifier"),
               name:
                 Zoi.string(description: "Agent name")
                 |> Zoi.optional(),
@@ -200,7 +198,7 @@ defmodule Jido.Agent do
                                description:
                                  "The name of the Agent. Must contain only letters, numbers, and underscores."
                              )
-                             |> Zoi.refine({Jido.Util, :validate_name, []}),
+                             |> Zoi.refine({Jido.Util, :validate_name_refinement, []}),
                            description:
                              Zoi.string(description: "A description of what the Agent does.")
                              |> Zoi.optional(),
@@ -1264,7 +1262,7 @@ defmodule Jido.Agent do
   def new(attrs) when is_list(attrs), do: new(Map.new(attrs))
 
   def new(attrs) when is_map(attrs) do
-    attrs_with_id = Map.put_new_lazy(attrs, :id, &Jido.Util.generate_id/0)
+    attrs_with_id = ensure_agent_id(attrs)
 
     case Zoi.parse(@schema, attrs_with_id) do
       {:ok, agent} ->
@@ -1272,6 +1270,19 @@ defmodule Jido.Agent do
 
       {:error, errors} ->
         {:error, Error.validation_error("Agent validation failed", %{errors: errors})}
+    end
+  end
+
+  defp ensure_agent_id(attrs) when is_map(attrs) do
+    atom_id = Map.get(attrs, :id, :__missing__)
+    string_id = Map.get(attrs, "id", :__missing__)
+    id_value = if atom_id == :__missing__, do: string_id, else: atom_id
+
+    case id_value do
+      :__missing__ -> Map.put(attrs, :id, Jido.Util.generate_id())
+      nil -> Map.put(attrs, :id, Jido.Util.generate_id())
+      "" -> Map.put(attrs, :id, Jido.Util.generate_id())
+      _other -> attrs
     end
   end
 

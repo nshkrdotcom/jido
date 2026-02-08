@@ -181,7 +181,7 @@ defmodule Jido.Agent.InstanceManager do
       {:ok, pid} ->
         {:ok, pid}
 
-      :error ->
+      {:error, :not_found} ->
         start_agent(manager, key, opts)
     end
   end
@@ -192,16 +192,16 @@ defmodule Jido.Agent.InstanceManager do
   ## Examples
 
       {:ok, pid} = Jido.Agent.InstanceManager.lookup(:sessions, "user-123")
-      :error = Jido.Agent.InstanceManager.lookup(:sessions, "nonexistent")
+      {:error, :not_found} = Jido.Agent.InstanceManager.lookup(:sessions, "nonexistent")
   """
-  @spec lookup(manager_name(), key()) :: {:ok, pid()} | :error
+  @spec lookup(manager_name(), key()) :: {:ok, pid()} | {:error, :not_found}
   def lookup(manager, key) do
     case Registry.lookup(registry_name(manager), key) do
       [{pid, _}] ->
         {:ok, pid}
 
       [] ->
-        :error
+        {:error, :not_found}
     end
   end
 
@@ -229,7 +229,7 @@ defmodule Jido.Agent.InstanceManager do
           :exit, _ -> :ok
         end
 
-      :error ->
+      {:error, :not_found} ->
         {:error, :not_found}
     end
   end
@@ -338,11 +338,26 @@ defmodule Jido.Agent.InstanceManager do
   # ---------------------------------------------------------------------------
 
   @doc false
-  def supervisor_name(manager), do: :"#{__MODULE__}.Supervisor.#{manager}"
+  def supervisor_name(manager) when is_atom(manager),
+    do: :"#{__MODULE__}.Supervisor.#{manager}"
+
+  def supervisor_name(_manager) do
+    raise ArgumentError, "manager must be an atom"
+  end
 
   @doc false
-  def registry_name(manager), do: :"#{__MODULE__}.Registry.#{manager}"
+  def registry_name(manager) when is_atom(manager),
+    do: :"#{__MODULE__}.Registry.#{manager}"
+
+  def registry_name(_manager) do
+    raise ArgumentError, "manager must be an atom"
+  end
 
   @doc false
-  def dynamic_supervisor_name(manager), do: :"#{__MODULE__}.DynamicSupervisor.#{manager}"
+  def dynamic_supervisor_name(manager) when is_atom(manager),
+    do: :"#{__MODULE__}.DynamicSupervisor.#{manager}"
+
+  def dynamic_supervisor_name(_manager) do
+    raise ArgumentError, "manager must be an atom"
+  end
 end

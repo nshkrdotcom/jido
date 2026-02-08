@@ -328,7 +328,9 @@ defmodule JidoTest.AgentServerTest do
       {:ok, pid} = AgentServer.start_link(agent: TestAgent, jido: jido)
 
       signal = Signal.new!("unknown.signal.type", %{}, source: "/test")
-      {:error, :no_matching_route} = AgentServer.call(pid, signal)
+      assert {:error, %Jido.Error.RoutingError{} = error} = AgentServer.call(pid, signal)
+      assert error.message == "No route for signal"
+      assert error.details.reason == :no_matching_route
 
       GenServer.stop(pid)
     end

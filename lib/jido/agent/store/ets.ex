@@ -1,68 +1,46 @@
 defmodule Jido.Agent.Store.ETS do
   @moduledoc """
-  ETS-based agent store adapter.
+  Compatibility wrapper over `Jido.Storage.ETS` checkpoint operations.
 
-  Fast in-memory storage for agent hibernate/thaw. Not restart-safe -
-  all data is lost when the BEAM stops.
-
-  ## Usage
-
-      Jido.Agent.InstanceManager.child_spec(
-        name: :sessions,
-        agent: MyAgent,
-        persistence: [
-          store: {Jido.Agent.Store.ETS, table: :my_agent_cache}
-        ]
-      )
+  This module preserves the legacy `Jido.Agent.Store` contract while delegating
+  storage behavior to the unified storage hierarchy.
 
   ## Options
 
-  - `:table` - ETS table name (required). Table is created if it doesn't exist.
+  - `:table` - ETS table name (required).
   """
+
   @behaviour Jido.Agent.Store
 
+  alias Jido.Storage.ETS, as: UnifiedETS
+
   @impl true
+  @spec get(term(), keyword()) :: {:ok, term()} | :not_found | {:error, term()}
   def get(key, opts) do
-    table = Keyword.fetch!(opts, :table)
-    ensure_table(table)
-
-    case :ets.lookup(table, key) do
-      [{^key, dump}] -> {:ok, dump}
-      [] -> :not_found
-    end
-  rescue
-    ArgumentError -> :not_found
+    UnifiedETS.get_checkpoint(key, normalize_opts(opts))
   end
 
   @impl true
+  @spec put(term(), term(), keyword()) :: :ok | {:error, term()}
   def put(key, dump, opts) do
-    table = Keyword.fetch!(opts, :table)
-    ensure_table(table)
-    :ets.insert(table, {key, dump})
-    :ok
-  rescue
-    ArgumentError -> {:error, :table_not_found}
+    UnifiedETS.put_checkpoint(key, dump, normalize_opts(opts))
   end
 
   @impl true
+  @spec delete(term(), keyword()) :: :ok | {:error, term()}
   def delete(key, opts) do
-    table = Keyword.fetch!(opts, :table)
-    ensure_table(table)
-    :ets.delete(table, key)
-    :ok
-  rescue
-    ArgumentError -> :ok
+    UnifiedETS.delete_checkpoint(key, normalize_opts(opts))
   end
 
-  defp ensure_table(table) do
-    case :ets.whereis(table) do
-      :undefined ->
-        :ets.new(table, [:named_table, :public, :set, read_concurrency: true])
+  @doc """
+  Deletes the configured ETS table set if present.
+  """
+  @spec cleanup(keyword()) :: :ok | {:error, term()}
+  def cleanup(opts) do
+    UnifiedETS.cleanup(normalize_opts(opts))
+  end
 
-      _ref ->
-        :ok
-    end
-  rescue
-    ArgumentError -> :ok
+  defp normalize_opts(opts) do
+    [table: Keyword.fetch!(opts, :table)]
   end
 end

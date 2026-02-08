@@ -164,6 +164,35 @@ The AgentServer receives directives from `cmd/2` and executes them. Error direct
 
 The `ErrorPolicy` module determines what happens with errors based on configuration.
 
+## Not Found Convention
+
+Jido uses two explicit `not_found` contracts depending on layer:
+
+- Runtime/process APIs return tagged tuples:
+  - `{:error, :not_found}` (for example `Jido.AgentServer.call/3`, `Jido.Agent.InstanceManager.lookup/2`)
+- Storage adapters use sentinel lookup results:
+  - `:not_found` (for example `Jido.Storage.get_checkpoint/2`, `Jido.Storage.load_thread/2`)
+
+This split keeps runtime APIs tuple-oriented while preserving adapter ergonomics for lookup-heavy persistence paths.
+
+## Raise vs Return Policy
+
+Jido follows this rule:
+
+- Return `{:error, ...}` for runtime failures and user/data validation failures.
+- Raise for programmer/setup errors (invalid API usage, missing required opts) and `!` APIs by convention.
+
+In short: if the caller can recover at runtime, return an error tuple; if it indicates a coding/config contract violation, raise.
+
+## Thread Store Contract
+
+`Jido.Thread.Store` uses a pure state-threading contract:
+
+- `{:ok, store, value}`
+- `{:error, store, reason}`
+
+The second element is always the updated store state and must be threaded by callers, even on errors.
+
 ## Error Policies
 
 Configure how the AgentServer handles error directives:

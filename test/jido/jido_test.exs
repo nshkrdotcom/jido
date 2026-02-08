@@ -48,6 +48,23 @@ defmodule JidoTest.JidoTest do
     end
   end
 
+  describe "supervisor race hardening" do
+    test "start_agent/3 returns explicit missing supervisor error for unknown instance" do
+      missing_instance = :"missing_jido_#{System.unique_integer([:positive])}"
+      expected_sup = Jido.agent_supervisor_name(missing_instance)
+
+      assert {:error, {:missing_supervisor, ^expected_sup}} =
+               Jido.start_agent(missing_instance, Minimal, id: "missing-start")
+    end
+
+    test "stop_agent/2 by pid returns :not_found when instance supervisor is unavailable" do
+      missing_instance = :"missing_jido_#{System.unique_integer([:positive])}"
+      pid = self()
+
+      assert {:error, :not_found} = Jido.stop_agent(missing_instance, pid)
+    end
+  end
+
   describe "dynamic supervisor guardrails" do
     test "respects configured max_agents limit" do
       instance = :"jido_max_children_#{System.unique_integer([:positive])}"

@@ -189,6 +189,34 @@ defmodule JidoTest.AgentServerCoverageTest do
     end
   end
 
+  defmodule BlockingCallAction do
+    @moduledoc false
+    use Jido.Action,
+      name: "blocking_call",
+      schema:
+        Zoi.object(%{
+          test_pid: Zoi.any(),
+          unblock_ref: Zoi.any()
+        })
+
+    def run(%{test_pid: test_pid, unblock_ref: unblock_ref}, _context) do
+      send(test_pid, {:blocking_call_started, unblock_ref})
+      Process.sleep(300)
+      {:ok, %{counter: 1}}
+    end
+  end
+
+  defmodule BlockingCallAgent do
+    @moduledoc false
+    use Jido.Agent,
+      name: "blocking_call_agent",
+      schema: [counter: [type: :integer, default: 0]]
+
+    def signal_routes(_ctx) do
+      [{"block.call", BlockingCallAction}]
+    end
+  end
+
   describe "resolve_server with {:via, ...}" do
     test "via tuple that resolves to nil returns error", %{jido: jido} do
       nonexistent_via = {:via, Registry, {Jido.registry_name(jido), "nonexistent-via-agent"}}
@@ -247,6 +275,21 @@ defmodule JidoTest.AgentServerCoverageTest do
       signal = Signal.new!("increment", %{}, source: "/test")
       assert {:error, :not_found} = AgentServer.call(pid, signal)
       assert {:error, :not_found} = AgentServer.state(pid)
+    end
+  end
+
+  describe "supervisor fallback policy" do
+    test "start/1 returns explicit error when jido supervisor is missing" do
+      missing_jido = :"missing_jido_#{System.unique_integer([:positive])}"
+      expected_sup = Jido.agent_supervisor_name(missing_jido)
+
+      assert {:error, {:missing_supervisor, ^expected_sup}} =
+               AgentServer.start(agent: SimpleTestAgent, jido: missing_jido)
+    end
+
+    test "start/1 does not silently fallback to legacy global supervisor when unavailable" do
+      assert {:error, {:missing_supervisor, Jido.AgentSupervisor}} =
+               AgentServer.start(agent: SimpleTestAgent)
     end
   end
 
@@ -352,7 +395,9 @@ defmodule JidoTest.AgentServerCoverageTest do
 
       signal = Signal.new!("many_directives", %{count: 5}, source: "/test")
       # Action produces 5 directives but queue size is 1, so we get overflow error
-      {:error, :queue_overflow} = AgentServer.call(pid, signal)
+      {:error, %Jido.Error.ExecutionError{} = error} = AgentServer.call(pid, signal)
+      assert error.message == "Directive queue overflow"
+      assert error.details.reason == :queue_overflow
 
       GenServer.stop(pid)
     end
@@ -413,12 +458,37 @@ defmodule JidoTest.AgentServerCoverageTest do
     end
   end
 
+  describe "async call signal handling" do
+    test "state queries remain responsive while blocking call action is running", %{jido: jido} do
+      {:ok, pid} = AgentServer.start_link(agent: BlockingCallAgent, jido: jido)
+
+      unblock_ref = make_ref()
+
+      signal =
+        Signal.new!(
+          "block.call",
+          %{test_pid: self(), unblock_ref: unblock_ref},
+          source: "/test"
+        )
+
+      call_task = Task.async(fn -> AgentServer.call(pid, signal, 2_000) end)
+
+      assert_receive {:blocking_call_started, ^unblock_ref}, 500
+      assert {:ok, _state} = GenServer.call(pid, :get_state, 100)
+
+      assert {:ok, _agent} = Task.await(call_task, 2_000)
+
+      GenServer.stop(pid)
+    end
+  end
+
   describe "invalid signal handling" do
     test "signal with no matching route returns error", %{jido: jido} do
       {:ok, pid} = AgentServer.start_link(agent: JidoTest.TestAgents.Minimal, jido: jido)
 
       signal = Signal.new!("nonexistent_action", %{}, source: "/test")
-      {:error, :no_matching_route} = AgentServer.call(pid, signal)
+      assert {:error, %Jido.Error.RoutingError{} = error} = AgentServer.call(pid, signal)
+      assert error.details.reason == :no_matching_route
 
       GenServer.stop(pid)
     end

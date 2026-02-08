@@ -32,9 +32,17 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Emit do
   end
 
   defp dispatch_signal_async(traced_signal, cfg, state) do
-    task_sup =
-      if state.jido, do: Jido.task_supervisor_name(state.jido), else: Jido.TaskSupervisor
+    case resolve_task_supervisor(state) do
+      {:ok, task_sup} ->
+        start_dispatch_task(task_sup, traced_signal, cfg)
 
+      {:error, reason} ->
+        Logger.warning("Emit dispatch dropped: missing task supervisor (#{inspect(reason)})")
+        :ok
+    end
+  end
+
+  defp start_dispatch_task(task_sup, traced_signal, cfg) do
     case Task.Supervisor.start_child(task_sup, fn ->
            Jido.Signal.Dispatch.dispatch(traced_signal, cfg)
          end) do
@@ -45,6 +53,18 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Emit do
         Logger.warning("Emit dispatch dropped: failed to start async task (#{inspect(reason)})")
         :ok
     end
+  end
+
+  defp resolve_task_supervisor(state) do
+    jido = state.jido
+    candidates = [Jido.task_supervisor_name(jido), Jido.SystemTaskSupervisor]
+
+    Enum.find_value(candidates, {:error, :not_found}, fn supervisor ->
+      case Process.whereis(supervisor) do
+        pid when is_pid(pid) -> {:ok, supervisor}
+        nil -> false
+      end
+    end)
   end
 end
 
@@ -70,10 +90,9 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Spawn do
       if is_function(state.spawn_fun, 1) do
         state.spawn_fun.(child_spec)
       else
-        agent_sup =
-          if state.jido, do: Jido.agent_supervisor_name(state.jido), else: Jido.AgentSupervisor
-
-        DynamicSupervisor.start_child(agent_sup, child_spec)
+        with {:ok, agent_sup} <- resolve_agent_supervisor(state) do
+          DynamicSupervisor.start_child(agent_sup, child_spec)
+        end
       end
 
     case result do
@@ -117,6 +136,23 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Spawn do
   defp child_spec_module({module, _args}) when is_atom(module), do: module
   defp child_spec_module(module) when is_atom(module), do: module
   defp child_spec_module(_), do: nil
+
+  defp resolve_agent_supervisor(state) do
+    case state.jido do
+      jido when is_atom(jido) ->
+        maybe_resolve_named_supervisor(Jido.agent_supervisor_name(jido))
+
+      _ ->
+        maybe_resolve_named_supervisor(Jido.AgentSupervisor)
+    end
+  end
+
+  defp maybe_resolve_named_supervisor(supervisor) when is_atom(supervisor) do
+    case Process.whereis(supervisor) do
+      pid when is_pid(pid) -> {:ok, supervisor}
+      nil -> {:error, :not_found}
+    end
+  end
 end
 
 defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Schedule do
@@ -232,8 +268,18 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.StopChild do
   end
 
   defp start_async_stop_child(state, tag, pid, reason) do
-    task_sup = if state.jido, do: Jido.task_supervisor_name(state.jido), else: Jido.TaskSupervisor
+    case resolve_task_supervisor(state) do
+      {:ok, task_sup} ->
+        start_stop_child_task(task_sup, state, tag, pid, reason)
 
+      {:error, task_reason} ->
+        Logger.warning(
+          "AgentServer #{state.id} failed to resolve async stop supervisor for child #{inspect(tag)}: #{inspect(task_reason)}"
+        )
+    end
+  end
+
+  defp start_stop_child_task(task_sup, state, tag, pid, reason) do
     case Task.Supervisor.start_child(task_sup, fn ->
            GenServer.stop(pid, reason, 5_000)
          end) do
@@ -245,6 +291,18 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.StopChild do
           "AgentServer #{state.id} failed to start async stop for child #{inspect(tag)}: #{inspect(task_reason)}"
         )
     end
+  end
+
+  defp resolve_task_supervisor(state) do
+    jido = state.jido
+    candidates = [Jido.task_supervisor_name(jido), Jido.SystemTaskSupervisor]
+
+    Enum.find_value(candidates, {:error, :not_found}, fn supervisor ->
+      case Process.whereis(supervisor) do
+        pid when is_pid(pid) -> {:ok, supervisor}
+        nil -> false
+      end
+    end)
   end
 end
 

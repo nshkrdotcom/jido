@@ -3,17 +3,14 @@ defmodule JidoTest.Agent.StoreTest do
 
   alias Jido.Agent.Store.ETS
   alias Jido.Agent.Store.File, as: FileStore
+  alias Jido.Storage.ETS, as: UnifiedETS
 
   describe "ETS Store" do
     setup do
       table = :"test_ets_#{:erlang.unique_integer([:positive])}"
 
       on_exit(fn ->
-        try do
-          :ets.delete(table)
-        rescue
-          _ -> :ok
-        end
+        :ok = UnifiedETS.cleanup(table: table)
       end)
 
       {:ok, table: table}
@@ -63,6 +60,19 @@ defmodule JidoTest.Agent.StoreTest do
 
       :ok = ETS.put(key, %{count: 42}, opts)
       assert {:ok, %{count: 42}} = ETS.get(key, opts)
+    end
+
+    test "uses dedicated table owner/heir policy", %{table: table} do
+      opts = [table: table]
+
+      :ok = ETS.put(:ownership_key, %{count: 1}, opts)
+
+      owner_pid = Process.whereis(Jido.Storage.ETS.Owner)
+      heir_pid = Process.whereis(Jido.Storage.ETS.Heir)
+      checkpoints = :"#{table}_checkpoints"
+
+      assert owner_pid == :ets.info(checkpoints, :owner)
+      assert heir_pid == :ets.info(checkpoints, :heir)
     end
   end
 

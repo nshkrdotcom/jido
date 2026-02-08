@@ -351,8 +351,16 @@ defmodule Jido do
   """
   @spec start_agent(atom(), module() | struct(), keyword()) :: DynamicSupervisor.on_start_child()
   def start_agent(jido_instance, agent, opts \\ []) when is_atom(jido_instance) do
+    supervisor = agent_supervisor_name(jido_instance)
     child_spec = {Jido.AgentServer, Keyword.merge(opts, agent: agent, jido: jido_instance)}
-    DynamicSupervisor.start_child(agent_supervisor_name(jido_instance), child_spec)
+
+    case ensure_supervisor_running(supervisor) do
+      :ok ->
+        safe_start_child(supervisor, child_spec)
+
+      {:error, :not_found} ->
+        {:error, {:missing_supervisor, supervisor}}
+    end
   end
 
   @doc """
@@ -365,7 +373,9 @@ defmodule Jido do
   """
   @spec stop_agent(atom(), pid() | String.t()) :: :ok | {:error, :not_found}
   def stop_agent(jido_instance, pid) when is_atom(jido_instance) and is_pid(pid) do
-    DynamicSupervisor.terminate_child(agent_supervisor_name(jido_instance), pid)
+    jido_instance
+    |> agent_supervisor_name()
+    |> safe_terminate_child(pid)
   end
 
   def stop_agent(jido_instance, id) when is_atom(jido_instance) and is_binary(id) do
@@ -418,9 +428,12 @@ defmodule Jido do
   """
   @spec agent_count(atom()) :: non_neg_integer()
   def agent_count(jido_instance) when is_atom(jido_instance) do
-    agent_supervisor_name(jido_instance)
-    |> DynamicSupervisor.count_children()
-    |> Map.get(:active, 0)
+    supervisor = agent_supervisor_name(jido_instance)
+
+    case safe_count_children(supervisor) do
+      {:ok, counts} -> Map.get(counts, :active, 0)
+      {:error, :not_found} -> 0
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -534,4 +547,39 @@ defmodule Jido do
   See `Jido.Await.cancel/2` for details.
   """
   defdelegate cancel(server, opts \\ []), to: Jido.Await
+
+  # ---------------------------------------------------------------------------
+  # Internal
+  # ---------------------------------------------------------------------------
+
+  defp ensure_supervisor_running(supervisor) when is_atom(supervisor) do
+    case Process.whereis(supervisor) do
+      pid when is_pid(pid) -> :ok
+      nil -> {:error, :not_found}
+    end
+  end
+
+  defp safe_start_child(supervisor, child_spec) when is_atom(supervisor) do
+    DynamicSupervisor.start_child(supervisor, child_spec)
+  catch
+    :exit, {:noproc, _} -> {:error, {:missing_supervisor, supervisor}}
+    :exit, {:normal, _} -> {:error, {:missing_supervisor, supervisor}}
+    :exit, {:shutdown, _} -> {:error, {:missing_supervisor, supervisor}}
+  end
+
+  defp safe_terminate_child(supervisor, pid) when is_atom(supervisor) and is_pid(pid) do
+    DynamicSupervisor.terminate_child(supervisor, pid)
+  catch
+    :exit, {:noproc, _} -> {:error, :not_found}
+    :exit, {:normal, _} -> {:error, :not_found}
+    :exit, {:shutdown, _} -> {:error, :not_found}
+  end
+
+  defp safe_count_children(supervisor) when is_atom(supervisor) do
+    {:ok, DynamicSupervisor.count_children(supervisor)}
+  catch
+    :exit, {:noproc, _} -> {:error, :not_found}
+    :exit, {:normal, _} -> {:error, :not_found}
+    :exit, {:shutdown, _} -> {:error, :not_found}
+  end
 end

@@ -174,6 +174,24 @@ defmodule Jido.AgentServer.State do
   end
 
   @doc """
+  Marks the server as actively processing work.
+  """
+  @spec start_processing(t()) :: t()
+  def start_processing(%__MODULE__{} = state) do
+    %{state | processing: true}
+    |> set_status(:processing)
+  end
+
+  @doc """
+  Marks the server as idle after processing completes.
+  """
+  @spec finish_processing(t()) :: t()
+  def finish_processing(%__MODULE__{} = state) do
+    %{state | processing: false}
+    |> set_status(:idle)
+  end
+
+  @doc """
   Enqueues a directive with its triggering signal for later execution.
   """
   @spec enqueue(t(), Jido.Signal.t(), struct()) :: {:ok, t()} | {:error, :queue_overflow}

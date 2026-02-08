@@ -10,7 +10,7 @@ defmodule Jido.AgentServer.Lifecycle do
   @type state :: map()
   @type event :: :attach | :detach | :touch | :idle_timeout | {:down, reference(), pid()}
 
-  @callback init(opts :: keyword(), server_state :: map()) :: map()
+  @callback init(lifecycle :: term(), server_state :: map()) :: map()
   @callback handle_event(event :: term(), server_state :: map()) ::
               {:cont, map()} | {:stop, reason :: term(), map()}
   @callback terminate(reason :: term(), server_state :: map()) :: :ok

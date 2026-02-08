@@ -245,6 +245,37 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
 
       assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
     end
+
+    test "does not fallback to legacy global supervisor when jido instance supervisor is missing",
+         %{
+           input_signal: input_signal,
+           agent: agent
+         } do
+      # Simulate an unrelated legacy global supervisor being present.
+      {:ok, _legacy_sup} =
+        start_supervised(
+          {DynamicSupervisor, strategy: :one_for_one, name: Jido.AgentSupervisor},
+          id: {:legacy_agent_supervisor, System.unique_integer([:positive])}
+        )
+
+      missing_jido = :"missing_jido_#{System.unique_integer([:positive])}"
+
+      {:ok, opts} =
+        Options.new(%{
+          agent: agent,
+          id: "test-agent-no-fallback",
+          jido: missing_jido
+        })
+
+      {:ok, state} = State.from_options(opts, agent.__struct__, agent)
+
+      child_spec = {Task, fn -> :ok end}
+      directive = %Directive.Spawn{child_spec: child_spec, tag: :worker}
+
+      # Contract: missing instance supervisor should not silently fallback.
+      assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
+      refute Map.has_key?(state.children, :worker)
+    end
   end
 
   describe "Schedule directive" do

@@ -10,6 +10,10 @@ defmodule Jido.Application do
       # System-wide supervisor for fire-and-forget async tasks
       {Task.Supervisor,
        name: Jido.SystemTaskSupervisor, max_children: RuntimeDefaults.system_task_max_children()},
+      # ETS table heir process to retain tables if owner crashes
+      Jido.Storage.ETS.Heir,
+      # Dedicated owner for ETS-backed storage tables
+      Jido.Storage.ETS.Owner,
       # Telemetry handler for agent and strategy metrics
       Jido.Telemetry
     ]

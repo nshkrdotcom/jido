@@ -57,4 +57,12 @@ defmodule Jido.AgentServer.State.Lifecycle do
 
     Zoi.parse(@schema, attrs)
   end
+
+  @doc """
+  Clears the active idle timer reference.
+  """
+  @spec clear_idle_timer(t()) :: t()
+  def clear_idle_timer(%__MODULE__{} = lifecycle) do
+    %{lifecycle | idle_timer: nil}
+  end
 end

@@ -22,6 +22,14 @@ defmodule JidoTest.Storage.ETSTest do
   end
 
   describe "checkpoint operations" do
+    test "rejects non-atom table names to avoid dynamic atom creation" do
+      opts = [table: "runtime_user_input"]
+
+      assert {:error, :invalid_table_name} = ETS.get_checkpoint(:key, opts)
+      assert {:error, :invalid_table_name} = ETS.put_checkpoint(:key, %{state: "saved"}, opts)
+      assert {:error, :invalid_table_name} = ETS.delete_checkpoint(:key, opts)
+    end
+
     test "get_checkpoint/2 returns :not_found for missing key" do
       opts = [table: unique_table(:get_missing)]
 
@@ -75,6 +83,14 @@ defmodule JidoTest.Storage.ETSTest do
   end
 
   describe "thread operations" do
+    test "thread operations reject non-atom table names" do
+      opts = [table: "runtime_user_input"]
+
+      assert {:error, :invalid_table_name} = ETS.load_thread("t-1", opts)
+      assert {:error, :invalid_table_name} = ETS.append_thread("t-1", [%{kind: :note}], opts)
+      assert {:error, :invalid_table_name} = ETS.delete_thread("t-1", opts)
+    end
+
     test "load_thread/2 returns :not_found for missing thread" do
       opts = [table: unique_table(:load_missing)]
 
@@ -317,6 +333,28 @@ defmodule JidoTest.Storage.ETSTest do
   end
 
   describe "table isolation" do
+    test "tables are created under dedicated owner/heir policy" do
+      base_table = unique_table(:ownership_policy)
+      opts = [table: base_table]
+
+      assert :ok = ETS.put_checkpoint(:policy_key, %{ok: true}, opts)
+
+      owner_pid = Process.whereis(Jido.Storage.ETS.Owner)
+      heir_pid = Process.whereis(Jido.Storage.ETS.Heir)
+
+      checkpoints = :"#{base_table}_checkpoints"
+      threads = :"#{base_table}_threads"
+      meta = :"#{base_table}_thread_meta"
+
+      assert owner_pid == :ets.info(checkpoints, :owner)
+      assert owner_pid == :ets.info(threads, :owner)
+      assert owner_pid == :ets.info(meta, :owner)
+
+      assert heir_pid == :ets.info(checkpoints, :heir)
+      assert heir_pid == :ets.info(threads, :heir)
+      assert heir_pid == :ets.info(meta, :heir)
+    end
+
     test "different table names are isolated" do
       opts1 = [table: unique_table(:isolation1)]
       opts2 = [table: unique_table(:isolation2)]

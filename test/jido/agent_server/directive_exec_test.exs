@@ -276,6 +276,41 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
       assert {:ok, ^state} = DirectiveExec.exec(directive, input_signal, state)
       refute Map.has_key?(state.children, :worker)
     end
+
+    test "tracks spawned child even when tag is nil", %{
+      input_signal: input_signal,
+      agent: agent,
+      jido: jido
+    } do
+      {:ok, opts} =
+        Options.new(%{
+          agent: agent,
+          id: "test-agent-spawn-auto-tag",
+          jido: jido
+        })
+
+      {:ok, state} = State.from_options(opts, agent.__struct__, agent)
+
+      child_spec =
+        {Task,
+         fn ->
+           receive do
+           after
+             86_400_000 -> :ok
+           end
+         end}
+
+      directive = %Directive.Spawn{child_spec: child_spec, tag: nil}
+
+      assert {:ok, new_state} = DirectiveExec.exec(directive, input_signal, state)
+      assert map_size(new_state.children) == 1
+
+      [{tag, child_info}] = Map.to_list(new_state.children)
+      assert match?({:spawn, _}, tag)
+      assert is_pid(child_info.pid)
+
+      Process.exit(child_info.pid, :kill)
+    end
   end
 
   describe "Schedule directive" do
@@ -329,7 +364,8 @@ defmodule JidoTest.AgentServer.DirectiveExecTest do
       child_info = new_state.children[:child_worker]
       assert child_info.module == TestAgent
       assert child_info.tag == :child_worker
-      assert child_info.meta == %{role: :worker}
+      assert child_info.meta.role == :worker
+      assert child_info.meta.directive == :spawn_agent
       assert is_pid(child_info.pid)
 
       GenServer.stop(child_info.pid)

@@ -188,10 +188,6 @@ defmodule Jido.Persist do
         Logger.debug("Persist.thaw: checkpoint not found for #{inspect(checkpoint_key)}")
         {:error, :not_found}
 
-      :not_found ->
-        Logger.debug("Persist.thaw: checkpoint not found for #{inspect(checkpoint_key)}")
-        {:error, :not_found}
-
       {:error, reason} = error ->
         Logger.error(
           "Persist.thaw failed to get checkpoint for #{inspect(checkpoint_key)}: #{inspect(reason)}"
@@ -335,10 +331,6 @@ defmodule Jido.Persist do
         {:error, :thread_mismatch}
 
       {:error, :not_found} ->
-        Logger.error("Persist: thread #{thread_id} not found but referenced in checkpoint")
-        {:error, :missing_thread}
-
-      :not_found ->
         Logger.error("Persist: thread #{thread_id} not found but referenced in checkpoint")
         {:error, :missing_thread}
 

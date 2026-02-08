@@ -35,6 +35,16 @@ defmodule JidoTest.DiscoveryTest do
     test "refreshes the catalog" do
       assert :ok = Discovery.refresh()
     end
+
+    test "preserves last_updated when discovered components are unchanged" do
+      assert :ok = Discovery.refresh()
+      {:ok, first_updated} = Discovery.last_updated()
+
+      assert :ok = Discovery.refresh()
+      {:ok, second_updated} = Discovery.last_updated()
+
+      assert DateTime.compare(first_updated, second_updated) == :eq
+    end
   end
 
   describe "last_updated/0" do

@@ -336,17 +336,22 @@ defmodule JidoTest.Agent.InstanceManagerTest do
       # Wait for process to terminate
       assert_receive {:DOWN, ^ref, :process, ^pid, _reason}, 1000
 
-      # Verify state was persisted to storage checkpoint
+      # Verify state was persisted to storage checkpoint.
+      # Persistence may complete asynchronously during terminate.
       checkpoint_key = {Jido.Agent, "stop-persist-key"}
 
-      case StorageETS.get_checkpoint(checkpoint_key, table: table) do
-        {:ok, persisted} ->
-          # Persisted data should contain the counter
-          assert persisted.state.counter == 42
+      assert {:ok, persisted} =
+               eventually(
+                 fn ->
+                   case StorageETS.get_checkpoint(checkpoint_key, table: table) do
+                     {:ok, checkpoint} -> {:ok, checkpoint}
+                     {:error, :not_found} -> false
+                   end
+                 end,
+                 timeout: 2_000
+               )
 
-        {:error, :not_found} ->
-          flunk("Agent state was not persisted on stop")
-      end
+      assert persisted.state.counter == 42
     end
   end
 

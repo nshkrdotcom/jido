@@ -33,7 +33,6 @@ defmodule Jido.AgentServer.Lifecycle.Keyed do
 
   alias Jido.AgentServer.State.Lifecycle, as: LifecycleState
   alias Jido.Persist
-  alias Jido.RuntimeDefaults
 
   @impl true
   def init(_lifecycle, state) do
@@ -169,27 +168,41 @@ defmodule Jido.AgentServer.Lifecycle.Keyed do
     pool_key = lifecycle.pool_key
     agent = state.agent
 
-    task =
-      Task.async(fn ->
-        Persist.hibernate(storage, agent)
-      end)
+    task_fun = fn ->
+      case Persist.hibernate(storage, agent) do
+        :ok ->
+          Logger.debug("Lifecycle hibernated agent for #{lifecycle.pool}/#{inspect(pool_key)}")
 
-    timeout = RuntimeDefaults.hibernate_timeout()
+        {:error, reason} ->
+          Logger.error(
+            "Lifecycle hibernate failed for #{lifecycle.pool}/#{inspect(pool_key)}: #{inspect(reason)}"
+          )
+      end
+    end
 
-    case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
-      {:ok, :ok} ->
-        Logger.debug("Lifecycle hibernated agent for #{lifecycle.pool}/#{inspect(pool_key)}")
+    maybe_start_hibernate_task(task_fun)
+  end
 
-      {:ok, {:error, reason}} ->
-        Logger.error(
-          "Lifecycle hibernate failed for #{lifecycle.pool}/#{inspect(pool_key)}: #{inspect(reason)}"
-        )
+  defp maybe_start_hibernate_task(task_fun) when is_function(task_fun, 0) do
+    case Process.whereis(Jido.SystemTaskSupervisor) do
+      pid when is_pid(pid) ->
+        case Task.Supervisor.start_child(Jido.SystemTaskSupervisor, task_fun) do
+          {:ok, _task_pid} -> :ok
+          {:error, _reason} -> safe_start_hibernate_task(task_fun)
+        end
 
       nil ->
-        Logger.error(
-          "Lifecycle hibernate timed out for #{lifecycle.pool}/#{inspect(pool_key)} after #{timeout}ms"
-        )
+        safe_start_hibernate_task(task_fun)
     end
+  end
+
+  defp safe_start_hibernate_task(task_fun) when is_function(task_fun, 0) do
+    _ = Task.start(task_fun)
+    :ok
+  rescue
+    _ -> :ok
+  catch
+    :exit, _ -> :ok
   end
 
   defp maybe_start_idle_timer(state) do

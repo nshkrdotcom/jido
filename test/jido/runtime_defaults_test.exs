@@ -28,6 +28,9 @@ defmodule JidoTest.RuntimeDefaultsTest do
     assert RuntimeDefaults.jido_supervisor_shutdown_timeout() == 10_000
     assert RuntimeDefaults.agent_supervisor_max_restarts() == 1_000
     assert RuntimeDefaults.agent_supervisor_max_seconds() == 5
+    assert RuntimeDefaults.instance_manager_max_restarts() == 100
+    assert RuntimeDefaults.instance_manager_max_seconds() == 5
+    assert RuntimeDefaults.debug_event_buffer_size() == 50
   end
 
   test "reads runtime overrides for shutdown and supervisor guardrails" do
@@ -39,7 +42,10 @@ defmodule JidoTest.RuntimeDefaultsTest do
       await_child_timeout: 55_555,
       jido_supervisor_shutdown_timeout: 6_666,
       agent_supervisor_max_restarts: 77,
-      agent_supervisor_max_seconds: 88
+      agent_supervisor_max_seconds: 88,
+      instance_manager_max_restarts: 99,
+      instance_manager_max_seconds: 44,
+      debug_event_buffer_size: 123
     )
 
     assert RuntimeDefaults.agent_server_shutdown_timeout() == 1_111
@@ -50,5 +56,8 @@ defmodule JidoTest.RuntimeDefaultsTest do
     assert RuntimeDefaults.jido_supervisor_shutdown_timeout() == 6_666
     assert RuntimeDefaults.agent_supervisor_max_restarts() == 77
     assert RuntimeDefaults.agent_supervisor_max_seconds() == 88
+    assert RuntimeDefaults.instance_manager_max_restarts() == 99
+    assert RuntimeDefaults.instance_manager_max_seconds() == 44
+    assert RuntimeDefaults.debug_event_buffer_size() == 123
   end
 end

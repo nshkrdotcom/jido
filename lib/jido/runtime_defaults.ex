@@ -16,6 +16,11 @@ defmodule Jido.RuntimeDefaults do
         jido_supervisor_shutdown_timeout: 10_000,
         agent_supervisor_max_restarts: 1_000,
         agent_supervisor_max_seconds: 5,
+        instance_manager_max_restarts: 100,
+        instance_manager_max_seconds: 5,
+        status_call_timeout: 1_000,
+        stream_status_interval_ms: 250,
+        debug_event_buffer_size: 50,
         max_agents: 10_000,
         max_tasks: 1_000,
         system_task_max_children: 2_000,
@@ -37,6 +42,11 @@ defmodule Jido.RuntimeDefaults do
   @jido_supervisor_shutdown_timeout 10_000
   @agent_supervisor_max_restarts 1_000
   @agent_supervisor_max_seconds 5
+  @instance_manager_max_restarts 100
+  @instance_manager_max_seconds 5
+  @status_call_timeout 1_000
+  @stream_status_interval_ms 250
+  @debug_event_buffer_size 50
   @hibernate_timeout 2_000
   @max_queue_size 10_000
   @max_agents 10_000
@@ -85,6 +95,26 @@ defmodule Jido.RuntimeDefaults do
   @spec agent_supervisor_max_seconds() :: pos_integer()
   def agent_supervisor_max_seconds,
     do: get(:agent_supervisor_max_seconds, @agent_supervisor_max_seconds)
+
+  @spec instance_manager_max_restarts() :: pos_integer()
+  def instance_manager_max_restarts,
+    do: get(:instance_manager_max_restarts, @instance_manager_max_restarts)
+
+  @spec instance_manager_max_seconds() :: pos_integer()
+  def instance_manager_max_seconds,
+    do: get(:instance_manager_max_seconds, @instance_manager_max_seconds)
+
+  @spec status_call_timeout() :: pos_integer()
+  def status_call_timeout,
+    do: get(:status_call_timeout, @status_call_timeout)
+
+  @spec stream_status_interval_ms() :: pos_integer()
+  def stream_status_interval_ms,
+    do: get(:stream_status_interval_ms, @stream_status_interval_ms)
+
+  @spec debug_event_buffer_size() :: pos_integer()
+  def debug_event_buffer_size,
+    do: get(:debug_event_buffer_size, @debug_event_buffer_size)
 
   @spec hibernate_timeout() :: pos_integer()
   def hibernate_timeout, do: get(:hibernate_timeout, @hibernate_timeout)

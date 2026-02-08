@@ -101,8 +101,19 @@ defmodule Jido.Discovery do
   """
   @spec refresh() :: :ok
   def refresh do
-    catalog = build_catalog()
-    :persistent_term.put(@catalog_key, catalog)
+    components = build_components()
+
+    case get_catalog() do
+      {:ok, %{components: ^components}} ->
+        :ok
+
+      _ ->
+        :persistent_term.put(@catalog_key, %{
+          last_updated: DateTime.utc_now(),
+          components: components
+        })
+    end
+
     :ok
   end
 
@@ -223,7 +234,7 @@ defmodule Jido.Discovery do
 
   defp start_async_task(fun) when is_function(fun, 0) do
     case Process.whereis(@system_task_supervisor) do
-      nil -> Task.start(fun)
+      nil -> {:error, :task_supervisor_not_found}
       _pid -> Task.Supervisor.start_child(@system_task_supervisor, fun)
     end
   end
@@ -231,13 +242,17 @@ defmodule Jido.Discovery do
   defp build_catalog do
     %{
       last_updated: DateTime.utc_now(),
-      components: %{
-        actions: discover_components(:__action_metadata__),
-        sensors: discover_components(:__sensor_metadata__),
-        agents: discover_components(:__agent_metadata__),
-        plugins: discover_components(:__plugin_metadata__),
-        demos: discover_components(:__jido_demo__)
-      }
+      components: build_components()
+    }
+  end
+
+  defp build_components do
+    %{
+      actions: discover_components(:__action_metadata__),
+      sensors: discover_components(:__sensor_metadata__),
+      agents: discover_components(:__agent_metadata__),
+      plugins: discover_components(:__plugin_metadata__),
+      demos: discover_components(:__jido_demo__)
     }
   end
 

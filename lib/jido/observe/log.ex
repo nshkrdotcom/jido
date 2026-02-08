@@ -45,7 +45,7 @@ defmodule Jido.Observe.Log do
   """
   @spec threshold() :: level()
   def threshold do
-    Application.get_env(:jido, :observability, [])
+    Jido.Observe.observability_config()
     |> Keyword.get(:log_level, @default_log_level)
     |> normalize_level()
   end

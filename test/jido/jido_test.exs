@@ -54,8 +54,8 @@ defmodule JidoTest.JidoTest do
   end
 
   describe "stop_agent/2 with non-existent id" do
-    test "returns error when agent not found", %{jido: jido} do
-      assert {:error, :not_found} = Jido.stop_agent(jido, "non-existent-agent-id")
+    test "is idempotent when agent is not found", %{jido: jido} do
+      assert :ok = Jido.stop_agent(jido, "non-existent-agent-id")
     end
   end
 

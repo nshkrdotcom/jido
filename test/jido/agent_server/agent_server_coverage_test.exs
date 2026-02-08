@@ -200,8 +200,14 @@ defmodule JidoTest.AgentServerCoverageTest do
         })
 
     def run(%{test_pid: test_pid, unblock_ref: unblock_ref}, _context) do
-      send(test_pid, {:blocking_call_started, unblock_ref})
-      Process.sleep(300)
+      send(test_pid, {:blocking_call_started, unblock_ref, self()})
+
+      receive do
+        {:unblock_call, ^unblock_ref} -> :ok
+      after
+        2_000 -> :ok
+      end
+
       {:ok, %{counter: 1}}
     end
   end
@@ -473,8 +479,9 @@ defmodule JidoTest.AgentServerCoverageTest do
 
       call_task = Task.async(fn -> AgentServer.call(pid, signal, 2_000) end)
 
-      assert_receive {:blocking_call_started, ^unblock_ref}, 500
+      assert_receive {:blocking_call_started, ^unblock_ref, action_pid}, 500
       assert {:ok, _state} = GenServer.call(pid, :get_state, 100)
+      send(action_pid, {:unblock_call, unblock_ref})
 
       assert {:ok, _agent} = Task.await(call_task, 2_000)
 

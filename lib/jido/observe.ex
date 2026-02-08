@@ -399,7 +399,9 @@ defmodule Jido.Observe do
     |> Keyword.get(:tracer, Jido.Observe.NoopTracer)
   end
 
-  defp observability_config do
+  @doc false
+  @spec observability_config() :: keyword()
+  def observability_config do
     Application.get_env(:jido, :observability, [])
   end
 

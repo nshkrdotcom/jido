@@ -128,7 +128,10 @@ defmodule Jido.Agent.InstanceManager do
       idle_timeout: Keyword.get(opts, :idle_timeout, :infinity),
       storage: resolve_storage_config(opts),
       agent_opts: Keyword.get(opts, :agent_opts, []),
-      max_agents: Keyword.get(opts, :max_agents, RuntimeDefaults.max_agents())
+      max_agents: Keyword.get(opts, :max_agents, RuntimeDefaults.max_agents()),
+      max_restarts:
+        Keyword.get(opts, :max_restarts, RuntimeDefaults.instance_manager_max_restarts()),
+      max_seconds: Keyword.get(opts, :max_seconds, RuntimeDefaults.instance_manager_max_seconds())
     }
 
     :persistent_term.put({__MODULE__, name}, config)
@@ -138,6 +141,8 @@ defmodule Jido.Agent.InstanceManager do
       {DynamicSupervisor,
        strategy: :one_for_one,
        max_children: config.max_agents,
+       max_restarts: config.max_restarts,
+       max_seconds: config.max_seconds,
        name: dynamic_supervisor_name(name)},
       {Jido.Agent.InstanceManager.Cleanup, name}
     ]

@@ -113,7 +113,9 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Spawn do
     end
   end
 
-  defp maybe_track_spawned_child(state, _pid, nil, _child_spec), do: state
+  defp maybe_track_spawned_child(state, pid, nil, child_spec) when is_pid(pid) do
+    maybe_track_spawned_child(state, pid, {:spawn, pid}, child_spec)
+  end
 
   defp maybe_track_spawned_child(state, pid, tag, child_spec) when is_pid(pid) do
     ref = Process.monitor(pid)
@@ -197,6 +199,7 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.SpawnAgent do
 
   def exec(%{agent: agent, tag: tag, opts: opts, meta: meta}, _input_signal, state) do
     child_id = opts[:id] || "#{state.id}/#{tag}"
+    normalized_meta = normalize_spawn_agent_meta(meta)
 
     child_opts =
       [
@@ -206,7 +209,7 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.SpawnAgent do
           pid: self(),
           id: state.id,
           tag: tag,
-          meta: meta
+          meta: normalized_meta
         }
       ] ++ Map.to_list(Map.delete(opts, :id))
 
@@ -223,7 +226,7 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.SpawnAgent do
             module: resolve_agent_module(agent),
             id: child_id,
             tag: tag,
-            meta: meta
+            meta: Map.put(normalized_meta, :directive, :spawn_agent)
           })
 
         new_state = State.add_child(state, tag, child_info)
@@ -241,6 +244,9 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.SpawnAgent do
   defp resolve_agent_module(agent) when is_atom(agent), do: agent
   defp resolve_agent_module(%{__struct__: module}), do: module
   defp resolve_agent_module(_), do: nil
+
+  defp normalize_spawn_agent_meta(meta) when is_map(meta), do: meta
+  defp normalize_spawn_agent_meta(_meta), do: %{}
 end
 
 defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.StopChild do

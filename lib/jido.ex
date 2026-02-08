@@ -382,7 +382,7 @@ defmodule Jido do
 
   def stop_agent(jido_instance, id) when is_atom(jido_instance) and is_binary(id) do
     case whereis(jido_instance, id) do
-      nil -> {:error, :not_found}
+      nil -> :ok
       pid -> stop_agent(jido_instance, pid)
     end
   end

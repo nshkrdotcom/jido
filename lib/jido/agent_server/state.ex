@@ -22,7 +22,9 @@ defmodule Jido.AgentServer.State do
               # Core identity
               id: Zoi.string(description: "Instance ID"),
               agent_module: Zoi.atom(description: "Agent module"),
-              agent: Zoi.any(description: "The Jido.Agent struct"),
+              agent:
+                Zoi.any(description: "The Jido.Agent struct")
+                |> Zoi.refine({__MODULE__, :validate_agent_refinement, []}),
 
               # Status and processing
               status:
@@ -45,6 +47,9 @@ defmodule Jido.AgentServer.State do
               # Cron jobs
               cron_jobs:
                 Zoi.map(description: "Map of job_id => scheduler job name") |> Zoi.default(%{}),
+              cron_monitors:
+                Zoi.map(description: "Map of monitor_ref => scheduler job_id")
+                |> Zoi.default(%{}),
               skip_schedules:
                 Zoi.boolean(description: "Skip registering plugin schedules")
                 |> Zoi.default(false),
@@ -135,6 +140,7 @@ defmodule Jido.AgentServer.State do
         registry: opts.registry,
         spawn_fun: opts.spawn_fun,
         cron_jobs: %{},
+        cron_monitors: %{},
         skip_schedules: opts.skip_schedules,
         error_count: 0,
         metrics: %{},
@@ -310,13 +316,21 @@ defmodule Jido.AgentServer.State do
     {timer_ref, %{state | scheduled_timers: remaining}}
   end
 
-  # Debug mode constants
-  @max_debug_events 50
+  @doc false
+  @spec validate_agent_refinement(any()) :: :ok | {:error, String.t()}
+  @spec validate_agent_refinement(any(), keyword()) :: :ok | {:error, String.t()}
+  def validate_agent_refinement(agent, _opts \\ [])
+  def validate_agent_refinement(agent, _opts) when is_struct(agent), do: :ok
+  def validate_agent_refinement(_agent, _opts), do: {:error, "agent must be a struct"}
+
+  defp max_debug_events do
+    RuntimeDefaults.debug_event_buffer_size()
+  end
 
   @doc """
   Records a debug event if debug mode is enabled.
 
-  Events are stored in a ring buffer (max #{@max_debug_events} entries).
+  Events are stored in a ring buffer (runtime configurable).
   Each event includes a monotonic timestamp for relative timing.
   """
   @spec record_debug_event(t(), atom(), map()) :: t()
@@ -330,7 +344,7 @@ defmodule Jido.AgentServer.State do
     }
 
     # Keep only last N events (ring buffer behavior)
-    new_events = Enum.take([event | events], @max_debug_events)
+    new_events = Enum.take([event | events], max_debug_events())
     %{state | debug_events: new_events}
   end
 

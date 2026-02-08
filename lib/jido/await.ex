@@ -320,7 +320,7 @@ defmodule Jido.Await do
       end
 
     case Process.whereis(@system_task_supervisor) do
-      nil -> Task.start(task)
+      nil -> {:error, :task_supervisor_not_found}
       _pid -> Task.Supervisor.start_child(@system_task_supervisor, task)
     end
   end

@@ -21,10 +21,15 @@ defmodule Jido.Application do
     # Register essential signal extensions before starting supervision tree
     register_signal_extensions()
 
-    # Initialize discovery catalog asynchronously (fire-and-forget)
-    Jido.Discovery.init_async()
+    case Supervisor.start_link(children, strategy: :one_for_one, name: Jido.Supervisor) do
+      {:ok, _pid} = ok ->
+        # Discovery needs Jido.SystemTaskSupervisor to be running first.
+        _ = Jido.Discovery.init_async()
+        ok
 
-    Supervisor.start_link(children, strategy: :one_for_one, name: Jido.Supervisor)
+      other ->
+        other
+    end
   end
 
   # Ensure critical signal extensions are registered

@@ -72,7 +72,7 @@ defmodule Jido do
   Optionally configure in `config/config.exs` to customize defaults:
 
       config :my_app, MyApp.Jido,
-        max_tasks: 2000,
+        max_tasks: 1000,
         agent_pools: []
   """
   defmacro __using__(opts) do
@@ -215,7 +215,7 @@ defmodule Jido do
       {:ok, pid} = Jido.start_agent(Jido.default_instance(), MyAgent)
 
       # With custom options
-      {:ok, _} = Jido.start(max_tasks: 2000)
+      {:ok, _} = Jido.start(max_tasks: 1000)
 
   ## Options
 

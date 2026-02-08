@@ -177,7 +177,6 @@ defmodule Jido.AgentServer do
   alias Jido.Tracing.Trace
 
   @type server :: pid() | atom() | {:via, module(), term()} | String.t()
-
   # ---------------------------------------------------------------------------
   # Public API
   # ---------------------------------------------------------------------------
@@ -699,45 +698,13 @@ defmodule Jido.AgentServer do
 
   @impl true
   def handle_continue(:post_init, state) do
-    agent_module = state.agent_module
-
     state =
-      if function_exported?(agent_module, :strategy, 0) do
-        strategy = agent_module.strategy()
-
-        strategy_opts =
-          if function_exported?(agent_module, :strategy_opts, 0),
-            do: agent_module.strategy_opts(),
-            else: []
-
-        ctx = %{agent_module: agent_module, strategy_opts: strategy_opts}
-        {agent, directives} = strategy.init(state.agent, ctx)
-
-        state = State.update_agent(state, agent)
-
-        case State.enqueue_all(state, init_signal(), List.wrap(directives)) do
-          {:ok, enq_state} ->
-            enq_state
-
-          {:error, :queue_overflow} ->
-            Logger.warning("AgentServer #{state.id} queue overflow during strategy init")
-            state
-        end
-      else
-        state
-      end
-
-    signal_router = SignalRouter.build(state)
-    state = %{state | signal_router: signal_router}
-
-    # Start plugin children
-    state = start_plugin_children(state)
-
-    # Start plugin subscription sensors
-    state = start_plugin_subscriptions(state)
-
-    # Register plugin schedules (cron jobs)
-    state = register_plugin_schedules(state)
+      state
+      |> initialize_strategy()
+      |> build_signal_router()
+      |> start_plugin_children()
+      |> start_plugin_subscriptions()
+      |> register_plugin_schedules()
 
     notify_parent_of_startup(state)
 
@@ -751,6 +718,39 @@ defmodule Jido.AgentServer do
 
   defp init_signal do
     Signal.new!("jido.strategy.init", %{}, source: "/agent/system")
+  end
+
+  defp initialize_strategy(%State{} = state) do
+    agent_module = state.agent_module
+
+    if function_exported?(agent_module, :strategy, 0) do
+      strategy = agent_module.strategy()
+
+      strategy_opts =
+        if function_exported?(agent_module, :strategy_opts, 0),
+          do: agent_module.strategy_opts(),
+          else: []
+
+      ctx = %{agent_module: agent_module, strategy_opts: strategy_opts}
+      {agent, directives} = strategy.init(state.agent, ctx)
+
+      state = State.update_agent(state, agent)
+
+      case State.enqueue_all(state, init_signal(), List.wrap(directives)) do
+        {:ok, enq_state} ->
+          enq_state
+
+        {:error, :queue_overflow} ->
+          Logger.warning("AgentServer #{state.id} queue overflow during strategy init")
+          state
+      end
+    else
+      state
+    end
+  end
+
+  defp build_signal_router(%State{} = state) do
+    %{state | signal_router: SignalRouter.build(state)}
   end
 
   @impl true
@@ -1588,8 +1588,26 @@ defmodule Jido.AgentServer do
 
     Enum.reduce(plugin_specs, state, fn spec, acc_state ->
       config = spec.config || %{}
-      start_plugin_spec_children(acc_state, spec.module, config)
+      safe_start_plugin_spec_children(acc_state, spec.module, config)
     end)
+  end
+
+  defp safe_start_plugin_spec_children(%State{} = state, plugin_module, config) do
+    start_plugin_spec_children(state, plugin_module, config)
+  rescue
+    error ->
+      Logger.error(
+        "Plugin #{inspect(plugin_module)} child_spec startup crashed: #{Exception.message(error)}"
+      )
+
+      state
+  catch
+    kind, reason ->
+      Logger.error(
+        "Plugin #{inspect(plugin_module)} child_spec startup #{kind}: #{inspect(reason)}"
+      )
+
+      state
   end
 
   defp start_plugin_spec_children(state, plugin_module, config) do
@@ -1681,25 +1699,43 @@ defmodule Jido.AgentServer do
         else: []
 
     Enum.reduce(plugin_specs, state, fn spec, acc_state ->
-      context = %{
-        agent_ref: via_tuple(acc_state.id, acc_state.registry),
-        agent_id: acc_state.id,
-        agent_module: agent_module,
-        plugin_spec: spec,
-        jido_instance: acc_state.jido
-      }
-
-      config = spec.config || %{}
-
-      subscriptions =
-        if function_exported?(spec.module, :subscriptions, 2),
-          do: spec.module.subscriptions(config, context),
-          else: []
-
-      Enum.reduce(subscriptions, acc_state, fn {sensor_module, sensor_config}, inner_state ->
-        start_subscription_sensor(inner_state, spec.module, sensor_module, sensor_config, context)
-      end)
+      safe_start_plugin_subscriptions(acc_state, agent_module, spec)
     end)
+  end
+
+  defp safe_start_plugin_subscriptions(%State{} = state, agent_module, spec) do
+    context = %{
+      agent_ref: via_tuple(state.id, state.registry),
+      agent_id: state.id,
+      agent_module: agent_module,
+      plugin_spec: spec,
+      jido_instance: state.jido
+    }
+
+    config = spec.config || %{}
+
+    subscriptions =
+      if function_exported?(spec.module, :subscriptions, 2),
+        do: spec.module.subscriptions(config, context),
+        else: []
+
+    Enum.reduce(subscriptions, state, fn {sensor_module, sensor_config}, acc_state ->
+      start_subscription_sensor(acc_state, spec.module, sensor_module, sensor_config, context)
+    end)
+  rescue
+    error ->
+      Logger.warning(
+        "Plugin #{inspect(spec.module)} subscriptions startup crashed: #{Exception.message(error)}"
+      )
+
+      state
+  catch
+    kind, reason ->
+      Logger.warning(
+        "Plugin #{inspect(spec.module)} subscriptions startup #{kind}: #{inspect(reason)}"
+      )
+
+      state
   end
 
   defp start_subscription_sensor(
@@ -1780,8 +1816,20 @@ defmodule Jido.AgentServer do
         else: []
 
     Enum.reduce(schedules, state, fn schedule_spec, acc_state ->
-      register_schedule(acc_state, schedule_spec)
+      safe_register_schedule(acc_state, schedule_spec)
     end)
+  end
+
+  defp safe_register_schedule(%State{} = state, schedule_spec) do
+    register_schedule(state, schedule_spec)
+  rescue
+    error ->
+      Logger.error("Failed to register plugin schedule: #{Exception.message(error)}")
+      state
+  catch
+    kind, reason ->
+      Logger.error("Failed to register plugin schedule (#{kind}): #{inspect(reason)}")
+      state
   end
 
   defp register_schedule(%State{} = state, schedule_spec) do

@@ -969,11 +969,7 @@ defmodule Jido.Agent do
   defp __quoted_restore_create_agent__ do
     quote location: :keep do
       defp __jido_restore_create_agent__(data) do
-        case new(id: data[:id] || data["id"]) do
-          {:ok, agent} -> {:ok, agent}
-          agent when is_struct(agent) -> {:ok, agent}
-          {:error, _} = error -> error
-        end
+        {:ok, new(id: data[:id] || data["id"])}
       end
     end
   end

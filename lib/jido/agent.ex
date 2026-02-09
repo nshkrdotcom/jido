@@ -131,6 +131,7 @@ defmodule Jido.Agent do
 
   alias Jido.Action.Schema
   alias Jido.Agent
+  alias Jido.Agent.DefaultPlugins
   alias Jido.Agent.Directive
   alias Jido.Agent.State, as: StateHelper
   alias Jido.Error
@@ -943,51 +944,81 @@ defmodule Jido.Agent do
 
   defp __quoted_callback_restore__ do
     quote location: :keep do
+      unquote(__quoted_restore_def__())
+      unquote(__quoted_restore_create_agent__())
+      unquote(__quoted_restore_plugins__())
+      unquote(__quoted_restore_single_plugin__())
+      unquote(__quoted_apply_plugin_restore__())
+    end
+  end
+
+  defp __quoted_restore_def__ do
+    quote location: :keep do
       @impl true
       def restore(data, ctx) do
-        result =
-          case new(id: data[:id] || data["id"]) do
-            {:ok, agent} -> {:ok, agent}
-            agent when is_struct(agent) -> {:ok, agent}
-            {:error, _} = error -> error
-          end
+        with {:ok, agent} <- __jido_restore_create_agent__(data) do
+          __jido_restore_plugins__(agent, data, ctx)
+        end
+      end
+    end
+  end
 
-        case result do
-          {:ok, agent} ->
-            base_state = data[:state] || data["state"] || %{}
-            agent = %{agent | state: Map.merge(agent.state, base_state)}
-            externalized_keys = data[:externalized_keys] || %{}
+  defp __quoted_restore_create_agent__ do
+    quote location: :keep do
+      defp __jido_restore_create_agent__(data) do
+        case new(id: data[:id] || data["id"]) do
+          {:ok, agent} -> {:ok, agent}
+          agent when is_struct(agent) -> {:ok, agent}
+          {:error, _} = error -> error
+        end
+      end
+    end
+  end
 
-            Enum.reduce_while(@plugin_instances, {:ok, agent}, fn instance, {:ok, acc} ->
-              config = instance.config || %{}
-              restore_ctx = Map.put(ctx, :config, config)
+  defp __quoted_restore_plugins__ do
+    quote location: :keep do
+      defp __jido_restore_plugins__(agent, data, ctx) do
+        base_state = data[:state] || data["state"] || %{}
+        agent = %{agent | state: Map.merge(agent.state, base_state)}
+        externalized_keys = data[:externalized_keys] || %{}
 
-              ext_key =
-                Enum.find_value(externalized_keys, fn {k, v} ->
-                  if v == instance.state_key, do: k
-                end)
+        Enum.reduce_while(@plugin_instances, {:ok, agent}, fn instance, {:ok, acc} ->
+          __jido_restore_single_plugin__(instance, acc, data, ctx, externalized_keys)
+        end)
+      end
+    end
+  end
 
-              pointer = if ext_key, do: data[ext_key]
+  defp __quoted_restore_single_plugin__ do
+    quote location: :keep do
+      defp __jido_restore_single_plugin__(instance, acc, data, ctx, externalized_keys) do
+        restore_ctx = Map.put(ctx, :config, instance.config || %{})
 
-              if pointer do
-                case instance.module.on_restore(pointer, restore_ctx) do
-                  {:ok, nil} ->
-                    {:cont, {:ok, acc}}
+        ext_key =
+          Enum.find_value(externalized_keys, fn {k, v} ->
+            if v == instance.state_key, do: k
+          end)
 
-                  {:ok, restored_state} ->
-                    {:cont,
-                     {:ok, %{acc | state: Map.put(acc.state, instance.state_key, restored_state)}}}
+        pointer = if ext_key, do: data[ext_key]
+        __jido_apply_plugin_restore__(instance, pointer, acc, restore_ctx)
+      end
+    end
+  end
 
-                  {:error, reason} ->
-                    {:halt, {:error, reason}}
-                end
-              else
-                {:cont, {:ok, acc}}
-              end
-            end)
+  defp __quoted_apply_plugin_restore__ do
+    quote location: :keep do
+      defp __jido_apply_plugin_restore__(_instance, nil, acc, _ctx), do: {:cont, {:ok, acc}}
 
-          error ->
-            error
+      defp __jido_apply_plugin_restore__(instance, pointer, acc, ctx) do
+        case instance.module.on_restore(pointer, ctx) do
+          {:ok, nil} ->
+            {:cont, {:ok, acc}}
+
+          {:ok, restored} ->
+            {:cont, {:ok, %{acc | state: Map.put(acc.state, instance.state_key, restored)}}}
+
+          {:error, reason} ->
+            {:halt, {:error, reason}}
         end
       end
     end
@@ -1216,10 +1247,10 @@ defmodule Jido.Agent do
       if jido_module != nil and function_exported?(jido_module, :__default_plugins__, 0) do
         jido_module.__default_plugins__()
       else
-        Jido.Agent.DefaultPlugins.package_defaults()
+        DefaultPlugins.package_defaults()
       end
 
-    Jido.Agent.DefaultPlugins.apply_agent_overrides(base_defaults, agent_opts[:default_plugins])
+    DefaultPlugins.apply_agent_overrides(base_defaults, agent_opts[:default_plugins])
   end
 
   defp __validate_and_create_plugin_instance__(plugin_decl) do

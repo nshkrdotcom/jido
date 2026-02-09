@@ -1132,28 +1132,21 @@ defmodule Jido.AgentServer do
 
     Enum.reduce_while(specs_and_instances, {:continue, signal}, fn {spec, instance},
                                                                    {_, current_signal} ->
-      if signal_matches_plugin?(current_signal, spec) do
-        case invoke_plugin_handle_signal(instance, spec, current_signal, state, agent_module) do
-          {:cont, :continue} ->
-            {:cont, {:continue, current_signal}}
-
-          {:cont, {:continue, new_signal}} ->
-            {:cont, {:continue, new_signal}}
-
-          {:halt, {:override, action_spec}} ->
-            {:halt, {:override, action_spec}}
-
-          {:halt, {:override, action_spec, new_signal}} ->
-            {:halt, {:override, action_spec, new_signal}}
-
-          {:halt, {:error, error}} ->
-            {:halt, {:error, error}}
-        end
-      else
-        {:cont, {:continue, current_signal}}
-      end
+      run_single_plugin_hook(spec, instance, current_signal, state, agent_module)
     end)
     |> normalize_hook_result()
+  end
+
+  defp run_single_plugin_hook(spec, instance, current_signal, state, agent_module) do
+    if signal_matches_plugin?(current_signal, spec) do
+      case invoke_plugin_handle_signal(instance, spec, current_signal, state, agent_module) do
+        {:cont, :continue} -> {:cont, {:continue, current_signal}}
+        {:cont, {:continue, new_signal}} -> {:cont, {:continue, new_signal}}
+        {:halt, _} = halt -> halt
+      end
+    else
+      {:cont, {:continue, current_signal}}
+    end
   end
 
   defp normalize_hook_result({:continue, signal}), do: {:continue, signal}

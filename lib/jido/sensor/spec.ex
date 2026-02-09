@@ -27,7 +27,8 @@ defmodule Jido.Sensor.Spec do
             %{
               module: Zoi.atom(description: "The sensor module"),
               name: Zoi.string(description: "Sensor name"),
-              description: Zoi.string(description: "Sensor description") |> Zoi.optional(),
+              description:
+                Zoi.string(description: "Sensor description") |> Zoi.nullable() |> Zoi.optional(),
               config: Zoi.map(description: "Configuration for the sensor") |> Zoi.default(%{}),
               schema: Zoi.any(description: "Zoi schema for introspection") |> Zoi.optional()
             },

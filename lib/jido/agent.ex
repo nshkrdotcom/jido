@@ -152,15 +152,18 @@ defmodule Jido.Agent do
                 |> Zoi.optional(),
               description:
                 Zoi.string(description: "Agent description")
+                |> Zoi.nullable()
                 |> Zoi.optional(),
               category:
                 Zoi.string(description: "Agent category")
+                |> Zoi.nullable()
                 |> Zoi.optional(),
               tags:
                 Zoi.list(Zoi.string(), description: "Tags")
                 |> Zoi.default([]),
               vsn:
                 Zoi.string(description: "Version")
+                |> Zoi.nullable()
                 |> Zoi.optional(),
               schema:
                 Zoi.any(

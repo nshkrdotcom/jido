@@ -12,9 +12,11 @@ defmodule Jido.Plugin.Spec do
               module: Zoi.atom(description: "Plugin module"),
               name: Zoi.string(description: "Plugin name"),
               state_key: Zoi.atom(description: "Key for plugin state in agent"),
-              description: Zoi.string(description: "Plugin description") |> Zoi.optional(),
-              category: Zoi.string(description: "Plugin category") |> Zoi.optional(),
-              vsn: Zoi.string(description: "Plugin version") |> Zoi.optional(),
+              description:
+                Zoi.string(description: "Plugin description") |> Zoi.nullable() |> Zoi.optional(),
+              category:
+                Zoi.string(description: "Plugin category") |> Zoi.nullable() |> Zoi.optional(),
+              vsn: Zoi.string(description: "Plugin version") |> Zoi.nullable() |> Zoi.optional(),
               schema: Zoi.any(description: "Plugin state schema") |> Zoi.optional(),
               config_schema: Zoi.any(description: "Plugin config schema") |> Zoi.optional(),
               config:

@@ -32,11 +32,17 @@ defmodule Jido.Plugin.Manifest do
             %{
               module: Zoi.atom(description: "The plugin module"),
               name: Zoi.string(description: "The plugin name"),
-              description: Zoi.string(description: "Description of the plugin") |> Zoi.optional(),
-              category: Zoi.string(description: "Category for organization") |> Zoi.optional(),
+              description:
+                Zoi.string(description: "Description of the plugin")
+                |> Zoi.nullable()
+                |> Zoi.optional(),
+              category:
+                Zoi.string(description: "Category for organization")
+                |> Zoi.nullable()
+                |> Zoi.optional(),
               tags:
                 Zoi.list(Zoi.string(), description: "Tags for categorization") |> Zoi.default([]),
-              vsn: Zoi.string(description: "Version string") |> Zoi.optional(),
+              vsn: Zoi.string(description: "Version string") |> Zoi.nullable() |> Zoi.optional(),
               otp_app:
                 Zoi.atom(description: "OTP application for config resolution") |> Zoi.optional(),
               capabilities:

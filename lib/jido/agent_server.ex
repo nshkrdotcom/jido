@@ -644,6 +644,8 @@ defmodule Jido.AgentServer do
 
   @impl true
   def init(raw_opts) do
+    Process.flag(:trap_exit, true)
+
     opts = if is_map(raw_opts), do: Map.to_list(raw_opts), else: raw_opts
 
     with {:ok, options} <- Options.new(opts),
@@ -865,6 +867,7 @@ defmodule Jido.AgentServer do
   end
 
   def handle_info({:scheduled_signal, %Signal{} = signal}, state) do
+    state = State.prune_scheduled_timers(state)
     {traced_signal, _ctx} = TraceContext.ensure_from_signal(signal)
 
     try do
@@ -877,7 +880,29 @@ defmodule Jido.AgentServer do
     end
   end
 
+  def handle_info({:EXIT, pid, reason}, state) when is_pid(pid) do
+    case State.child_tag_by_pid(state, pid) do
+      nil ->
+        {:noreply, state}
+
+      tag ->
+        if abnormal_exit_reason?(reason) do
+          Logger.warning(
+            "AgentServer #{state.id} linked child #{inspect(tag)} exited abnormally: #{inspect(reason)}"
+          )
+        else
+          Logger.debug(
+            "AgentServer #{state.id} linked child #{inspect(tag)} exited: #{inspect(reason)}"
+          )
+        end
+
+        {:noreply, state}
+    end
+  end
+
   def handle_info({:DOWN, ref, :process, pid, reason}, state) do
+    Process.demonitor(ref, [:flush])
+
     # First check if this is an attachment monitor
     case Map.get(state.lifecycle.attachment_monitors, ref) do
       ^pid ->
@@ -889,13 +914,19 @@ defmodule Jido.AgentServer do
 
       _ ->
         # Not an attachment, check completion waiters using O(1) map lookup by monitor ref
-        {_popped_waiter, new_waiters} = Map.pop(state.completion_waiters, ref)
+        {popped_waiter, new_waiters} = Map.pop(state.completion_waiters, ref)
         state = %{state | completion_waiters: new_waiters}
 
-        if match?(%{parent: %ParentRef{pid: ^pid}}, state) do
-          handle_parent_down(state, pid, reason)
-        else
-          handle_child_down(state, pid, reason)
+        cond do
+          popped_waiter != nil ->
+            {:noreply, state}
+
+          parent_down?(state, ref, pid) ->
+            state = %{state | parent_monitor_ref: nil}
+            handle_parent_down(state, pid, reason)
+
+          true ->
+            handle_child_down(state, ref, pid, reason)
         end
     end
   end
@@ -933,18 +964,121 @@ defmodule Jido.AgentServer do
 
   @impl true
   def terminate(reason, state) do
-    # Delegate to lifecycle module for persistence/hibernation
-    state.lifecycle.mod.terminate(reason, state)
-
-    # Clean up all cron jobs owned by this agent
-    Enum.each(state.cron_jobs, fn {_job_id, pid} ->
-      if is_pid(pid) and Process.alive?(pid) do
-        Jido.Scheduler.cancel(pid)
-      end
-    end)
-
+    safe_terminate_cleanup(fn -> state.lifecycle.mod.terminate(reason, state) end)
+    safe_terminate_cleanup(fn -> cancel_idle_timer(state) end)
+    safe_terminate_cleanup(fn -> cancel_scheduled_timers(state) end)
+    safe_terminate_cleanup(fn -> stop_tracked_children(state) end)
+    safe_terminate_cleanup(fn -> cancel_cron_jobs(state) end)
+    safe_terminate_cleanup(fn -> demonitor_waiters(state) end)
+    safe_terminate_cleanup(fn -> demonitor_attachment_monitors(state) end)
+    safe_terminate_cleanup(fn -> demonitor_parent_ref(state) end)
     :ok
   end
+
+  defp safe_terminate_cleanup(fun) when is_function(fun, 0) do
+    _ = fun.()
+    :ok
+  rescue
+    e ->
+      Logger.warning("AgentServer terminate cleanup error: #{Exception.message(e)}")
+      :ok
+  catch
+    kind, reason ->
+      Logger.warning("AgentServer terminate cleanup failed: #{kind} #{inspect(reason)}")
+      :ok
+  end
+
+  defp cancel_idle_timer(%State{lifecycle: %{idle_timer: nil}}), do: :ok
+
+  defp cancel_idle_timer(%State{lifecycle: %{idle_timer: ref}}) when is_reference(ref) do
+    :erlang.cancel_timer(ref)
+
+    receive do
+      {:timeout, ^ref, :lifecycle_idle_timeout} -> :ok
+    after
+      0 -> :ok
+    end
+  end
+
+  defp cancel_idle_timer(_state), do: :ok
+
+  defp cancel_scheduled_timers(%State{scheduled_timers: timers}) do
+    Enum.each(timers, fn {ref, _meta} ->
+      :erlang.cancel_timer(ref)
+    end)
+  end
+
+  defp stop_tracked_children(%State{children: children}) do
+    Enum.each(children, fn {tag, %ChildInfo{pid: pid, ref: ref}} ->
+      if is_pid(pid) and Process.alive?(pid) do
+        Logger.debug("AgentServer stopping tracked child #{inspect(tag)} (#{inspect(pid)})")
+        Process.exit(pid, :shutdown)
+      end
+
+      wait_for_child_down(ref, pid)
+      maybe_demonitor(ref)
+      flush_exit(pid)
+    end)
+  end
+
+  defp wait_for_child_down(ref, pid) when is_reference(ref) and is_pid(pid) do
+    receive do
+      {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+    after
+      100 -> :ok
+    end
+  end
+
+  defp wait_for_child_down(_ref, _pid), do: :ok
+
+  defp flush_exit(pid) when is_pid(pid) do
+    receive do
+      {:EXIT, ^pid, _reason} -> :ok
+    after
+      0 -> :ok
+    end
+  end
+
+  defp cancel_cron_jobs(%State{cron_jobs: cron_jobs}) do
+    Enum.each(cron_jobs, fn {_job_id, pid} ->
+      if is_pid(pid) and Process.alive?(pid) do
+        ref = Process.monitor(pid)
+
+        Jido.Scheduler.cancel(pid)
+
+        receive do
+          {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+        after
+          100 -> :ok
+        end
+
+        Process.demonitor(ref, [:flush])
+      end
+    end)
+  end
+
+  defp demonitor_waiters(%State{completion_waiters: completion_waiters}) do
+    Enum.each(completion_waiters, fn {ref, _waiter} ->
+      maybe_demonitor(ref)
+    end)
+  end
+
+  defp demonitor_attachment_monitors(%State{lifecycle: lifecycle}) do
+    Enum.each(lifecycle.attachment_monitors, fn {ref, _pid} ->
+      maybe_demonitor(ref)
+    end)
+  end
+
+  defp demonitor_parent_ref(%State{parent_monitor_ref: ref}) do
+    maybe_demonitor(ref)
+  end
+
+  defp maybe_demonitor(ref) when is_reference(ref) do
+    Process.demonitor(ref, [:flush])
+    :ok
+  end
+
+  defp maybe_demonitor(_ref), do: :ok
 
   # ---------------------------------------------------------------------------
   # Internal: Signal Processing
@@ -1350,8 +1484,7 @@ defmodule Jido.AgentServer do
             meta: %{child_spec_id: spec[:id]}
           })
 
-        new_children = Map.put(state.children, tag, child_info)
-        %{state | children: new_children}
+        State.add_child(state, tag, child_info)
 
       {:error, reason} ->
         Logger.error("Failed to start plugin child #{inspect(plugin_module)}: #{inspect(reason)}")
@@ -1431,8 +1564,7 @@ defmodule Jido.AgentServer do
             meta: %{plugin: plugin_module, sensor: sensor_module}
           })
 
-        new_children = Map.put(state.children, tag, child_info)
-        %{state | children: new_children}
+        State.add_child(state, tag, child_info)
 
       {:error, reason} ->
         Logger.warning(
@@ -1647,8 +1779,8 @@ defmodule Jido.AgentServer do
   # ---------------------------------------------------------------------------
 
   defp maybe_monitor_parent(%State{parent: %ParentRef{pid: pid}} = state) when is_pid(pid) do
-    Process.monitor(pid)
-    state
+    ref = Process.monitor(pid)
+    %{state | parent_monitor_ref: ref}
   end
 
   defp maybe_monitor_parent(state), do: state
@@ -1714,8 +1846,12 @@ defmodule Jido.AgentServer do
     end
   end
 
-  defp handle_child_down(%State{} = state, pid, reason) do
-    {tag, state} = State.remove_child_by_pid(state, pid)
+  defp handle_child_down(%State{} = state, ref, pid, reason) do
+    {tag, state} =
+      case State.remove_child_by_ref(state, ref) do
+        {nil, s} -> State.remove_child_by_pid(s, pid)
+        result -> result
+      end
 
     if tag do
       Logger.debug("AgentServer #{state.id} child #{inspect(tag)} exited: #{inspect(reason)}")
@@ -1740,6 +1876,18 @@ defmodule Jido.AgentServer do
       {:noreply, state}
     end
   end
+
+  defp parent_down?(%State{parent_monitor_ref: ref, parent: %ParentRef{pid: pid}}, ref, pid)
+       when is_reference(ref),
+       do: true
+
+  defp parent_down?(%State{parent: %ParentRef{pid: pid}}, _ref, pid), do: true
+  defp parent_down?(_state, _ref, _pid), do: false
+
+  defp abnormal_exit_reason?(:normal), do: false
+  defp abnormal_exit_reason?(:shutdown), do: false
+  defp abnormal_exit_reason?({:shutdown, _}), do: false
+  defp abnormal_exit_reason?(_), do: true
 
   # Wraps parent-down reasons so OTP treats them as clean shutdowns.
   # OTP only considers :normal, :shutdown, and {:shutdown, term} as "normal" exits.

@@ -35,7 +35,13 @@ defmodule Jido.AgentServer.State do
 
               # Hierarchy
               parent: Zoi.any(description: "Parent reference") |> Zoi.optional(),
+              parent_monitor_ref:
+                Zoi.any(description: "Monitor reference for parent process") |> Zoi.optional(),
               children: Zoi.map(description: "Map of tag => ChildInfo") |> Zoi.default(%{}),
+              child_monitors:
+                Zoi.map(description: "Map of child monitor ref => child tag") |> Zoi.default(%{}),
+              child_pids:
+                Zoi.map(description: "Map of child pid => child tag") |> Zoi.default(%{}),
               on_parent_death:
                 Zoi.atom(description: "Behavior on parent death") |> Zoi.default(:stop),
 
@@ -68,6 +74,8 @@ defmodule Jido.AgentServer.State do
               completion_waiters:
                 Zoi.map(description: "Map of ref => waiter for completion notifications")
                 |> Zoi.default(%{}),
+              scheduled_timers:
+                Zoi.map(description: "Map of timer ref => timer metadata") |> Zoi.default(%{}),
 
               # Lifecycle (InstanceManager integration: attachment tracking, idle timeout, persistence)
               lifecycle: Zoi.any(description: "Lifecycle state (State.Lifecycle.t())"),
@@ -117,7 +125,10 @@ defmodule Jido.AgentServer.State do
         processing: false,
         queue: :queue.new(),
         parent: opts.parent,
+        parent_monitor_ref: nil,
         children: %{},
+        child_monitors: %{},
+        child_pids: %{},
         on_parent_death: opts.on_parent_death,
         jido: opts.jido,
         default_dispatch: opts.default_dispatch,
@@ -130,6 +141,7 @@ defmodule Jido.AgentServer.State do
         error_count: 0,
         metrics: %{},
         completion_waiters: %{},
+        scheduled_timers: %{},
         lifecycle: lifecycle,
         debug: opts.debug,
         debug_events: []
@@ -222,30 +234,109 @@ defmodule Jido.AgentServer.State do
   Adds a child to the children map.
   """
   @spec add_child(t(), term(), ChildInfo.t()) :: t()
-  def add_child(%__MODULE__{children: children} = state, tag, %ChildInfo{} = child) do
-    %{state | children: Map.put(children, tag, child)}
+  def add_child(
+        %__MODULE__{children: children, child_monitors: child_monitors, child_pids: child_pids} =
+          state,
+        tag,
+        %ChildInfo{} = child
+      ) do
+    %{
+      state
+      | children: Map.put(children, tag, child),
+        child_monitors: maybe_put_child_monitor(child_monitors, child.ref, tag),
+        child_pids: Map.put(child_pids, child.pid, tag)
+    }
   end
 
   @doc """
   Removes a child by tag.
   """
   @spec remove_child(t(), term()) :: t()
-  def remove_child(%__MODULE__{children: children} = state, tag) do
-    %{state | children: Map.delete(children, tag)}
+  def remove_child(
+        %__MODULE__{children: children, child_monitors: child_monitors, child_pids: child_pids} =
+          state,
+        tag
+      ) do
+    case Map.pop(children, tag) do
+      {nil, _children} ->
+        state
+
+      {%ChildInfo{} = child, remaining_children} ->
+        %{
+          state
+          | children: remaining_children,
+            child_monitors: maybe_delete_child_monitor(child_monitors, child.ref),
+            child_pids: Map.delete(child_pids, child.pid)
+        }
+    end
   end
 
   @doc """
   Removes a child by PID.
   """
   @spec remove_child_by_pid(t(), pid()) :: {term() | nil, t()}
-  def remove_child_by_pid(%__MODULE__{children: children} = state, pid) do
-    case Enum.find(children, fn {_tag, child} -> child.pid == pid end) do
-      {tag, _child} ->
-        {tag, %{state | children: Map.delete(children, tag)}}
-
-      nil ->
-        {nil, state}
+  def remove_child_by_pid(%__MODULE__{child_pids: child_pids} = state, pid) do
+    case Map.get(child_pids, pid) do
+      nil -> {nil, state}
+      tag -> {tag, remove_child(state, tag)}
     end
+  end
+
+  @doc """
+  Removes a child by monitor reference.
+  """
+  @spec remove_child_by_ref(t(), reference()) :: {term() | nil, t()}
+  def remove_child_by_ref(%__MODULE__{child_monitors: child_monitors} = state, ref)
+      when is_reference(ref) do
+    case Map.get(child_monitors, ref) do
+      nil -> {nil, state}
+      tag -> {tag, remove_child(state, tag)}
+    end
+  end
+
+  @doc """
+  Looks up a child tag by PID.
+  """
+  @spec child_tag_by_pid(t(), pid()) :: term() | nil
+  def child_tag_by_pid(%__MODULE__{child_pids: child_pids}, pid) do
+    Map.get(child_pids, pid)
+  end
+
+  @doc """
+  Adds a scheduled timer ref for cleanup.
+  """
+  @spec add_scheduled_timer(t(), reference(), map()) :: t()
+  def add_scheduled_timer(%__MODULE__{scheduled_timers: timers} = state, ref, meta)
+      when is_reference(ref) and is_map(meta) do
+    %{state | scheduled_timers: Map.put(timers, ref, meta)}
+  end
+
+  @doc """
+  Removes a scheduled timer ref.
+  """
+  @spec remove_scheduled_timer(t(), reference()) :: t()
+  def remove_scheduled_timer(%__MODULE__{scheduled_timers: timers} = state, ref)
+      when is_reference(ref) do
+    %{state | scheduled_timers: Map.delete(timers, ref)}
+  end
+
+  @doc """
+  Prunes fired or cancelled timers from tracking.
+  """
+  @spec prune_scheduled_timers(t()) :: t()
+  def prune_scheduled_timers(%__MODULE__{scheduled_timers: timers} = state) do
+    alive_timers =
+      Enum.reduce(timers, %{}, fn {ref, meta}, acc ->
+        case :erlang.read_timer(ref) do
+          remaining when is_integer(remaining) and remaining >= 0 ->
+            Map.put(acc, ref, meta)
+
+          _ ->
+            acc
+        end
+      end)
+
+    %{state | scheduled_timers: alive_timers}
   end
 
   @doc """
@@ -255,6 +346,18 @@ defmodule Jido.AgentServer.State do
   def get_child(%__MODULE__{children: children}, tag) do
     Map.get(children, tag)
   end
+
+  defp maybe_put_child_monitor(monitors, ref, tag) when is_reference(ref) do
+    Map.put(monitors, ref, tag)
+  end
+
+  defp maybe_put_child_monitor(monitors, _ref, _tag), do: monitors
+
+  defp maybe_delete_child_monitor(monitors, ref) when is_reference(ref) do
+    Map.delete(monitors, ref)
+  end
+
+  defp maybe_delete_child_monitor(monitors, _ref), do: monitors
 
   @doc """
   Increments the error count.

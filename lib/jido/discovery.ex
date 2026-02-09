@@ -84,9 +84,9 @@ defmodule Jido.Discovery do
   Call this from your application supervisor's start callback.
   The catalog will be built in the background without blocking startup.
   """
-  @spec init_async() :: Task.t()
+  @spec init_async() :: Jido.SystemTask.async_task()
   def init_async do
-    Task.async(fn ->
+    Jido.SystemTask.async_nolink(fn ->
       catalog = build_catalog()
       :persistent_term.put(@catalog_key, catalog)
       :ok

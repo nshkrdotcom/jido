@@ -192,7 +192,7 @@ defmodule Jido.Await do
         ref = make_ref()
 
         pid =
-          spawn(fn ->
+          Jido.SystemTask.start_child(fn ->
             remaining = max(0, deadline - now_ms())
             result = completion(server, remaining, opts)
             send(caller, {:await_result, ref, server, result})
@@ -262,7 +262,7 @@ defmodule Jido.Await do
         ref = make_ref()
 
         pid =
-          spawn(fn ->
+          Jido.SystemTask.start_child(fn ->
             remaining = max(0, deadline - now_ms())
             result = completion(server, remaining, opts)
             send(caller, {:await_result, ref, server, result})

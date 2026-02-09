@@ -86,6 +86,7 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Schedule do
   @moduledoc false
 
   alias Jido.AgentServer.Signal.Scheduled
+  alias Jido.AgentServer.State
   alias Jido.Tracing.Context, as: TraceContext
 
   def exec(%{delay_ms: delay, message: message}, input_signal, state) do
@@ -107,8 +108,14 @@ defimpl Jido.AgentServer.DirectiveExec, for: Jido.Agent.Directive.Schedule do
         {:error, _} -> signal
       end
 
-    Process.send_after(self(), {:scheduled_signal, traced_signal}, delay)
-    {:ok, state}
+    timer_ref = Process.send_after(self(), {:scheduled_signal, traced_signal}, delay)
+
+    timer_meta = %{
+      delay_ms: delay,
+      signal_type: traced_signal.type
+    }
+
+    {:ok, State.add_scheduled_timer(state, timer_ref, timer_meta)}
   end
 end
 

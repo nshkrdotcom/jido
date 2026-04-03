@@ -95,11 +95,11 @@ defmodule JidoTest.AwaitCoverageTest do
   end
 
   describe "poll_for_child error branch" do
-    test "returns error when parent process dies during polling" do
+    test "returns timeout when parent process dies during polling" do
       fake_pid = spawn(fn -> :ok end)
       eventually(fn -> not Process.alive?(fake_pid) end)
 
-      assert catch_exit(Await.child(fake_pid, :some_child, 100)) != nil
+      assert {:error, :timeout} = Await.child(fake_pid, :some_child, 100)
     end
   end
 
@@ -118,17 +118,7 @@ defmodule JidoTest.AwaitCoverageTest do
       Process.sleep(10)
 
       result = Await.all([pid1, pid2], 500)
-
-      case result do
-        {:ok, _} ->
-          :ok
-
-        {:error, {server, reason}} ->
-          assert is_pid(server) or is_atom(reason)
-
-        {:error, :timeout} ->
-          :ok
-      end
+      assert {:error, {^pid2, :not_found}} = result
 
       if Process.alive?(pid1), do: GenServer.stop(pid1)
     end
@@ -141,8 +131,7 @@ defmodule JidoTest.AwaitCoverageTest do
       eventually(fn -> not Process.alive?(dead_pid) end)
 
       result = Await.all([dead_pid, pid1], 500)
-
-      assert match?({:error, {^dead_pid, _}}, result) or match?({:error, :timeout}, result)
+      assert {:error, {^dead_pid, :not_found}} = result
 
       if Process.alive?(pid1), do: GenServer.stop(pid1)
     end
@@ -200,8 +189,7 @@ defmodule JidoTest.AwaitCoverageTest do
       eventually(fn -> not Process.alive?(dead_pid) end)
 
       result = Await.any([dead_pid, live_pid], 500)
-
-      assert match?({:error, {^dead_pid, _}}, result) or match?({:error, :timeout}, result)
+      assert {:error, {^dead_pid, :not_found}} = result
 
       if Process.alive?(live_pid), do: GenServer.stop(live_pid)
     end
@@ -217,20 +205,20 @@ defmodule JidoTest.AwaitCoverageTest do
       GenServer.stop(pid)
     end
 
-    test "alive? returns error exit for dead process" do
+    test "alive? returns false for dead process" do
       fake_pid = spawn(fn -> :ok end)
       eventually(fn -> not Process.alive?(fake_pid) end)
 
-      assert catch_exit(Await.alive?(fake_pid)) != nil
+      refute Await.alive?(fake_pid)
     end
   end
 
   describe "get_children edge cases" do
-    test "get_children exits for dead parent" do
+    test "get_children returns :not_found for dead parent" do
       fake_pid = spawn(fn -> :ok end)
       eventually(fn -> not Process.alive?(fake_pid) end)
 
-      assert catch_exit(Await.get_children(fake_pid)) != nil
+      assert {:error, :not_found} = Await.get_children(fake_pid)
     end
 
     test "get_children returns empty map for agent with no children", %{jido: jido} do
@@ -244,11 +232,11 @@ defmodule JidoTest.AwaitCoverageTest do
   end
 
   describe "get_child edge cases" do
-    test "get_child exits for dead parent" do
+    test "get_child returns :not_found for dead parent" do
       fake_pid = spawn(fn -> :ok end)
       eventually(fn -> not Process.alive?(fake_pid) end)
 
-      assert catch_exit(Await.get_child(fake_pid, :some_tag)) != nil
+      assert {:error, :not_found} = Await.get_child(fake_pid, :some_tag)
     end
 
     test "get_child returns :child_not_found for nonexistent child", %{jido: jido} do
@@ -341,12 +329,7 @@ defmodule JidoTest.AwaitCoverageTest do
       eventually(fn -> not Process.alive?(dead_pid) end)
 
       result = Await.all([dead_pid, live_pid], 1000)
-
-      case result do
-        {:error, {^dead_pid, _reason}} -> :ok
-        {:error, :timeout} -> :ok
-        {:ok, _} -> flunk("Expected error or timeout, got ok")
-      end
+      assert {:error, {^dead_pid, :not_found}} = result
 
       if Process.alive?(live_pid), do: GenServer.stop(live_pid)
     end
@@ -361,12 +344,7 @@ defmodule JidoTest.AwaitCoverageTest do
       eventually(fn -> not Process.alive?(dead_pid) end)
 
       result = Await.any([dead_pid, live_pid], 1000)
-
-      case result do
-        {:error, {^dead_pid, _reason}} -> :ok
-        {:error, :timeout} -> :ok
-        {:ok, _} -> flunk("Expected error or timeout, got ok")
-      end
+      assert {:error, {^dead_pid, :not_found}} = result
 
       if Process.alive?(live_pid), do: GenServer.stop(live_pid)
     end

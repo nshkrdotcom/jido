@@ -12,6 +12,7 @@ defmodule JidoTest.Integration.SchedulerDurabilityIntegrationTest do
 
   import ExUnit.CaptureLog
   import JidoTest.Support.SchedulerIntegrationHarness
+  import JidoTest.Support.SchedulerTestControl
 
   alias Jido.Agent.InstanceManager
   alias Jido.AgentServer
@@ -101,7 +102,7 @@ defmodule JidoTest.Integration.SchedulerDurabilityIntegrationTest do
       )
 
     table = Keyword.get(opts, :table, unique_table("scheduler_integration_storage"))
-    idle_timeout = Keyword.get(opts, :idle_timeout, 200)
+    idle_timeout = Keyword.get(opts, :idle_timeout, 150)
 
     {:ok, _} =
       start_supervised(
@@ -157,7 +158,8 @@ defmodule JidoTest.Integration.SchedulerDurabilityIntegrationTest do
       job_pid1 = wait_for_job(pid1, job_id, timeout: 5_000)
 
       assert Process.alive?(job_pid1)
-      eventually(fn -> tick_count(pid1) >= 1 end, timeout: 5_000)
+      force_tick(job_pid1)
+      eventually(fn -> tick_count(pid1) >= 1 end, timeout: 1_000)
 
       state1 = state(pid1)
       assert state1.cron_specs == %{}
@@ -208,12 +210,13 @@ defmodule JidoTest.Integration.SchedulerDurabilityIntegrationTest do
 
           good_job_pid = wait_for_job(pid, :good, timeout: 5_000)
           assert Process.alive?(good_job_pid)
+          force_tick(good_job_pid)
 
           eventually(
             fn ->
               Enum.any?(ticks(pid), &(&1[:kind] == :good_replay))
             end,
-            timeout: 5_000
+            timeout: 1_000
           )
 
           current_state = state(pid)
@@ -383,13 +386,14 @@ defmodule JidoTest.Integration.SchedulerDurabilityIntegrationTest do
 
           plugin_pid = wait_for_job(pid, plugin_job_id(), timeout: 5_000)
           assert Process.alive?(plugin_pid)
+          force_tick(plugin_pid)
 
           eventually(
             fn ->
               tick_count(pid) >= 1 and
                 Enum.any?(ticks(pid), &(&1[:source] == :plugin_schedule))
             end,
-            timeout: 5_000
+            timeout: 1_000
           )
 
           current_state = state(pid)

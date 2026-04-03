@@ -49,6 +49,34 @@ defmodule JidoTest.AgentServerTest do
     end
   end
 
+  defmodule GatedAction do
+    @moduledoc false
+    use Jido.Action,
+      name: "gated_action",
+      schema: [
+        notify: [type: :any],
+        gate_ref: [type: :any],
+        block?: [type: :boolean, default: true],
+        result: [type: :map, default: %{}]
+      ]
+
+    def run(%{notify: notify, gate_ref: gate_ref} = params, _context) do
+      result = Map.get(params, :result, %{})
+
+      if Map.get(params, :block?, true) do
+        send(notify, {:gated_action_started, gate_ref, self()})
+
+        receive do
+          {:continue_gated_action, ^gate_ref} -> :ok
+        after
+          5_000 -> raise "Timed out waiting for gated action release"
+        end
+      end
+
+      {:ok, result}
+    end
+  end
+
   defmodule TestAgent do
     @moduledoc false
     use Jido.Agent,
@@ -72,6 +100,19 @@ defmodule JidoTest.AgentServerTest do
         {"noop", TestActions.NoSchema}
       ]
     end
+  end
+
+  defp gated_signal(type, gate_ref, opts \\ []) do
+    Signal.new!(
+      type,
+      %{
+        notify: self(),
+        gate_ref: gate_ref,
+        block?: Keyword.get(opts, :block?, true),
+        result: Keyword.get(opts, :result, %{})
+      },
+      source: "/test"
+    )
   end
 
   describe "start_link/1" do
@@ -245,16 +286,6 @@ defmodule JidoTest.AgentServerTest do
     end
 
     test "does not block state queries while a slow signal call is in-flight", %{jido: jido} do
-      defmodule NonBlockingSlowAction do
-        @moduledoc false
-        use Jido.Action, name: "non_blocking_slow", schema: []
-
-        def run(_params, _context) do
-          Process.sleep(150)
-          {:ok, %{slow_done: true}}
-        end
-      end
-
       defmodule NonBlockingAgent do
         @moduledoc false
         use Jido.Agent,
@@ -266,22 +297,26 @@ defmodule JidoTest.AgentServerTest do
 
         def signal_routes(_ctx) do
           [
-            {"slow", NonBlockingSlowAction},
+            {"slow", GatedAction},
             {"increment", TestActions.IncrementAction}
           ]
         end
       end
 
       {:ok, pid} = AgentServer.start_link(agent: NonBlockingAgent, jido: jido)
+      gate_ref = make_ref()
 
-      slow_signal = Signal.new!("slow", %{}, source: "/test")
+      slow_signal = gated_signal("slow", gate_ref, result: %{slow_done: true})
       task = Task.async(fn -> AgentServer.call(pid, slow_signal, 2_000) end)
 
-      Process.sleep(20)
+      assert_receive {:gated_action_started, ^gate_ref, worker_pid}, 1_000
+
       started = System.monotonic_time(:millisecond)
       assert {:ok, _state} = AgentServer.state(pid)
       elapsed = System.monotonic_time(:millisecond) - started
       assert elapsed < 100
+
+      send(worker_pid, {:continue_gated_action, gate_ref})
 
       assert {:ok, agent} = Task.await(task, 2_000)
       assert agent.state.slow_done == true
@@ -290,16 +325,6 @@ defmodule JidoTest.AgentServerTest do
     end
 
     test "buffers async signals while a sync call is running", %{jido: jido} do
-      defmodule BufferedSlowAction do
-        @moduledoc false
-        use Jido.Action, name: "buffered_slow", schema: []
-
-        def run(_params, _context) do
-          Process.sleep(120)
-          {:ok, %{slow_done: true}}
-        end
-      end
-
       defmodule BufferedSignalAgent do
         @moduledoc false
         use Jido.Agent,
@@ -311,20 +336,24 @@ defmodule JidoTest.AgentServerTest do
 
         def signal_routes(_ctx) do
           [
-            {"slow", BufferedSlowAction},
+            {"slow", GatedAction},
             {"increment", TestActions.IncrementAction}
           ]
         end
       end
 
       {:ok, pid} = AgentServer.start_link(agent: BufferedSignalAgent, jido: jido)
+      gate_ref = make_ref()
 
-      slow_signal = Signal.new!("slow", %{}, source: "/test")
+      slow_signal = gated_signal("slow", gate_ref, result: %{slow_done: true})
       task = Task.async(fn -> AgentServer.call(pid, slow_signal, 2_000) end)
 
-      Process.sleep(15)
+      assert_receive {:gated_action_started, ^gate_ref, worker_pid}, 1_000
+
       increment_signal = Signal.new!("increment", %{}, source: "/test")
       assert :ok = AgentServer.cast(pid, increment_signal)
+
+      send(worker_pid, {:continue_gated_action, gate_ref})
 
       assert {:ok, _agent} = Task.await(task, 2_000)
 
@@ -629,16 +658,6 @@ defmodule JidoTest.AgentServerTest do
     end
 
     test "transitions to processing during signal handling", %{jido: jido} do
-      defmodule SlowAction do
-        @moduledoc false
-        use Jido.Action, name: "slow", schema: []
-
-        def run(_params, _context) do
-          Process.sleep(100)
-          {:ok, %{}}
-        end
-      end
-
       defmodule SlowAgent do
         @moduledoc false
         use Jido.Agent,
@@ -646,21 +665,21 @@ defmodule JidoTest.AgentServerTest do
           schema: [value: [type: :integer, default: 0]]
 
         def signal_routes(_ctx) do
-          [{"slow", SlowAction}]
+          [{"slow", GatedAction}]
         end
       end
 
       {:ok, pid} = AgentServer.start_link(agent: SlowAgent, jido: jido)
+      gate_ref = make_ref()
 
       # Start async processing
-      signal = Signal.new!("slow", %{}, source: "/test")
+      signal = gated_signal("slow", gate_ref)
       task = Task.async(fn -> AgentServer.call(pid, signal) end)
 
-      # Either catch processing in progress, or it completes quickly - either is valid
-      # The key is the server doesn't crash and returns to idle after processing
-      eventually_state(pid, fn state ->
-        state.status in [:idle, :processing]
-      end)
+      assert_receive {:gated_action_started, ^gate_ref, worker_pid}, 1_000
+      eventually(fn -> not is_nil(:sys.get_state(pid).signal_call_inflight) end, timeout: 500)
+
+      send(worker_pid, {:continue_gated_action, gate_ref})
 
       # Wait for task to complete
       Task.await(task)
@@ -1002,16 +1021,6 @@ defmodule JidoTest.AgentServerTest do
 
   describe "drain loop invariant" do
     test "only one drain loop runs at a time", %{jido: jido} do
-      defmodule SlowAction2 do
-        @moduledoc false
-        use Jido.Action, name: "slow", schema: []
-
-        def run(_params, _context) do
-          Process.sleep(100)
-          {:ok, %{processed: true}}
-        end
-      end
-
       defmodule CounterAgent do
         @moduledoc false
         use Jido.Agent,
@@ -1019,18 +1028,25 @@ defmodule JidoTest.AgentServerTest do
           schema: [drain_count: [type: :integer, default: 0]]
 
         def signal_routes(_ctx) do
-          [{"slow", SlowAction2}]
+          [{"slow", GatedAction}]
         end
       end
 
       {:ok, pid} = AgentServer.start_link(agent: CounterAgent, jido: jido)
+      gate_ref = make_ref()
 
       signals =
-        for _ <- 1..10 do
-          Signal.new!("slow", %{}, source: "/test")
-        end
+        [
+          gated_signal("slow", gate_ref),
+          gated_signal("slow", make_ref(), block?: false),
+          gated_signal("slow", make_ref(), block?: false)
+        ]
 
       Enum.each(signals, fn sig -> AgentServer.cast(pid, sig) end)
+
+      assert_receive {:gated_action_started, ^gate_ref, worker_pid}, 1_000
+
+      send(worker_pid, {:continue_gated_action, gate_ref})
 
       eventually_state(
         pid,

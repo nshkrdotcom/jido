@@ -11,6 +11,7 @@ defmodule JidoTest.Integration.SchedulerIntegrationTest do
 
   import ExUnit.CaptureLog
   import JidoTest.Support.SchedulerIntegrationHarness
+  import JidoTest.Support.SchedulerTestControl
 
   alias Jido.AgentServer
   alias Jido.Signal
@@ -74,17 +75,19 @@ defmodule JidoTest.Integration.SchedulerIntegrationTest do
                )
 
       job_pid = wait_for_job(pid, :heartbeat, timeout: 5_000)
-      wait_for_tick_count(pid, 1, timeout: 5_000)
+      force_tick(job_pid)
+      wait_for_tick_count(pid, 1, timeout: 1_000)
 
       server_ref = Process.monitor(pid)
 
       # Simulate time zone database failure
       Application.put_env(:jido, :time_zone_database, FailingTimeZoneDatabase)
+      force_tick(job_pid)
 
       eventually(fn -> Process.alive?(pid) end, timeout: 2_000)
 
       eventually(fn -> Process.alive?(job_pid) and :sys.get_state(job_pid).retrying? end,
-        timeout: 5_000
+        timeout: 1_000
       )
 
       {:ok, state_during_outage} = AgentServer.state(pid)
@@ -95,12 +98,14 @@ defmodule JidoTest.Integration.SchedulerIntegrationTest do
 
       # Restore working database
       Application.put_env(:jido, :time_zone_database, TimeZoneInfo.TimeZoneDatabase)
+      force_retry(job_pid)
+      force_tick(job_pid)
 
       eventually(fn -> Process.alive?(job_pid) and not :sys.get_state(job_pid).retrying? end,
-        timeout: 5_000
+        timeout: 1_000
       )
 
-      wait_for_tick_count(pid, baseline + 1, timeout: 8_000)
+      wait_for_tick_count(pid, baseline + 1, timeout: 1_000)
 
       refute_received {:DOWN, ^server_ref, :process, ^pid, _reason}
     end
@@ -132,12 +137,13 @@ defmodule JidoTest.Integration.SchedulerIntegrationTest do
 
           good_job_pid = wait_for_job(pid, :good_message, timeout: 5_000)
           assert Process.alive?(good_job_pid)
+          force_tick(good_job_pid)
 
           eventually(
             fn ->
               Enum.count(ticks(pid), &(&1[:kind] == :good_message)) >= 1
             end,
-            timeout: 5_000
+            timeout: 1_000
           )
         end)
 
@@ -171,13 +177,15 @@ defmodule JidoTest.Integration.SchedulerIntegrationTest do
 
       alpha_job_pid = wait_for_job(pid, :alpha, timeout: 5_000)
       beta_job_pid = wait_for_job(pid, :beta, timeout: 5_000)
+      force_tick(alpha_job_pid)
+      force_tick(beta_job_pid)
 
       eventually(
         fn ->
           ticks = ticks(pid)
           Enum.any?(ticks, &(&1[:job] == :alpha)) and Enum.any?(ticks, &(&1[:job] == :beta))
         end,
-        timeout: 5_000
+        timeout: 1_000
       )
 
       beta_baseline =
@@ -185,6 +193,7 @@ defmodule JidoTest.Integration.SchedulerIntegrationTest do
         |> Enum.count(&(&1[:job] == :beta))
 
       Process.exit(alpha_job_pid, :kill)
+      force_cron_restart(pid, :alpha, timeout: 1_000)
 
       restarted_alpha_pid =
         eventually(
@@ -199,18 +208,19 @@ defmodule JidoTest.Integration.SchedulerIntegrationTest do
               false
             end
           end,
-          timeout: 6_000
+          timeout: 1_000
         )
 
       assert Process.alive?(beta_job_pid)
       assert state(pid).cron_jobs[:beta] == beta_job_pid
       assert Process.alive?(restarted_alpha_pid)
+      force_tick(beta_job_pid)
 
       eventually(
         fn ->
           Enum.count(ticks(pid), &(&1[:job] == :beta)) >= beta_baseline + 1
         end,
-        timeout: 5_000
+        timeout: 1_000
       )
 
       refute_received {:DOWN, ^server_ref, :process, ^pid, _reason}
@@ -225,7 +235,8 @@ defmodule JidoTest.Integration.SchedulerIntegrationTest do
       job_pid = wait_for_job(pid, job_id, timeout: 5_000)
 
       assert Process.alive?(job_pid)
-      eventually(fn -> tick_count(pid) >= 1 end, timeout: 5_000)
+      force_tick(job_pid)
+      eventually(fn -> tick_count(pid) >= 1 end, timeout: 1_000)
 
       state = state(pid)
       assert state.cron_jobs[job_id] == job_pid
@@ -240,6 +251,7 @@ defmodule JidoTest.Integration.SchedulerIntegrationTest do
       assert Process.alive?(original_job_pid)
 
       Process.exit(original_job_pid, :kill)
+      force_cron_restart(pid, job_id, timeout: 1_000)
 
       restarted_job_pid =
         eventually(
@@ -254,7 +266,7 @@ defmodule JidoTest.Integration.SchedulerIntegrationTest do
               false
             end
           end,
-          timeout: 6_000
+          timeout: 1_000
         )
 
       assert is_pid(restarted_job_pid)
@@ -270,12 +282,13 @@ defmodule JidoTest.Integration.SchedulerIntegrationTest do
       job_pid = wait_for_job(pid, job_id, timeout: 5_000)
 
       assert Process.alive?(job_pid)
+      force_tick(job_pid)
 
       eventually(
         fn ->
           tick_count(pid) >= 1 and Enum.any?(ticks(pid), &(&1[:source] == :plugin_schedule))
         end,
-        timeout: 5_000
+        timeout: 1_000
       )
 
       state = state(pid)
@@ -291,6 +304,7 @@ defmodule JidoTest.Integration.SchedulerIntegrationTest do
       assert Process.alive?(original_job_pid)
 
       Process.exit(original_job_pid, :kill)
+      force_cron_restart(pid, job_id, timeout: 1_000)
 
       restarted_job_pid =
         eventually(
@@ -305,7 +319,7 @@ defmodule JidoTest.Integration.SchedulerIntegrationTest do
               false
             end
           end,
-          timeout: 6_000
+          timeout: 1_000
         )
 
       assert is_pid(restarted_job_pid)

@@ -100,7 +100,7 @@ defmodule Jido.Scheduler.Job do
   end
 
   @impl true
-  def handle_info(@tick, state) do
+  def handle_info({:timeout, ref, @tick}, %{timer_ref: ref} = state) do
     state =
       state
       |> schedule_after_tick()
@@ -109,7 +109,12 @@ defmodule Jido.Scheduler.Job do
     {:noreply, state}
   end
 
-  def handle_info(@retry_schedule, state), do: {:noreply, retry_schedule(state)}
+  def handle_info({:timeout, _ref, @tick}, state), do: {:noreply, state}
+
+  def handle_info({:timeout, ref, @retry_schedule}, %{timer_ref: ref} = state),
+    do: {:noreply, retry_schedule(state)}
+
+  def handle_info({:timeout, _ref, @retry_schedule}, state), do: {:noreply, state}
 
   def handle_info({:DOWN, ref, :process, pid, reason}, %{owner_ref: ref, owner_pid: pid} = state) do
     {:stop, {:owner_down, reason}, state}
@@ -167,7 +172,7 @@ defmodule Jido.Scheduler.Job do
     with {:ok, now} <- now_in_timezone(timezone),
          {:ok, next_at} <- next_scheduled_at(cron, timezone, now),
          {:ok, delay_ms} <- timer_delay_ms(next_at, now) do
-      {:ok, Process.send_after(self(), @tick, delay_ms)}
+      {:ok, :erlang.start_timer(delay_ms, self(), @tick)}
     end
   end
 
@@ -239,7 +244,7 @@ defmodule Jido.Scheduler.Job do
       end)
     end
 
-    timer_ref = Process.send_after(self(), @retry_schedule, @retry_delay_ms)
+    timer_ref = :erlang.start_timer(@retry_delay_ms, self(), @retry_schedule)
     %{state | timer_ref: timer_ref, retrying?: true}
   end
 

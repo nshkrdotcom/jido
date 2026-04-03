@@ -2,6 +2,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
   use ExUnit.Case, async: false
 
   import JidoTest.Eventually
+  import JidoTest.Support.SchedulerTestControl
 
   # Tests with timing-based assertions (idle timeout behavior)
   @moduletag :integration
@@ -17,6 +18,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
   # Use module attribute for manager naming to avoid atom leaks
   # Each test gets a unique integer suffix but we clean up persistent_term
   @manager_prefix "instance_manager_test"
+  @idle_timeout_ms 150
 
   defmodule StorageAwareJido do
     use Jido, otp_app: :jido_test_instance_manager
@@ -337,7 +339,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
           InstanceManager.child_spec(
             name: manager_name,
             agent: TestAgent,
-            idle_timeout: 200,
+            idle_timeout: @idle_timeout_ms,
             agent_opts: [jido: JidoTest.InstanceManagerTestJido],
             storage: nil
           )
@@ -444,7 +446,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
           InstanceManager.child_spec(
             name: manager_name,
             agent: TestAgent,
-            idle_timeout: 200,
+            idle_timeout: @idle_timeout_ms,
             storage: {ETS, table: table_name},
             agent_opts: [jido: JidoTest.InstanceManagerTestJido]
           )
@@ -594,7 +596,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
           InstanceManager.child_spec(
             name: manager_name,
             agent: TestAgent,
-            idle_timeout: 200,
+            idle_timeout: @idle_timeout_ms,
             agent_opts: [jido: StorageAwareJido]
           )
         )
@@ -646,7 +648,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
           InstanceManager.child_spec(
             name: manager_name,
             agent: TestAgent,
-            idle_timeout: 200,
+            idle_timeout: @idle_timeout_ms,
             agent_opts: [jido: RedisStorageAwareJido]
           )
         )
@@ -694,7 +696,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
           InstanceManager.child_spec(
             name: manager_name,
             agent: DurableCronAgent,
-            idle_timeout: 200,
+            idle_timeout: @idle_timeout_ms,
             storage: {ETS, table: table_name},
             agent_opts: [jido: JidoTest.InstanceManagerTestJido]
           )
@@ -720,18 +722,34 @@ defmodule JidoTest.Agent.InstanceManagerTest do
 
       :ok = AgentServer.cast(pid1, register_signal)
 
-      _state1 =
-        eventually_state(
-          pid1,
-          fn state ->
-            Map.has_key?(state.cron_jobs, :durable_tick) and
-              Map.has_key?(state.cron_specs, :durable_tick)
+      job_pid1 =
+        eventually(
+          fn ->
+            case AgentServer.state(pid1) do
+              {:ok, state} ->
+                if Map.has_key?(state.cron_specs, :durable_tick) do
+                  case Map.get(state.cron_jobs, :durable_tick) do
+                    job_pid when is_pid(job_pid) ->
+                      if Process.alive?(job_pid), do: job_pid, else: false
+
+                    _other ->
+                      false
+                  end
+                else
+                  false
+                end
+
+              _other ->
+                false
+            end
           end,
           timeout: 2_000
         )
 
+      force_tick(job_pid1)
+
       state1 =
-        eventually_state(pid1, fn state -> state.agent.state.tick_count > 0 end, timeout: 3_000)
+        eventually_state(pid1, fn state -> state.agent.state.tick_count > 0 end, timeout: 1_000)
 
       pre_hibernate_ticks = state1.agent.state.tick_count
 
@@ -754,16 +772,34 @@ defmodule JidoTest.Agent.InstanceManagerTest do
 
       refute pid1 == pid2
 
-      eventually_state(pid2, fn state -> Map.has_key?(state.cron_jobs, :durable_tick) end,
-        timeout: 2_000
-      )
+      job_pid2 =
+        eventually(
+          fn ->
+            case AgentServer.state(pid2) do
+              {:ok, state} ->
+                case Map.get(state.cron_jobs, :durable_tick) do
+                  job_pid when is_pid(job_pid) ->
+                    if Process.alive?(job_pid), do: job_pid, else: false
+
+                  _other ->
+                    false
+                end
+
+              _other ->
+                false
+            end
+          end,
+          timeout: 2_000
+        )
+
+      force_tick(job_pid2)
 
       eventually_state(
         pid2,
         fn state ->
           state.agent.state.tick_count > pre_hibernate_ticks
         end,
-        timeout: 3_000
+        timeout: 1_000
       )
 
       :ok = AgentServer.detach(pid2)
@@ -948,7 +984,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
           InstanceManager.child_spec(
             name: manager_name,
             agent: DeclarativeConflictAgent,
-            idle_timeout: 200,
+            idle_timeout: @idle_timeout_ms,
             storage: {ETS, table: table_name},
             agent_opts: [jido: JidoTest.InstanceManagerTestJido]
           )
@@ -1071,7 +1107,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
           InstanceManager.child_spec(
             name: manager_name,
             agent: TestAgent,
-            idle_timeout: 200,
+            idle_timeout: @idle_timeout_ms,
             storage: nil,
             agent_opts: [jido: JidoTest.InstanceManagerTestJido]
           )
@@ -1099,7 +1135,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
           InstanceManager.child_spec(
             name: manager_name,
             agent: TestAgent,
-            idle_timeout: 200,
+            idle_timeout: @idle_timeout_ms,
             storage: {ETS, table: override_table},
             agent_opts: [jido: StorageAwareJido]
           )
@@ -1133,7 +1169,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
           InstanceManager.child_spec(
             name: manager_name,
             agent: TestAgent,
-            idle_timeout: 200,
+            idle_timeout: @idle_timeout_ms,
             storage: {ETS, table: table_name},
             agent_opts: [jido: JidoTest.InstanceManagerTestJido]
           )
@@ -1180,7 +1216,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
           InstanceManager.child_spec(
             name: manager_a,
             agent: TestAgent,
-            idle_timeout: 200,
+            idle_timeout: @idle_timeout_ms,
             storage: {ETS, table: table_name},
             agent_opts: [jido: JidoTest.InstanceManagerTestJido]
           ),
@@ -1192,7 +1228,7 @@ defmodule JidoTest.Agent.InstanceManagerTest do
           InstanceManager.child_spec(
             name: manager_b,
             agent: TestAgent,
-            idle_timeout: 200,
+            idle_timeout: @idle_timeout_ms,
             storage: {ETS, table: table_name},
             agent_opts: [jido: JidoTest.InstanceManagerTestJido]
           ),

@@ -35,12 +35,21 @@ defmodule JidoTest.Pod.MutationRuntimeTest do
 
     @impl true
     def mount(_agent, _config) do
+      gate_ref = :persistent_term.get({__MODULE__, :gate_ref}, nil)
+
       case :persistent_term.get({__MODULE__, :notify_pid}, nil) do
-        pid when is_pid(pid) -> send(pid, :slow_mount_started)
+        pid when is_pid(pid) -> send(pid, {:slow_mount_started, self(), gate_ref})
         _other -> :ok
       end
 
-      Process.sleep(1_000)
+      if is_reference(gate_ref) do
+        receive do
+          {:continue_slow_mount, ^gate_ref} -> :ok
+        after
+          5_000 -> raise "Timed out waiting for slow mount gate release"
+        end
+      end
+
       {:ok, %{}}
     end
   end
@@ -177,6 +186,7 @@ defmodule JidoTest.Pod.MutationRuntimeTest do
       :persistent_term.erase({InstanceManager, @reviewer_manager})
       :persistent_term.erase({InstanceManager, @nested_pod_manager})
       :persistent_term.erase({InstanceManager, @slow_manager})
+      :persistent_term.erase({SlowMountPlugin, :gate_ref})
       :persistent_term.erase({SlowMountPlugin, :notify_pid})
     end)
 
@@ -381,7 +391,9 @@ defmodule JidoTest.Pod.MutationRuntimeTest do
 
   test "rejects a second mutation while one is already in flight", %{pod_id: pod_id, jido: jido} do
     {:ok, pod_pid} = AgentServer.start_link(agent: EmptyMutablePod, id: pod_id, jido: jido)
+    gate_ref = make_ref()
     :persistent_term.put({SlowMountPlugin, :notify_pid}, self())
+    :persistent_term.put({SlowMountPlugin, :gate_ref}, gate_ref)
 
     task =
       Task.async(fn ->
@@ -397,7 +409,7 @@ defmodule JidoTest.Pod.MutationRuntimeTest do
         )
       end)
 
-    assert_receive :slow_mount_started, 5_000
+    assert_receive {:slow_mount_started, mount_pid, ^gate_ref}, 5_000
 
     assert {:error, :mutation_in_progress} =
              Pod.mutate(
@@ -410,6 +422,8 @@ defmodule JidoTest.Pod.MutationRuntimeTest do
                  })
                ]
              )
+
+    send(mount_pid, {:continue_slow_mount, gate_ref})
 
     assert {:ok, _report} = Task.await(task, 10_000)
 

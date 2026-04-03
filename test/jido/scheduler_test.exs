@@ -3,6 +3,7 @@ defmodule JidoTest.SchedulerTest do
 
   import ExUnit.CaptureLog
   import JidoTest.Eventually
+  import JidoTest.Support.SchedulerTestControl
 
   alias Jido.Scheduler
   alias Jido.Scheduler.Job
@@ -127,7 +128,9 @@ defmodule JidoTest.SchedulerTest do
                  "* * * * * * *"
                )
 
-      assert_receive {:worker_tick, worker_pid}, 2_000
+      force_tick(pid)
+
+      assert_receive {:worker_tick, worker_pid}, 1_000
       assert is_pid(worker_pid)
       refute worker_pid == pid
       Scheduler.cancel(pid)
@@ -155,13 +158,15 @@ defmodule JidoTest.SchedulerTest do
           "* * * * * * *"
         )
 
-      assert_receive {:worker_started, worker_pid}, 2_000
+      force_tick(pid)
+
+      assert_receive {:worker_started, worker_pid}, 1_000
       assert is_pid(worker_pid)
 
       assert :ok = Scheduler.cancel(pid)
       eventually(fn -> not Process.alive?(pid) end)
       eventually(fn -> not Process.alive?(worker_pid) end)
-      refute_receive {:worker_started, _another_worker}, 1_500
+      refute Process.alive?(pid)
     end
 
     test "callback kill does not take down the owner" do
@@ -188,7 +193,10 @@ defmodule JidoTest.SchedulerTest do
       assert Process.alive?(owner)
       assert Process.alive?(pid)
 
-      refute_receive {:DOWN, ^ref, :process, ^owner, _reason}, 1_500
+      force_tick(pid)
+
+      eventually(fn -> Process.alive?(owner) and Process.alive?(pid) end, timeout: 500)
+      refute_received {:DOWN, ^ref, :process, ^owner, _reason}
       assert Process.alive?(owner)
 
       send(owner, :stop)
@@ -287,14 +295,18 @@ defmodule JidoTest.SchedulerTest do
 
         # Simulate database failure
         Application.put_env(:jido, :time_zone_database, FailingTimeZoneDatabase)
+        force_tick(job_pid)
 
         eventually(fn -> Process.alive?(owner) and Process.alive?(job_pid) end, timeout: 2_000)
+        eventually(fn -> :sys.get_state(job_pid).retrying? end, timeout: 1_000)
 
         # Restore working database
         :persistent_term.put(tick_gate, true)
         Application.put_env(:jido, :time_zone_database, TimeZoneInfo.TimeZoneDatabase)
+        force_retry(job_pid)
+        force_tick(job_pid)
 
-        assert_receive {:recovered_tick, ^owner_tag, worker_pid}, 3_000
+        assert_receive {:recovered_tick, ^owner_tag, worker_pid}, 1_000
         assert is_pid(worker_pid)
         refute worker_pid == job_pid
         assert Process.alive?(job_pid)

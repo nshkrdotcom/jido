@@ -8,6 +8,9 @@ defmodule JidoTest.AgentServer.CronTickDeliveryTest do
   """
   use JidoTest.Case, async: false
 
+  import JidoTest.Eventually
+  import JidoTest.Support.SchedulerTestControl
+
   @moduletag :integration
   @moduletag capture_log: true
 
@@ -63,6 +66,27 @@ defmodule JidoTest.AgentServer.CronTickDeliveryTest do
     end
   end
 
+  defp wait_for_job(pid, job_id) do
+    eventually(
+      fn ->
+        case AgentServer.state(pid) do
+          {:ok, state} ->
+            case Map.get(state.cron_jobs, job_id) do
+              job_pid when is_pid(job_pid) ->
+                if Process.alive?(job_pid), do: job_pid, else: false
+
+              _other ->
+                false
+            end
+
+          _other ->
+            false
+        end
+      end,
+      timeout: 1_000
+    )
+  end
+
   # ---------------------------------------------------------------------------
   # Tests
   # ---------------------------------------------------------------------------
@@ -80,13 +104,13 @@ defmodule JidoTest.AgentServer.CronTickDeliveryTest do
 
       :ok = AgentServer.cast(pid, register_signal)
 
-      # Wait for the cron job to register
-      eventually_state(pid, fn state -> Map.has_key?(state.cron_jobs, :tick_test) end)
+      job_pid = wait_for_job(pid, :tick_test)
+      force_tick(job_pid)
 
       # The actual regression: before the fix, ticks would silently fail
       # because cast(string_id, signal) was rejected by resolve_server/1.
       # With the fix, ticks should deliver and increment tick_count.
-      eventually_state(pid, fn state -> state.agent.state.tick_count > 0 end, timeout: 5_000)
+      eventually_state(pid, fn state -> state.agent.state.tick_count > 0 end, timeout: 1_000)
 
       GenServer.stop(pid)
     end
@@ -124,10 +148,13 @@ defmodule JidoTest.AgentServer.CronTickDeliveryTest do
 
       :ok = AgentServer.cast(pid, register_signal)
 
-      eventually_state(pid, fn state -> Map.has_key?(state.cron_jobs, :multi_tick) end)
+      job_pid = wait_for_job(pid, :multi_tick)
+      force_tick(job_pid)
+      eventually_state(pid, fn state -> state.agent.state.tick_count >= 1 end, timeout: 1_000)
+      force_tick(job_pid)
 
       # Wait for at least 2 ticks to confirm accumulation
-      eventually_state(pid, fn state -> state.agent.state.tick_count >= 2 end, timeout: 5_000)
+      eventually_state(pid, fn state -> state.agent.state.tick_count >= 2 end, timeout: 1_000)
 
       GenServer.stop(pid)
     end

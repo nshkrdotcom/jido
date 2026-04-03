@@ -23,7 +23,7 @@ defmodule JidoTest.DiscoveryTest do
       schema: []
   end
 
-  setup do
+  setup_all do
     Discovery.refresh()
     :ok
   end

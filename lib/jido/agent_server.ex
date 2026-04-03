@@ -393,6 +393,9 @@ defmodule Jido.AgentServer do
       try do
         GenServer.call(pid, {:await_completion, opts}, timeout)
       catch
+        :exit, {:noproc, _} ->
+          {:error, :not_found}
+
         :exit, {:timeout, _} ->
           GenServer.cast(pid, {:cancel_await_completion, waiter_id})
 
@@ -2492,7 +2495,9 @@ defmodule Jido.AgentServer do
   # Internal: Server Resolution
   # ---------------------------------------------------------------------------
 
-  defp resolve_server(pid) when is_pid(pid), do: {:ok, pid}
+  defp resolve_server(pid) when is_pid(pid) do
+    if Process.alive?(pid), do: {:ok, pid}, else: {:error, :not_found}
+  end
 
   defp resolve_server({:via, _, _} = via) do
     case GenServer.whereis(via) do

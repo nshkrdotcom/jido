@@ -4,6 +4,11 @@ defmodule JidoTest.JidoTest do
   alias Jido.AgentServer
   alias JidoTest.TestAgents.Minimal
 
+  setup_all do
+    assert :ok = Jido.refresh_discovery()
+    :ok
+  end
+
   describe "scheduler_name/1" do
     test "returns scheduler name for jido instance" do
       assert Jido.scheduler_name(MyApp.Jido) == MyApp.Jido.Scheduler
